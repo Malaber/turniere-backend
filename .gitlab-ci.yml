@@ -18,7 +18,6 @@ rails spec:
     - when: always
   script:
     - cd /app
-    - python3 -m pip install invoke
     - inv db-migrate
     - inv test
   artifacts:
@@ -37,7 +36,6 @@ rails e2e spec:
     - when: always
   script:
     - cd /app
-    - python3 -m pip install invoke
     - inv verify-http
   after_script:
     - 'test -f /tmp/turniere-e2e-server.log && tail -n 200 /tmp/turniere-e2e-server.log || true'
