@@ -322,7 +322,10 @@ def test_shard(c, node_index=1, node_total=8, dry_run=False):
     if not files:
         return
 
-    c.run("bundle exec rspec " + " ".join(shlex.quote(path) for path in files), pty=True)
+    c.run(
+        "bundle exec rspec --require ./spec/rails_helper " + " ".join(shlex.quote(path) for path in files),
+        pty=True,
+    )
 
 
 @task
@@ -720,5 +723,19 @@ def docker_test_http_e2e(
         f"TURNIERE_E2E_USERNAME={username} "
         "bundle exec rspec spec/e2e/http && "
         "kill \\$SERVER_PID\""
+    )
+    c.run(command, pty=True)
+
+
+@task(name="docker-test-shard")
+def docker_test_shard(c, node_index=1, node_total=8, image=TEST_TAG, build=True):
+    """Run one Rails-spec shard inside the test Docker image."""
+    if build:
+        docker_build_all(c)
+
+    command = (
+        f"docker run --rm {image} bash -lc "
+        f"\"cd /app && bundle exec rails db:migrate && "
+        f"inv test-shard --node-index={node_index} --node-total={node_total}\""
     )
     c.run(command, pty=True)

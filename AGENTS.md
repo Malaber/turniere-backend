@@ -19,6 +19,7 @@ Examples:
 - `inv blackbox-production`
 - `inv scenario-main-usecase`
 - `inv docker-build-all`
+- `inv docker-test-shard --node-index=3 --node-total=8`
 - `inv docker-test-http-e2e`
 
 The GitLab CI pipeline is expected to use these tasks as well.
