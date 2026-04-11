@@ -45,10 +45,11 @@ def _env(**overrides):
 def _wait_for_http(base_url=TEST_BASE_URL, timeout=60):
     deadline = time.time() + timeout
     healthz_url = f"{base_url}/healthz"
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
     while time.time() < deadline:
         try:
-            with urllib.request.urlopen(healthz_url) as response:
+            with opener.open(healthz_url) as response:
                 if response.status == 200:
                     return
         except Exception:
