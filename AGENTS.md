@@ -13,6 +13,7 @@ Examples:
 
 - `inv db-migrate`
 - `inv test`
+- `inv test-shard --node-index=1 --node-total=8`
 - `inv lint`
 - `inv verify-http`
 - `inv blackbox-production`
@@ -22,6 +23,7 @@ Examples:
 
 The GitLab CI pipeline is expected to use these tasks as well.
 In CI, blackbox E2E should target sidecar service containers rather than Docker Compose inside the job.
+The normal Rails spec suite is sharded through `inv test-shard ...` and should stay aligned with the CI matrix configuration.
 
 This is not just a convenience preference. The task layer is the operational
 contract for this repo and should stay aligned across local use, CI, and

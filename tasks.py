@@ -7,6 +7,7 @@ import signal
 import subprocess
 import time
 import urllib.request
+from pathlib import Path
 
 
 SERVER_HOST = "0.0.0.0"
@@ -31,6 +32,8 @@ BLACKBOX_DB_PASSWORD = "turniere"
 BLACKBOX_SECRET_KEY_BASE = "turniere-blackbox-secret-key-base-please-change-in-real-prod"
 BLACKBOX_MAILGUN_API_KEY = "blackbox-test-api-key"
 BLACKBOX_MAILGUN_DOMAIN = "blackbox.example.com"
+SPEC_ROOT = Path("spec")
+E2E_SPEC_ROOT = SPEC_ROOT / "e2e" / "http"
 
 
 def _env(**overrides):
@@ -165,6 +168,35 @@ def _print_service_logs(env, service, tail=120):
     print(output.rstrip())
 
 
+def _spec_files():
+    return sorted(
+        path for path in SPEC_ROOT.rglob("*_spec.rb")
+        if not path.is_relative_to(E2E_SPEC_ROOT)
+    )
+
+
+def _spec_weight(path):
+    return sum(1 for _ in path.open("r", encoding="utf-8"))
+
+
+def _spec_shards(node_total):
+    if node_total <= 0:
+        raise ValueError("node_total must be positive")
+
+    shards = [{"weight": 0, "files": []} for _ in range(node_total)]
+    weighted_files = sorted(
+        ((path, _spec_weight(path)) for path in _spec_files()),
+        key=lambda item: (-item[1], str(item[0])),
+    )
+
+    for path, weight in weighted_files:
+        shard = min(shards, key=lambda item: (item["weight"], len(item["files"])))
+        shard["files"].append(path)
+        shard["weight"] += weight
+
+    return shards
+
+
 def _shared_production_env():
     return _env(
         RAILS_ENV="production",
@@ -259,6 +291,38 @@ def server_test(c, host=SERVER_HOST, port=SERVER_PORT):
 def test(c):
     """Run the normal RSpec suite."""
     c.run("bundle exec rspec", pty=True)
+
+
+@task(name="test-shard")
+def test_shard(c, node_index=1, node_total=8, dry_run=False):
+    """Run one deterministic shard of the non-E2E RSpec suite."""
+    node_index = int(node_index)
+    node_total = int(node_total)
+
+    if node_index < 1 or node_index > node_total:
+        raise ValueError(f"node_index must be between 1 and {node_total}, got {node_index}")
+
+    shards = _spec_shards(node_total)
+    shard = shards[node_index - 1]
+    files = [str(path) for path in shard["files"]]
+
+    _print_header(f"RSpec shard {node_index}/{node_total}")
+    print(f"Files: {len(files)}")
+    print(f"Estimated weight: {shard['weight']}")
+    if files:
+        print("Included specs:")
+        for path in files:
+            print(f"- {path}")
+    else:
+        print("No spec files assigned to this shard.")
+
+    if dry_run:
+        return
+
+    if not files:
+        return
+
+    c.run("bundle exec rspec " + " ".join(shlex.quote(path) for path in files), pty=True)
 
 
 @task
