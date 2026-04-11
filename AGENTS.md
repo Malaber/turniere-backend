@@ -26,6 +26,14 @@ The GitLab CI pipeline is expected to use these tasks as well.
 In CI, blackbox E2E should target sidecar service containers rather than Docker Compose inside the job.
 The normal Rails spec suite is sharded through `inv test-shard ...` and should stay aligned with the CI matrix configuration.
 
+Useful GitLab push-option variables for saving CI minutes on public repos:
+
+- skip all spec jobs: `git push -o ci.variable="SKIP_ALL_SPECS=1"`
+- skip only normal Rails specs: `git push -o ci.variable="SKIP_RAILS_SPEC=1"`
+- skip only blackbox E2E: `git push -o ci.variable="SKIP_E2E_SPEC=1"`
+
+Do not use these by default. Only use them when the change truly does not affect the skipped area.
+
 This is not just a convenience preference. The task layer is the operational
 contract for this repo and should stay aligned across local use, CI, and
 cross-repo consumers.
