@@ -24,3 +24,17 @@ rails spec:
     paths:
       - specs_with_runtime.txt
     expire_in: 30 days
+
+rails e2e spec:
+  stage: test
+  image: $CI_REGISTRY_IMAGE/test/commits:$CI_COMMIT_SHA
+  rules:
+    - if: $SKIP_TEST
+      when: never
+    - if: $CI_PIPELINE_SOURCE != "push"
+      when: never
+    - when: always
+  script:
+    - cd /app
+    - bundle exec rails db:migrate
+    - bundle exec rspec spec/requests/e2e
