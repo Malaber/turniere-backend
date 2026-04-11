@@ -619,6 +619,9 @@ def blackbox_service(
     username=E2E_USERNAME,
 ):
     """Run blackbox HTTP E2E against an already running production app plus Postgres sidecars."""
+    _print_header("Running production database migrations")
+    c.run("bundle exec rails db:migrate", env=_shared_production_env(), pty=True)
+
     _print_header(f"Waiting for app healthcheck at {base_url}")
     _wait_for_http(base_url=base_url, timeout=120)
 
