@@ -41,6 +41,15 @@ rails e2e spec:
       alias: postgres
     - name: $CI_REGISTRY_IMAGE/production/commits:$CI_COMMIT_SHA
       alias: app
+      variables:
+        POSTGRES_URL: postgres://turniere:turniere@postgres:5432/turniere_blackbox
+        POSTGRES_USERNAME: turniere
+        POSTGRES_PASSWORD: turniere
+        SECRET_KEY_BASE: turniere-blackbox-secret-key-base-please-change-in-real-prod
+        MAILGUN_API_KEY: blackbox-test-api-key
+        MAILGUN_DOMAIN: blackbox.example.com
+        RAILS_LOG_TO_STDOUT: "1"
+        RAILS_SERVE_STATIC_FILES: "1"
       command:
         - bundle
         - exec

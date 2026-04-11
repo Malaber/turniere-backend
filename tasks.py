@@ -7,6 +7,7 @@ import signal
 import subprocess
 import time
 import urllib.request
+import urllib.error
 from pathlib import Path
 
 
@@ -46,16 +47,24 @@ def _wait_for_http(base_url=TEST_BASE_URL, timeout=60):
     deadline = time.time() + timeout
     healthz_url = f"{base_url}/healthz"
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    last_error = None
 
     while time.time() < deadline:
         try:
             with opener.open(healthz_url) as response:
                 if response.status == 200:
                     return
-        except Exception:
+                last_error = f"unexpected status {response.status}"
+        except urllib.error.HTTPError as error:
+            body = error.read().decode("utf-8", errors="replace")
+            last_error = f"http {error.code}: {body}"
+            time.sleep(0.5)
+        except Exception as error:
+            last_error = repr(error)
             time.sleep(0.5)
 
-    raise RuntimeError(f"healthcheck did not become ready within {timeout}s: {healthz_url}")
+    detail = f" last error: {last_error}" if last_error else ""
+    raise RuntimeError(f"healthcheck did not become ready within {timeout}s: {healthz_url}.{detail}")
 
 
 def _docker_compose_cmd(project_name=BLACKBOX_PROJECT, compose_file=BLACKBOX_COMPOSE_FILE):
