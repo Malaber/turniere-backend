@@ -37,6 +37,15 @@ rails e2e spec:
       alias: postgres
     - name: $CI_REGISTRY_IMAGE/production/commits:$CI_COMMIT_SHA
       alias: app
+      entrypoint:
+        - /bin/bash
+        - -lc
+      command:
+        - |
+          until getent hosts postgres >/dev/null 2>&1; do sleep 1; done
+          until bundle exec ruby -rpg -e "PG.connect(ENV.fetch('POSTGRES_URL')).close" >/dev/null 2>&1; do sleep 1; done
+          bundle exec rails db:migrate
+          exec bundle exec rails s -p 3000 -b 0.0.0.0
   variables:
     POSTGRES_DB: turniere_blackbox
     POSTGRES_USER: turniere
