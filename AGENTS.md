@@ -16,6 +16,7 @@ Examples:
 - `inv test-shard --node-index=1 --node-total=8`
 - `inv lint`
 - `inv verify-http`
+- `inv blackbox-self`
 - `inv blackbox-production`
 - `inv scenario-main-usecase`
 - `inv docker-build-all`
@@ -23,7 +24,7 @@ Examples:
 - `inv docker-test-http-e2e`
 
 The GitLab CI pipeline is expected to use these tasks as well.
-In CI, blackbox E2E should target sidecar service containers rather than Docker Compose inside the job.
+In CI, blackbox E2E should run from the production image with Postgres as the sidecar and should avoid Docker Compose inside the job.
 The normal Rails spec suite is sharded through `inv test-shard ...` and should stay aligned with the CI matrix configuration.
 
 Useful GitLab push-option variables for saving CI minutes on public repos:

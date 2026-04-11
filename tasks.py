@@ -252,16 +252,23 @@ def _run_blackbox_rspec(base_url, email, password, username):
         )
 
 
-def _start_test_server():
-    log_handle = open("/tmp/turniere-e2e-server.log", "w")
+def _start_server(command, env, log_path="/tmp/turniere-e2e-server.log"):
+    log_handle = open(log_path, "w")
     process = subprocess.Popen(
-        f"bundle exec rails s -e test -b {SERVER_HOST} -p {SERVER_PORT}",
-        shell=True,
+        ["/bin/sh", "-lc", command],
+        env=env,
         stdout=log_handle,
         stderr=subprocess.STDOUT,
         preexec_fn=os.setsid,
     )
     return process, log_handle
+
+
+def _start_test_server():
+    return _start_server(
+        f"bundle exec rails s -e test -b {SERVER_HOST} -p {SERVER_PORT}",
+        _env(),
+    )
 
 
 def _stop_process(process, log_handle):
@@ -644,6 +651,48 @@ def blackbox_service(
 
     _print_header("Running HTTP E2E against production image")
     _run_blackbox_rspec(base_url, email, password, username)
+
+
+@task(name="blackbox-self")
+def blackbox_self(
+    c,
+    base_url=TEST_BASE_URL,
+    email=E2E_EMAIL,
+    password=E2E_PASSWORD,
+    username=E2E_USERNAME,
+):
+    """Run the pure-Ruby blackbox verifier inside the production image against a local production server."""
+    env = _shared_production_env()
+    server_command = f"bundle exec rails s -b {SERVER_HOST} -p {SERVER_PORT}"
+
+    _print_header("Running production database migrations")
+    c.run("bundle exec rails db:migrate", env=env, pty=True)
+
+    process, log_handle = _start_server(server_command, env)
+    try:
+        _print_header(f"Waiting for app healthcheck at {base_url}")
+        _wait_for_http(base_url=base_url, timeout=120)
+
+        _print_header("Bootstrapping confirmed E2E user")
+        c.run(
+            _bootstrap_user_command(email, password, username),
+            env=env,
+            pty=True,
+        )
+
+        _print_header("Running blackbox verifier")
+        c.run(
+            "ruby script/verify_e2e_blackbox.rb",
+            env=_env(
+                TURNIERE_E2E_BASE_URL=base_url,
+                TURNIERE_E2E_EMAIL=email,
+                TURNIERE_E2E_PASSWORD=password,
+                TURNIERE_E2E_USERNAME=username,
+            ),
+            pty=True,
+        )
+    finally:
+        _stop_process(process, log_handle)
 
 
 @task(name="blackbox-production")
