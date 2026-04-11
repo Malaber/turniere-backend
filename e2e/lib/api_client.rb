@@ -1,0 +1,123 @@
+# frozen_string_literal: true
+
+require 'json'
+require 'net/http'
+require 'uri'
+
+module TurniereE2E
+  class ApiError < StandardError
+    attr_reader :status, :body
+
+    def initialize(message, status:, body:)
+      super(message)
+      @status = status
+      @body = body
+    end
+  end
+
+  class ApiClient
+    attr_reader :base_url
+
+    def initialize(base_url:)
+      @base_url = base_url.sub(%r{/\z}, '')
+      @auth_headers = {}
+    end
+
+    def register!(email:, password:, username:)
+      response = request(
+        :post,
+        '/users',
+        body: {
+          email: email,
+          password: password,
+          password_confirmation: password,
+          username: username
+        }
+      )
+      store_auth_headers!(response)
+      response.fetch(:json)
+    end
+
+    def login!(email:, password:)
+      response = request(
+        :post,
+        '/users/sign_in',
+        body: {
+          email: email,
+          password: password
+        }
+      )
+      store_auth_headers!(response)
+      response
+    end
+
+    def authenticated?
+      !@auth_headers.empty?
+    end
+
+    def get(path, params: nil, headers: {})
+      request(:get, path, params: params, headers: headers)
+    end
+
+    def post(path, body: nil, params: nil, headers: {})
+      request(:post, path, body: body, params: params, headers: headers)
+    end
+
+    def patch(path, body: nil, params: nil, headers: {})
+      request(:patch, path, body: body, params: params, headers: headers)
+    end
+
+    private
+
+    def request(method, path, body: nil, params: nil, headers: {})
+      uri = URI.parse("#{base_url}#{path}")
+      uri.query = URI.encode_www_form(params) if params && !params.empty?
+
+      request_class = case method
+                      when :get then Net::HTTP::Get
+                      when :post then Net::HTTP::Post
+                      when :patch then Net::HTTP::Patch
+                      else
+                        raise ArgumentError, "unsupported method #{method}"
+                      end
+
+      request = request_class.new(uri)
+      merged_headers(headers).each { |key, value| request[key] = value }
+      request.body = JSON.dump(body) if body
+
+      response = Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == 'https') do |http|
+        http.request(request)
+      end
+
+      parsed_json = parse_json_body(response.body)
+      {
+        status: response.code.to_i,
+        json: parsed_json,
+        headers: response.each_header.to_h
+      }
+    end
+
+    def merged_headers(headers)
+      {
+        'accept' => 'application/json',
+        'content-type' => 'application/json'
+      }.merge(@auth_headers).merge(headers.transform_keys(&:downcase))
+    end
+
+    def parse_json_body(body)
+      return {} if body.nil? || body.strip.empty?
+
+      JSON.parse(body, symbolize_names: true)
+    rescue JSON::ParserError
+      { raw_body: body }
+    end
+
+    def store_auth_headers!(response)
+      %w[access-token client uid].each_with_object({}) do |key, auth_headers|
+        auth_headers[key] = response[:headers][key] if response[:headers].key?(key)
+      end.tap do |headers|
+        @auth_headers = headers unless headers.empty?
+      end
+    end
+  end
+end

@@ -2,9 +2,27 @@
 
 This file records non-obvious backend behaviors that the E2E suite intentionally preserves.
 
+## HTTP E2E auth bootstrap
+
+The lifecycle scenarios themselves run only through the HTTP API.
+
+One bootstrap exception currently exists:
+
+- the backend requires email confirmation before a newly registered user can sign in
+- there is no public API to complete that confirmation loop without accessing the email channel
+- because of that, HTTP E2E runs need a pre-confirmed user
+
+The reusable scenario script supports this through:
+
+- `TURNIERE_E2E_EMAIL`
+- `TURNIERE_E2E_PASSWORD`
+- optional `TURNIERE_E2E_USERNAME`
+
+Frontend tests can use the same script against a live backend as long as those credentials point to a confirmed account on that backend.
+
 ## Group-stage tournaments cannot finish the playoff final through the normal match endpoint
 
-Observed and covered by `spec/requests/e2e/tournament_lifecycle_spec.rb`:
+Observed and covered by `spec/e2e/http/tournament_lifecycle_spec.rb` and `script/e2e_scenarios.rb`:
 
 - in tournaments that started with a group stage, the playoff final can be started and scored
 - but `PATCH /matches/:id` with `state=finished` on that final returns:
@@ -16,7 +34,7 @@ This appears to happen because playoff stages count down to level `0`, while the
 
 ## Group stage to playoff conversion with 3 groups and `playoff_teams_amount = 4`
 
-Observed and covered by `spec/requests/e2e/tournament_lifecycle_spec.rb`:
+Observed and covered by `spec/e2e/http/tournament_lifecycle_spec.rb` and `script/e2e_scenarios.rb`:
 
 - `instant_finalists_amount` becomes `3`
 - `intermediate_round_participants_amount` becomes `2`
