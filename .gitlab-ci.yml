@@ -35,13 +35,13 @@ rails e2e spec:
       when: never
     - when: always
   script:
-    - cd /app
-    - bundle exec rails db:migrate
-    - bundle exec rails runner -e test "user = User.find_or_initialize_by(email: 'e2e@example.com'); user.username = 'e2e-user'; user.password = 'password123'; user.password_confirmation = 'password123'; user.confirmed_at = Time.current; user.uid = user.email; user.provider = 'email'; user.save!"
-    - bundle exec rails s -e test -p 3000 -b 0.0.0.0 > /tmp/turniere-e2e-server.log 2>&1 &
-    - SERVER_PID=$!
-    - ruby script/wait_for_http.rb http://127.0.0.1:3000 60
-    - TURNIERE_E2E_BASE_URL=http://127.0.0.1:3000 TURNIERE_E2E_EMAIL=e2e@example.com TURNIERE_E2E_PASSWORD=password123 TURNIERE_E2E_USERNAME=e2e-user bundle exec rspec spec/e2e/http
-    - kill $SERVER_PID
+    - 'cd /app'
+    - 'bundle exec rails db:migrate'
+    - 'bundle exec rails runner -e test "user = User.find_or_initialize_by(email: ''e2e@example.com''); user.username = ''e2e-user''; user.password = ''password123''; user.password_confirmation = ''password123''; user.confirmed_at = Time.current; user.uid = user.email; user.provider = ''email''; user.save!"'
+    - 'bundle exec rails s -e test -p 3000 -b 0.0.0.0 > /tmp/turniere-e2e-server.log 2>&1 &'
+    - 'SERVER_PID=$!'
+    - 'ruby script/wait_for_http.rb http://127.0.0.1:3000 60'
+    - 'TURNIERE_E2E_BASE_URL=http://127.0.0.1:3000 TURNIERE_E2E_EMAIL=e2e@example.com TURNIERE_E2E_PASSWORD=password123 TURNIERE_E2E_USERNAME=e2e-user bundle exec rspec spec/e2e/http'
+    - 'kill $SERVER_PID'
   after_script:
-    - test -f /tmp/turniere-e2e-server.log && tail -n 200 /tmp/turniere-e2e-server.log || true
+    - 'test -f /tmp/turniere-e2e-server.log && tail -n 200 /tmp/turniere-e2e-server.log || true'
