@@ -35,3 +35,4 @@ coverage/**
 /config/credentials/beta.key
 
 /specs_with_runtime.txt
+.venv/

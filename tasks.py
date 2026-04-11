@@ -1,6 +1,8 @@
 from invoke import task
 
 import os
+import re
+import shlex
 import signal
 import subprocess
 import time
@@ -10,6 +12,8 @@ import urllib.request
 SERVER_HOST = "0.0.0.0"
 SERVER_PORT = "3000"
 TEST_BASE_URL = f"http://127.0.0.1:{SERVER_PORT}"
+BLACKBOX_BASE_URL = TEST_BASE_URL
+BLACKBOX_INTERNAL_BASE_URL = "http://app:3000"
 
 E2E_EMAIL = "e2e@example.com"
 E2E_PASSWORD = "password123"
@@ -18,6 +22,15 @@ E2E_USERNAME = "e2e-user"
 PRODUCTION_TAG = "registry.gitlab.com/turniere/turniere-backend/production/commits:local"
 DEVELOPMENT_TAG = "registry.gitlab.com/turniere/turniere-backend/development/commits:local"
 TEST_TAG = "registry.gitlab.com/turniere/turniere-backend/test/commits:local"
+BLACKBOX_COMPOSE_FILE = "docker-compose.blackbox.yml"
+BLACKBOX_PROJECT = "turniere-blackbox"
+BLACKBOX_POSTGRES_IMAGE = "postgres:16"
+BLACKBOX_DB_NAME = "turniere_blackbox"
+BLACKBOX_DB_USER = "turniere"
+BLACKBOX_DB_PASSWORD = "turniere"
+BLACKBOX_SECRET_KEY_BASE = "turniere-blackbox-secret-key-base-please-change-in-real-prod"
+BLACKBOX_MAILGUN_API_KEY = "blackbox-test-api-key"
+BLACKBOX_MAILGUN_DOMAIN = "blackbox.example.com"
 
 
 def _env(**overrides):
@@ -39,6 +52,162 @@ def _wait_for_http(base_url=TEST_BASE_URL, timeout=60):
             time.sleep(0.5)
 
     raise RuntimeError(f"healthcheck did not become ready within {timeout}s: {healthz_url}")
+
+
+def _docker_compose_cmd(project_name=BLACKBOX_PROJECT, compose_file=BLACKBOX_COMPOSE_FILE):
+    return ["docker-compose", "-p", project_name, "-f", compose_file]
+
+
+def _run_subprocess(command, env=None, capture_output=False, check=True):
+    completed = subprocess.run(
+        command,
+        env=env,
+        text=True,
+        capture_output=capture_output,
+        check=False,
+    )
+    if check and completed.returncode != 0:
+        raise subprocess.CalledProcessError(
+            completed.returncode,
+            command,
+            output=completed.stdout,
+            stderr=completed.stderr,
+        )
+    return completed
+
+
+def _compose_env(
+    host_port=SERVER_PORT,
+    app_image=PRODUCTION_TAG,
+    runner_image=TEST_TAG,
+    postgres_image=BLACKBOX_POSTGRES_IMAGE,
+):
+    return _env(
+        TURNIERE_BLACKBOX_HOST_PORT=host_port,
+        TURNIERE_BLACKBOX_APP_IMAGE=app_image,
+        TURNIERE_BLACKBOX_RUNNER_IMAGE=runner_image,
+        TURNIERE_BLACKBOX_POSTGRES_IMAGE=postgres_image,
+        TURNIERE_BLACKBOX_POSTGRES_DB=BLACKBOX_DB_NAME,
+        TURNIERE_BLACKBOX_POSTGRES_USER=BLACKBOX_DB_USER,
+        TURNIERE_BLACKBOX_POSTGRES_PASSWORD=BLACKBOX_DB_PASSWORD,
+        TURNIERE_BLACKBOX_SECRET_KEY_BASE=BLACKBOX_SECRET_KEY_BASE,
+        TURNIERE_BLACKBOX_MAILGUN_API_KEY=BLACKBOX_MAILGUN_API_KEY,
+        TURNIERE_BLACKBOX_MAILGUN_DOMAIN=BLACKBOX_MAILGUN_DOMAIN,
+        TURNIERE_E2E_BASE_URL=BLACKBOX_INTERNAL_BASE_URL,
+        TURNIERE_E2E_EMAIL=E2E_EMAIL,
+        TURNIERE_E2E_PASSWORD=E2E_PASSWORD,
+        TURNIERE_E2E_USERNAME=E2E_USERNAME,
+    )
+
+
+def _format_command(command):
+    return " ".join(shlex.quote(part) for part in command)
+
+
+def _compose_run(compose_args, env, capture_output=False, check=True):
+    command = _docker_compose_cmd() + compose_args
+    return _run_subprocess(command, env=env, capture_output=capture_output, check=check)
+
+
+def _print_header(title):
+    print(f"\n== {title} ==")
+
+
+def _bootstrap_user_command(email, password, username):
+    return (
+        "bundle exec rails runner "
+        f"\"user = User.find_or_initialize_by(email: '{email}'); "
+        f"user.username = '{username}'; "
+        f"user.password = '{password}'; "
+        f"user.password_confirmation = '{password}'; "
+        "user.confirmed_at = Time.current; "
+        "user.uid = user.email; "
+        "user.provider = 'email'; "
+        "user.save!\""
+    )
+
+
+def _parse_rspec_report(output):
+    summary_match = re.search(r"(\d+)\s+examples?,\s+(\d+)\s+failures?(?:,\s+(\d+)\s+pending)?", output)
+    failed_examples = re.findall(r"^\s*rspec\s+(.+)$", output, flags=re.MULTILINE)
+
+    return {
+        "examples": int(summary_match.group(1)) if summary_match else None,
+        "failures": int(summary_match.group(2)) if summary_match else None,
+        "pending": int(summary_match.group(3)) if summary_match and summary_match.group(3) else 0,
+        "failed_examples": failed_examples,
+    }
+
+
+def _print_rspec_report(report):
+    examples = report["examples"]
+    failures = report["failures"]
+    pending = report["pending"]
+    failed_examples = report["failed_examples"]
+
+    if examples is None or failures is None:
+        print("Rerun summary could not be parsed from the RSpec output.")
+        return
+
+    print(f"Examples: {examples}")
+    print(f"Failures: {failures}")
+    print(f"Pending: {pending}")
+    if failed_examples:
+        print("Failed examples:")
+        for example in failed_examples:
+            print(f"- {example}")
+
+
+def _print_service_logs(env, service, tail=120):
+    _print_header(f"{service} logs (last {tail} lines)")
+    logs = _compose_run(["logs", "--tail", str(tail), service], env=env, capture_output=True, check=False)
+    output = logs.stdout or logs.stderr or "<no logs>"
+    print(output.rstrip())
+
+
+def _shared_production_env():
+    return _env(
+        RAILS_ENV="production",
+        POSTGRES_URL=os.environ.get(
+            "POSTGRES_URL",
+            f"postgres://{BLACKBOX_DB_USER}:{BLACKBOX_DB_PASSWORD}@postgres:5432/{BLACKBOX_DB_NAME}",
+        ),
+        POSTGRES_USERNAME=os.environ.get("POSTGRES_USERNAME", BLACKBOX_DB_USER),
+        POSTGRES_PASSWORD=os.environ.get("POSTGRES_PASSWORD", BLACKBOX_DB_PASSWORD),
+        SECRET_KEY_BASE=os.environ.get("SECRET_KEY_BASE", BLACKBOX_SECRET_KEY_BASE),
+        MAILGUN_API_KEY=os.environ.get("MAILGUN_API_KEY", BLACKBOX_MAILGUN_API_KEY),
+        MAILGUN_DOMAIN=os.environ.get("MAILGUN_DOMAIN", BLACKBOX_MAILGUN_DOMAIN),
+        RAILS_LOG_TO_STDOUT=os.environ.get("RAILS_LOG_TO_STDOUT", "1"),
+        RAILS_SERVE_STATIC_FILES=os.environ.get("RAILS_SERVE_STATIC_FILES", "1"),
+    )
+
+
+def _run_blackbox_rspec(base_url, email, password, username):
+    env = _env(
+        TURNIERE_E2E_BASE_URL=base_url,
+        TURNIERE_E2E_EMAIL=email,
+        TURNIERE_E2E_PASSWORD=password,
+        TURNIERE_E2E_USERNAME=username,
+    )
+    command = ["bundle", "exec", "rspec", "spec/e2e/http", "--format", "documentation"]
+    print(_format_command(command))
+    result = _run_subprocess(command, env=env, capture_output=True, check=False)
+    if result.stdout:
+        print(result.stdout.rstrip())
+    if result.stderr:
+        print(result.stderr.rstrip())
+
+    report = _parse_rspec_report(f"{result.stdout}\n{result.stderr}")
+    _print_header("Blackbox report")
+    _print_rspec_report(report)
+
+    if result.returncode != 0:
+        raise subprocess.CalledProcessError(
+            result.returncode,
+            result.args,
+            output=result.stdout,
+            stderr=result.stderr,
+        )
 
 
 def _start_test_server():
@@ -258,6 +427,202 @@ def docker_build_all(c):
     docker_build_production(c)
     docker_build_development(c)
     docker_build_test(c)
+
+
+@task(name="docker-blackbox-up")
+def docker_blackbox_up(
+    c,
+    host_port=SERVER_PORT,
+    app_image=PRODUCTION_TAG,
+    runner_image=TEST_TAG,
+    postgres_image=BLACKBOX_POSTGRES_IMAGE,
+    build=True,
+):
+    """Build the Docker images, then boot Postgres and the production app for blackbox testing."""
+    if build:
+        docker_build_all(c)
+
+    env = _compose_env(
+        host_port=host_port,
+        app_image=app_image,
+        runner_image=runner_image,
+        postgres_image=postgres_image,
+    )
+
+    _print_header("Starting production blackbox stack")
+    _compose_run(["down", "-v", "--remove-orphans"], env=env, check=False)
+    _compose_run(["up", "-d", "postgres", "app"], env=env)
+
+    base_url = f"http://127.0.0.1:{host_port}"
+    _print_header(f"Waiting for app healthcheck at {base_url}")
+    _wait_for_http(base_url=base_url, timeout=120)
+
+    _print_header("Bootstrapping confirmed E2E user")
+    bootstrap = _compose_run(
+        ["exec", "-T", "app", "bash", "-lc", _bootstrap_user_command(E2E_EMAIL, E2E_PASSWORD, E2E_USERNAME)],
+        env=env,
+        capture_output=True,
+        check=False,
+    )
+    if bootstrap.returncode != 0:
+        print(bootstrap.stdout or "", end="")
+        print(bootstrap.stderr or "", end="")
+        raise subprocess.CalledProcessError(
+            bootstrap.returncode,
+            bootstrap.args,
+            output=bootstrap.stdout,
+            stderr=bootstrap.stderr,
+        )
+
+    print("Production app is ready for blackbox E2E.")
+
+
+@task(name="docker-blackbox-down")
+def docker_blackbox_down(
+    c,
+    host_port=SERVER_PORT,
+    app_image=PRODUCTION_TAG,
+    runner_image=TEST_TAG,
+    postgres_image=BLACKBOX_POSTGRES_IMAGE,
+):
+    """Stop and remove the production blackbox stack."""
+    env = _compose_env(
+        host_port=host_port,
+        app_image=app_image,
+        runner_image=runner_image,
+        postgres_image=postgres_image,
+    )
+    _compose_run(["down", "-v", "--remove-orphans"], env=env, check=False)
+
+
+@task(name="docker-blackbox-test")
+def docker_blackbox_test(
+    c,
+    host_port=SERVER_PORT,
+    app_image=PRODUCTION_TAG,
+    runner_image=TEST_TAG,
+    postgres_image=BLACKBOX_POSTGRES_IMAGE,
+):
+    """Run the HTTP E2E suite against the running production blackbox stack."""
+    env = _compose_env(
+        host_port=host_port,
+        app_image=app_image,
+        runner_image=runner_image,
+        postgres_image=postgres_image,
+    )
+
+    _print_header("Running HTTP E2E against production image")
+    command = [
+        "run",
+        "--rm",
+        "e2e",
+        "bundle",
+        "exec",
+        "rspec",
+        "spec/e2e/http",
+        "--format",
+        "documentation",
+    ]
+    print(_format_command(_docker_compose_cmd() + command))
+    result = _compose_run(command, env=env, capture_output=True, check=False)
+    if result.stdout:
+        print(result.stdout.rstrip())
+    if result.stderr:
+        print(result.stderr.rstrip())
+
+    report = _parse_rspec_report(f"{result.stdout}\n{result.stderr}")
+    _print_header("Blackbox report")
+    _print_rspec_report(report)
+
+    if result.returncode != 0:
+        raise subprocess.CalledProcessError(
+            result.returncode,
+            result.args,
+            output=result.stdout,
+            stderr=result.stderr,
+        )
+
+
+@task(name="blackbox-service")
+def blackbox_service(
+    c,
+    base_url=BLACKBOX_INTERNAL_BASE_URL,
+    email=E2E_EMAIL,
+    password=E2E_PASSWORD,
+    username=E2E_USERNAME,
+):
+    """Run blackbox HTTP E2E against an already running production app plus Postgres sidecars."""
+    _print_header(f"Waiting for app healthcheck at {base_url}")
+    _wait_for_http(base_url=base_url, timeout=120)
+
+    _print_header("Bootstrapping confirmed E2E user")
+    c.run(
+        _bootstrap_user_command(email, password, username),
+        env=_shared_production_env(),
+        pty=True,
+    )
+
+    _print_header("Running HTTP E2E against production image")
+    _run_blackbox_rspec(base_url, email, password, username)
+
+
+@task(name="blackbox-production")
+def blackbox_production(
+    c,
+    host_port=SERVER_PORT,
+    app_image=PRODUCTION_TAG,
+    runner_image=TEST_TAG,
+    postgres_image=BLACKBOX_POSTGRES_IMAGE,
+    build=True,
+    keep_running=False,
+):
+    """Build the production image, boot a Postgres-backed stack, run HTTP E2E, and print a summary."""
+    env = _compose_env(
+        host_port=host_port,
+        app_image=app_image,
+        runner_image=runner_image,
+        postgres_image=postgres_image,
+    )
+
+    exit_error = None
+    try:
+        docker_blackbox_up(
+            c,
+            host_port=host_port,
+            app_image=app_image,
+            runner_image=runner_image,
+            postgres_image=postgres_image,
+            build=build,
+        )
+        docker_blackbox_test(
+            c,
+            host_port=host_port,
+            app_image=app_image,
+            runner_image=runner_image,
+            postgres_image=postgres_image,
+        )
+    except (RuntimeError, subprocess.CalledProcessError) as error:
+        exit_error = error
+        _print_service_logs(env, "app")
+        _print_service_logs(env, "postgres")
+    finally:
+        if keep_running:
+            _print_header("Stack kept running")
+            print(
+                f"Production app: http://127.0.0.1:{host_port}\n"
+                f"Stop it later with: {_format_command(_docker_compose_cmd() + ['down', '-v', '--remove-orphans'])}"
+            )
+        else:
+            docker_blackbox_down(
+                c,
+                host_port=host_port,
+                app_image=app_image,
+                runner_image=runner_image,
+                postgres_image=postgres_image,
+            )
+
+    if exit_error:
+        raise exit_error
 
 
 @task(name="docker-test-http-e2e")

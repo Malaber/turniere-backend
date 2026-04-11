@@ -28,6 +28,26 @@ rails spec:
 rails e2e spec:
   stage: test
   image: $CI_REGISTRY_IMAGE/test/commits:$CI_COMMIT_SHA
+  services:
+    - name: postgres:16
+      alias: postgres
+    - name: $CI_REGISTRY_IMAGE/production/commits:$CI_COMMIT_SHA
+      alias: app
+  variables:
+    POSTGRES_DB: turniere_blackbox
+    POSTGRES_USER: turniere
+    POSTGRES_PASSWORD: turniere
+    POSTGRES_URL: postgres://turniere:turniere@postgres:5432/turniere_blackbox
+    POSTGRES_USERNAME: turniere
+    SECRET_KEY_BASE: turniere-blackbox-secret-key-base-please-change-in-real-prod
+    MAILGUN_API_KEY: blackbox-test-api-key
+    MAILGUN_DOMAIN: blackbox.example.com
+    RAILS_LOG_TO_STDOUT: "1"
+    RAILS_SERVE_STATIC_FILES: "1"
+    TURNIERE_E2E_BASE_URL: http://app:3000
+    TURNIERE_E2E_EMAIL: e2e@example.com
+    TURNIERE_E2E_PASSWORD: password123
+    TURNIERE_E2E_USERNAME: e2e-user
   rules:
     - if: $SKIP_TEST
       when: never
@@ -36,6 +56,4 @@ rails e2e spec:
     - when: always
   script:
     - cd /app
-    - inv verify-http
-  after_script:
-    - 'test -f /tmp/turniere-e2e-server.log && tail -n 200 /tmp/turniere-e2e-server.log || true'
+    - inv blackbox-service

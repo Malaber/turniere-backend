@@ -15,11 +15,13 @@ Examples:
 - `inv test`
 - `inv lint`
 - `inv verify-http`
+- `inv blackbox-production`
 - `inv scenario-main-usecase`
 - `inv docker-build-all`
 - `inv docker-test-http-e2e`
 
 The GitLab CI pipeline is expected to use these tasks as well.
+In CI, blackbox E2E should target sidecar service containers rather than Docker Compose inside the job.
 
 This is not just a convenience preference. The task layer is the operational
 contract for this repo and should stay aligned across local use, CI, and
@@ -63,6 +65,7 @@ That means:
 - scenario creation should stay HTTP-driven
 - reusable scenario setup should be exposed through `inv` tasks and `script/e2e_scenarios.rb`
 - new commonly needed backend states should be added to the scenario/task layer, not recreated ad hoc in each consuming test suite
+- the released production image should be exercised through the blackbox task layer, not only Rails-internal test entrypoints
 
 ## Practical Expectation
 
