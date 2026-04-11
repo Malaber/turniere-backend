@@ -4,6 +4,13 @@ require 'spec_helper'
 require_relative '../../../e2e/lib/scenario_runner'
 
 RSpec.describe 'Tournament lifecycle HTTP E2E' do
+  required_env_vars = %w[TURNIERE_E2E_EMAIL TURNIERE_E2E_PASSWORD].freeze
+
+  before do
+    missing_vars = required_env_vars.reject { |name| ENV.key?(name) }
+    skip("HTTP E2E requires #{missing_vars.join(', ')}") unless missing_vars.empty?
+  end
+
   let(:base_url) { ENV.fetch('TURNIERE_E2E_BASE_URL', 'http://127.0.0.1:3000') }
   let(:runner) do
     TurniereE2E::ScenarioRunner.new(
