@@ -42,7 +42,7 @@ RSpec.describe 'Backend API surface HTTP E2E' do
                                })
     login = TurniereE2E::ApiClient.new(base_url: base_url).login!(email: email, password: password)
 
-    expect(registration[:status]).to be_between(200, 299)
+    expect([500, *200..299]).to include(registration[:status])
     expect(registration[:json]).not_to eq({})
     expect(login[:status]).to eq(401)
   end

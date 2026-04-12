@@ -127,6 +127,9 @@ def _compose_env(
         TURNIERE_E2E_EMAIL=E2E_EMAIL,
         TURNIERE_E2E_PASSWORD=E2E_PASSWORD,
         TURNIERE_E2E_USERNAME=E2E_USERNAME,
+        TURNIERE_E2E_ALT_EMAIL=E2E_ALT_EMAIL,
+        TURNIERE_E2E_ALT_PASSWORD=E2E_ALT_PASSWORD,
+        TURNIERE_E2E_ALT_USERNAME=E2E_ALT_USERNAME,
     )
 
 
@@ -241,12 +244,16 @@ def _shared_production_env():
     )
 
 
-def _run_blackbox_rspec(base_url, email, password, username):
+def _run_blackbox_rspec(base_url, email, password, username, alt_email=E2E_ALT_EMAIL, alt_password=E2E_ALT_PASSWORD,
+                        alt_username=E2E_ALT_USERNAME):
     env = _env(
         TURNIERE_E2E_BASE_URL=base_url,
         TURNIERE_E2E_EMAIL=email,
         TURNIERE_E2E_PASSWORD=password,
         TURNIERE_E2E_USERNAME=username,
+        TURNIERE_E2E_ALT_EMAIL=alt_email,
+        TURNIERE_E2E_ALT_PASSWORD=alt_password,
+        TURNIERE_E2E_ALT_USERNAME=alt_username,
     )
     command = ["bundle", "exec", "rspec", "spec/e2e/http", "--format", "documentation"]
     print(_format_command(command))
@@ -618,21 +625,25 @@ def docker_blackbox_up(
     _wait_for_http(base_url=base_url, timeout=120)
 
     _print_header("Bootstrapping confirmed E2E user")
-    bootstrap = _compose_run(
-        ["exec", "-T", "app", "bash", "-lc", _bootstrap_user_command(E2E_EMAIL, E2E_PASSWORD, E2E_USERNAME)],
-        env=env,
-        capture_output=True,
-        check=False,
-    )
-    if bootstrap.returncode != 0:
-        print(bootstrap.stdout or "", end="")
-        print(bootstrap.stderr or "", end="")
-        raise subprocess.CalledProcessError(
-            bootstrap.returncode,
-            bootstrap.args,
-            output=bootstrap.stdout,
-            stderr=bootstrap.stderr,
+    for bootstrap_email, bootstrap_password, bootstrap_username in (
+        (E2E_EMAIL, E2E_PASSWORD, E2E_USERNAME),
+        (E2E_ALT_EMAIL, E2E_ALT_PASSWORD, E2E_ALT_USERNAME),
+    ):
+        bootstrap = _compose_run(
+            ["exec", "-T", "app", "bash", "-lc", _bootstrap_user_command(bootstrap_email, bootstrap_password, bootstrap_username)],
+            env=env,
+            capture_output=True,
+            check=False,
         )
+        if bootstrap.returncode != 0:
+            print(bootstrap.stdout or "", end="")
+            print(bootstrap.stderr or "", end="")
+            raise subprocess.CalledProcessError(
+                bootstrap.returncode,
+                bootstrap.args,
+                output=bootstrap.stdout,
+                stderr=bootstrap.stderr,
+            )
 
     print("Production app is ready for blackbox E2E.")
 
@@ -710,6 +721,9 @@ def blackbox_service(
     email=E2E_EMAIL,
     password=E2E_PASSWORD,
     username=E2E_USERNAME,
+    alt_email=E2E_ALT_EMAIL,
+    alt_password=E2E_ALT_PASSWORD,
+    alt_username=E2E_ALT_USERNAME,
 ):
     """Run blackbox HTTP E2E against an already running production app plus Postgres sidecars."""
     _print_header("Running production database migrations")
@@ -724,9 +738,14 @@ def blackbox_service(
         env=_shared_production_env(),
         pty=True,
     )
+    c.run(
+        _bootstrap_user_command(alt_email, alt_password, alt_username),
+        env=_shared_production_env(),
+        pty=True,
+    )
 
     _print_header("Running HTTP E2E against production image")
-    _run_blackbox_rspec(base_url, email, password, username)
+    _run_blackbox_rspec(base_url, email, password, username, alt_email, alt_password, alt_username)
 
 
 @task(name="blackbox-production")
