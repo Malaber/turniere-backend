@@ -67,6 +67,10 @@ module TurniereE2E
       request(:patch, path, body: body, params: params, headers: headers)
     end
 
+    def delete(path, params: nil, headers: {})
+      request(:delete, path, params: params, headers: headers)
+    end
+
     private
 
     def request(method, path, body: nil, params: nil, headers: {})
@@ -77,6 +81,7 @@ module TurniereE2E
                       when :get then Net::HTTP::Get
                       when :post then Net::HTTP::Post
                       when :patch then Net::HTTP::Patch
+                      when :delete then Net::HTTP::Delete
                       else
                         raise ArgumentError, "unsupported method #{method}"
                       end
