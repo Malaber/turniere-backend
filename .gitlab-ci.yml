@@ -52,7 +52,6 @@ rails e2e spec:
         - 0.0.0.0
   variables:
     FF_NETWORK_PER_BUILD: "true"
-    CI_DEBUG_SERVICES: "true"
     POSTGRES_DB: turniere_blackbox
     POSTGRES_USER: turniere
     POSTGRES_PASSWORD: turniere

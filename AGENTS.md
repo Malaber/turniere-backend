@@ -16,7 +16,6 @@ Examples:
 - `inv test-shard --node-index=1 --node-total=8`
 - `inv lint`
 - `inv verify-http`
-- `inv blackbox-self`
 - `inv blackbox-production`
 - `inv scenario-main-usecase`
 - `inv docker-build-all`

@@ -653,48 +653,6 @@ def blackbox_service(
     _run_blackbox_rspec(base_url, email, password, username)
 
 
-@task(name="blackbox-self")
-def blackbox_self(
-    c,
-    base_url=TEST_BASE_URL,
-    email=E2E_EMAIL,
-    password=E2E_PASSWORD,
-    username=E2E_USERNAME,
-):
-    """Run the pure-Ruby blackbox verifier inside the production image against a local production server."""
-    env = _shared_production_env()
-    server_command = f"bundle exec rails s -b {SERVER_HOST} -p {SERVER_PORT}"
-
-    _print_header("Running production database migrations")
-    c.run("bundle exec rails db:migrate", env=env, pty=True)
-
-    process, log_handle = _start_server(server_command, env)
-    try:
-        _print_header(f"Waiting for app healthcheck at {base_url}")
-        _wait_for_http(base_url=base_url, timeout=120)
-
-        _print_header("Bootstrapping confirmed E2E user")
-        c.run(
-            _bootstrap_user_command(email, password, username),
-            env=env,
-            pty=True,
-        )
-
-        _print_header("Running blackbox verifier")
-        c.run(
-            "ruby script/verify_e2e_blackbox.rb",
-            env=_env(
-                TURNIERE_E2E_BASE_URL=base_url,
-                TURNIERE_E2E_EMAIL=email,
-                TURNIERE_E2E_PASSWORD=password,
-                TURNIERE_E2E_USERNAME=username,
-            ),
-            pty=True,
-        )
-    finally:
-        _stop_process(process, log_handle)
-
-
 @task(name="blackbox-production")
 def blackbox_production(
     c,
