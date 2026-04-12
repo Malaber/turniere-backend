@@ -35,12 +35,21 @@ BLACKBOX_MAILGUN_API_KEY = "blackbox-test-api-key"
 BLACKBOX_MAILGUN_DOMAIN = "blackbox.example.com"
 SPEC_ROOT = Path("spec")
 E2E_SPEC_ROOT = SPEC_ROOT / "e2e" / "http"
+BUNDLER_VERSION = Path("Gemfile.lock").read_text(encoding="utf-8").split("BUNDLED WITH", 1)[1].strip().splitlines()[-1].strip()
 
 
 def _env(**overrides):
     env = os.environ.copy()
     env.update({key: str(value) for key, value in overrides.items()})
     return env
+
+
+def _bundle_command(*parts):
+    return " ".join(["bundle", f"_{BUNDLER_VERSION}_", *parts])
+
+
+def _bundle_exec(*parts):
+    return _bundle_command("exec", *parts)
 
 
 def _wait_for_http(base_url=TEST_BASE_URL, timeout=60):
@@ -128,7 +137,7 @@ def _print_header(title):
 
 def _bootstrap_user_command(email, password, username):
     return (
-        "bundle exec rails runner "
+        f"{_bundle_exec('rails', 'runner')} "
         f"\"user = User.find_or_initialize_by(email: '{email}'); "
         f"user.username = '{username}'; "
         f"user.password = '{password}'; "
@@ -266,7 +275,7 @@ def _start_server(command, env, log_path="/tmp/turniere-e2e-server.log"):
 
 def _start_test_server():
     return _start_server(
-        f"bundle exec rails s -e test -b {SERVER_HOST} -p {SERVER_PORT}",
+        f"{_bundle_exec('rails', 's')} -e test -b {SERVER_HOST} -p {SERVER_PORT}",
         _env(),
     )
 
@@ -282,32 +291,52 @@ def _stop_process(process, log_handle):
 
 @task
 def setup(c):
-    """Install gem dependencies locally."""
-    c.run("bundle install", pty=True)
+    """Install the pinned Bundler and local backend gem dependencies."""
+    install_bundler = c.run(
+        f"gem list -i bundler -v {BUNDLER_VERSION}",
+        warn=True,
+        hide=True,
+    )
+    if not install_bundler.ok:
+        c.run(f"gem install bundler:{BUNDLER_VERSION}", pty=True)
+
+    c.run(f"{_bundle_command('config', 'set', 'without', 'production')}", pty=True)
+    c.run(f"{_bundle_command('config', 'set', 'with', 'development test')}", pty=True)
+    c.run(_bundle_command("install"), pty=True)
 
 
 @task(name="db-migrate")
-def db_migrate(c):
+def db_migrate(c, env="development"):
     """Run database migrations locally."""
-    c.run("bundle exec rails db:migrate", pty=True)
+    c.run(f"RAILS_ENV={env} {_bundle_exec('rails', 'db:migrate')}", pty=True)
 
 
 @task
-def server(c, host=SERVER_HOST, port=SERVER_PORT):
+def server(c, host=SERVER_HOST, port=SERVER_PORT, env="development"):
     """Start the backend locally in development."""
-    c.run(f"bundle exec rails s -b {host} -p {port}", pty=True)
+    c.run(f"RAILS_ENV={env} {_bundle_exec('rails', 's')} -b {host} -p {port}", pty=True)
+
+
+@task(name="start-local")
+def start_local(c, host=SERVER_HOST, port=SERVER_PORT, bootstrap_user=False):
+    """Install local deps if needed, migrate the dev database, and start the server."""
+    setup(c)
+    db_migrate(c, env="development")
+    if bootstrap_user:
+        bootstrap_dev_user(c)
+    server(c, host=host, port=port, env="development")
 
 
 @task(name="server-test")
 def server_test(c, host=SERVER_HOST, port=SERVER_PORT):
     """Start the backend locally in test mode."""
-    c.run(f"bundle exec rails s -e test -b {host} -p {port}", pty=True)
+    c.run(f"RAILS_ENV=test {_bundle_exec('rails', 's')} -b {host} -p {port}", pty=True)
 
 
 @task
 def test(c):
     """Run the normal RSpec suite."""
-    c.run("bundle exec rspec", pty=True)
+    c.run(_bundle_exec("rspec"), pty=True)
 
 
 @task(name="test-shard")
@@ -340,7 +369,7 @@ def test_shard(c, node_index=1, node_total=8, dry_run=False):
         return
 
     c.run(
-        "bundle exec rspec --require ./spec/rails_helper " + " ".join(shlex.quote(path) for path in files),
+        _bundle_exec("rspec") + " --require ./spec/rails_helper " + " ".join(shlex.quote(path) for path in files),
         pty=True,
     )
 
@@ -348,14 +377,31 @@ def test_shard(c, node_index=1, node_total=8, dry_run=False):
 @task
 def lint(c):
     """Run RuboCop."""
-    c.run("bundle exec rubocop", pty=True)
+    c.run(_bundle_exec("rubocop"), pty=True)
+
+
+@task(name="bootstrap-dev-user")
+def bootstrap_dev_user(c, email=E2E_EMAIL, password=E2E_PASSWORD, username=E2E_USERNAME):
+    """Create or update a confirmed local development user."""
+    command = (
+        f"RAILS_ENV=development {_bundle_exec('rails', 'runner')} "
+        f"\"user = User.find_or_initialize_by(email: '{email}'); "
+        f"user.username = '{username}'; "
+        f"user.password = '{password}'; "
+        f"user.password_confirmation = '{password}'; "
+        "user.confirmed_at = Time.current; "
+        "user.uid = user.email; "
+        "user.provider = 'email'; "
+        "user.save!\""
+    )
+    c.run(command, pty=True)
 
 
 @task(name="bootstrap-e2e-user")
 def bootstrap_e2e_user(c, email=E2E_EMAIL, password=E2E_PASSWORD, username=E2E_USERNAME):
     """Create or update the confirmed HTTP E2E user in test env."""
     command = (
-        "bundle exec rails runner -e test "
+        f"RAILS_ENV=test {_bundle_exec('rails', 'runner')} "
         f"\"user = User.find_or_initialize_by(email: '{email}'); "
         f"user.username = '{username}'; "
         f"user.password = '{password}'; "
@@ -378,7 +424,7 @@ def test_http_e2e(
 ):
     """Run HTTP E2E specs against an already running backend."""
     c.run(
-        "bundle exec rspec spec/e2e/http",
+        f"{_bundle_exec('rspec')} spec/e2e/http",
         env=_env(
             TURNIERE_E2E_BASE_URL=base_url,
             TURNIERE_E2E_EMAIL=email,
