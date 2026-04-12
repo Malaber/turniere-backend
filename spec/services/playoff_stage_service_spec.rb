@@ -212,5 +212,22 @@ RSpec.describe PlayoffStageService do
         expect(@test.state).to eq('not_started')
       end
     end
+
+    context 'when the current match is the final of a tournament with a group stage' do
+      before do
+        @tournament = create(:group_stage_tournament, stage_count: 1)
+        @final_match = @tournament.stages.reject { |stage| stage.level == -1 }.max_by(&:level).matches.first
+        @final_match.state = :finished
+        @final_match.match_scores.each_with_index do |match_score, index|
+          match_score.points = index
+          match_score.save!
+        end
+        @final_match.save!
+      end
+
+      it 'does not treat the group stage as a lower playoff stage' do
+        expect(PlayoffStageService.populate_match_below(@final_match)).to eq([])
+      end
+    end
   end
 end

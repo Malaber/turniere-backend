@@ -21,7 +21,7 @@ RSpec.describe 'Tournament lifecycle HTTP E2E' do
     )
   end
 
-  it 'drives the main 4x4 group-stage use case over HTTP and preserves the current final-finish behavior' do
+  it 'drives the main 4x4 group-stage use case over HTTP through a finished final' do
     result = runner.run_group_stage_main_usecase
 
     expect(result.dig(:checkpoints, :created, :playoff_teams_amount)).to eq(8)
@@ -35,11 +35,12 @@ RSpec.describe 'Tournament lifecycle HTTP E2E' do
     expect(playoff_entry_stage[:match_states].count).to eq(4)
 
     final_attempt = result.dig(:checkpoints, :final_finish_attempted, :finish_attempt)
-    expect(final_attempt[:status]).to eq(422)
-    expect(final_attempt.dig(:body, :error)).to eq('Moving Team one stage down failed')
+    expect(final_attempt[:status]).to eq(200)
+    expect(result.dig(:checkpoints, :final_finish_attempted, :tournament, :stage_summaries)
+      .find { |stage| stage[:level] == 0 }[:match_states]).to eq(['finished'])
   end
 
-  it 'drives the 3-group intermediate-round path over HTTP and preserves the current advancing behavior' do
+  it 'drives the 3-group intermediate-round path over HTTP through a finished final' do
     result = runner.run_group_stage_intermediate_round
 
     created = result.fetch(:checkpoints).fetch(:created)
@@ -55,8 +56,9 @@ RSpec.describe 'Tournament lifecycle HTTP E2E' do
     expect(playoff_entry_stage[:match_states].count('not_started')).to eq(1)
 
     final_attempt = result.dig(:checkpoints, :final_finish_attempted, :finish_attempt)
-    expect(final_attempt[:status]).to eq(422)
-    expect(final_attempt.dig(:body, :error)).to eq('Moving Team one stage down failed')
+    expect(final_attempt[:status]).to eq(200)
+    expect(result.dig(:checkpoints, :final_finish_attempted, :tournament, :stage_summaries)
+      .find { |stage| stage[:level] == 0 }[:match_states]).to eq(['finished'])
   end
 
   {
