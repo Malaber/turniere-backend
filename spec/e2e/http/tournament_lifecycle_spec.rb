@@ -93,11 +93,14 @@ RSpec.describe 'Tournament lifecycle HTTP E2E' do
             received_points: 1
           )
       else
+        expected_first_group_points = direct_result == :lost ? 9 : 6
+        expected_second_group_points = direct_result == :lost ? 6 : 6
+
         expect(ordered_scores[0].slice(:team_name, :position, :group_points, :difference_in_points, :scored_points, :received_points))
           .to eq(
             team_name: expected_positions[0] == 1 ? 'G1-S1' : 'G1-S2',
             position: 1,
-            group_points: 6,
+            group_points: expected_first_group_points,
             difference_in_points: 3,
             scored_points: 5,
             received_points: 2
@@ -106,7 +109,7 @@ RSpec.describe 'Tournament lifecycle HTTP E2E' do
           .to eq(
             team_name: expected_positions[0] == 1 ? 'G1-S2' : 'G1-S1',
             position: 2,
-            group_points: 6,
+            group_points: expected_second_group_points,
             difference_in_points: 3,
             scored_points: 5,
             received_points: 2
