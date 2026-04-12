@@ -24,7 +24,7 @@ Examples:
 - `inv docker-test-http-e2e`
 
 The GitLab CI pipeline is expected to use these tasks as well.
-In CI, blackbox E2E should run from the production image with Postgres as the sidecar and should avoid Docker Compose inside the job.
+In CI, blackbox E2E should prefer the documented GitLab service-to-service model with `FF_NETWORK_PER_BUILD: "true"` when the production image needs to talk to a Postgres sidecar.
 The normal Rails spec suite is sharded through `inv test-shard ...` and should stay aligned with the CI matrix configuration.
 
 Useful GitLab push-option variables for saving CI minutes on public repos:
