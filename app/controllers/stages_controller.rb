@@ -45,6 +45,22 @@ class StagesController < ApplicationController
       raise ActiveRecord::Rollback
     end
 
+    @stage.groups.each do |group|
+      next if UpdateGroupsGroupScoresAndSave.call(group: group).success?
+
+      render json: { error: 'Updating group scores failed' }, status: :unprocessable_entity
+      raise ActiveRecord::Rollback
+    end
+
+    blocking_ties = GroupStageService.blocking_ties_for(@stage)
+    if blocking_ties.any?
+      render json: {
+        error: 'Playoffs cannot be generated yet because a decider match is required for an advancing place',
+        blocking_ties: blocking_ties
+      }, status: :unprocessable_entity
+      raise ActiveRecord::Rollback
+    end
+
     return if AddPlayoffsToTournamentAndSave.call(tournament: @stage.tournament,
                                                   teams: GroupStageService.get_advancing_teams(@stage)).success?
 

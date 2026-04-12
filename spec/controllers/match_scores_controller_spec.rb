@@ -25,7 +25,8 @@ RSpec.describe MatchScoresController, type: :controller do
   describe 'PUT #update' do
     let(:valid_update) do
       {
-        points: 42
+        points: 42,
+        hidden_points: 13
       }
     end
 
@@ -39,6 +40,7 @@ RSpec.describe MatchScoresController, type: :controller do
             put :update, params: { id: @match_score.to_param }.merge(valid_update)
             @match_score.reload
             expect(@match_score.points).to eq(valid_update[:points])
+            expect(@match_score.hidden_points).to eq(valid_update[:hidden_points])
           end
 
           it 'renders a response with the updated team' do
@@ -46,6 +48,7 @@ RSpec.describe MatchScoresController, type: :controller do
             expect(response).to be_successful
             body = deserialize_response response
             expect(body[:points]).to eq(valid_update[:points])
+            expect(body[:hidden_points]).to eq(valid_update[:hidden_points])
           end
         end
 
@@ -86,7 +89,8 @@ RSpec.describe MatchScoresController, type: :controller do
 
     let(:valid_update) do
       {
-        points: 42
+        points: 42,
+        hidden_points: 13
       }
     end
 

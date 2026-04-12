@@ -23,9 +23,10 @@ class Match < ApplicationRecord
   end
 
   def current_leading_team
-    return nil if match_scores.first.points == match_scores.second.points
+    return nil if match_scores.size < 2
+    return nil if score_value_for(match_scores.first) == score_value_for(match_scores.second)
 
-    match_scores.max_by(&:points).team
+    match_scores.max_by { |match_score| score_value_for(match_score) }.team
   end
 
   def winner
@@ -39,14 +40,19 @@ class Match < ApplicationRecord
   end
 
   def scored_points_of(team)
+    return 0 if decider?
+
     teams.include?(team) ? match_scores.find_by(team: team).points : 0
   end
 
   def received_points_of(team)
+    return 0 if decider?
+
     teams.include?(team) ? match_scores.find { |ms| ms.team != team }.points : 0
   end
 
   def group_points_of(team)
+    return 0 if decider?
     return 0 unless (finished? || in_progress?) && teams.include?(team)
 
     case current_leading_team
@@ -59,9 +65,17 @@ class Match < ApplicationRecord
     end
   end
 
+  def hidden_points_of(team)
+    teams.include?(team) ? match_scores.find_by(team: team).hidden_points : 0
+  end
+
   private
 
   def stage_xor_group
     errors.add(:stage_xor_group, 'Stage and Group missing or both present') unless stage.present? ^ group.present?
+  end
+
+  def score_value_for(match_score)
+    decider? ? match_score.hidden_points : match_score.points
   end
 end

@@ -61,6 +61,41 @@ RSpec.describe MatchesController, type: :controller do
     end
   end
 
+  describe 'POST #create' do
+    let(:group_stage_tournament) { create(:group_stage_tournament, group_count: 1, match_factory: :finished_group_match) }
+    let(:group) { group_stage_tournament.stages.find_by(level: -1).groups.first }
+    let(:team_ids) { group.teams.first(2).map(&:id) }
+
+    context 'as owner' do
+      before do
+        apply_authentication_headers_for group.owner
+      end
+
+      it 'creates a decider match at the end of the group' do
+        expect do
+          post :create, params: { group_id: group.to_param, team_ids: team_ids }
+        end.to change { group.matches.reload.count }.by(1)
+
+        expect(response).to have_http_status(:created)
+        created_match = group.matches.reload.max_by(&:position)
+        expect(created_match.decider?).to eq(true)
+        expect(created_match.state).to eq('not_started')
+        expect(created_match.teams.map(&:id)).to match_array(team_ids)
+      end
+    end
+
+    context 'with invalid teams' do
+      before do
+        apply_authentication_headers_for group.owner
+      end
+
+      it 'rejects the request' do
+        post :create, params: { group_id: group.to_param, team_ids: [group.teams.first.id] }
+        expect(response).to have_http_status(:unprocessable_entity)
+      end
+    end
+  end
+
   describe 'POST #update' do
     context 'on a running playoff match' do
       let(:valid_update) do

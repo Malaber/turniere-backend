@@ -50,6 +50,7 @@ RSpec.describe GroupsController, type: :controller do
         resolved_by: 'direct_comparison',
         compared_with_team_name: 'B',
         direct_comparison_result: 'won',
+        hidden_points_result: 'not_played',
         tied: false,
         needs_decider_match: false
       )
@@ -57,6 +58,7 @@ RSpec.describe GroupsController, type: :controller do
         resolved_by: 'direct_comparison',
         compared_with_team_name: 'A',
         direct_comparison_result: 'lost',
+        hidden_points_result: 'not_played',
         tied: false,
         needs_decider_match: false
       )
