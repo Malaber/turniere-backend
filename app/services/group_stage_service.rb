@@ -96,6 +96,28 @@ class GroupStageService
       group.group_scores.sort.map(&:team)
     end
 
+    def ranking_decision_for(group_score)
+      sorted_group_scores = group_score.group.group_scores.reload.sort
+      index = sorted_group_scores.index(group_score)
+      return nil if index.nil? || sorted_group_scores.size <= 1
+
+      comparison_index = comparison_partner_index(sorted_group_scores, index)
+      return nil if comparison_index.nil?
+
+      compared_group_score = sorted_group_scores[comparison_index]
+      comparison_reason = group_score.comparison_reason_against(compared_group_score)
+
+      {
+        resolved_by: comparison_reason[:resolved_by].to_s,
+        compared_with_team_id: compared_group_score.team.id,
+        compared_with_team_name: compared_group_score.team.name,
+        direct_comparison_result: comparison_reason[:direct_comparison_result].to_s,
+        tied: comparison_reason[:tied],
+        needs_decider_match: comparison_reason[:tied] &&
+          unresolved_tie_crosses_advancing_cutoff?(sorted_group_scores, group_score, advancing_slots_for_group(group_score.group))
+      }
+    end
+
     # Returns all teams advancing to playoff stage from given group stage
     # They are ordered in such a way, that PlayoffStageService will correctly match the teams
     #
@@ -186,6 +208,57 @@ class GroupStageService
       end
 
       group_scores
+    end
+
+    def comparison_partner_index(sorted_group_scores, index)
+      return index - 1 if index.positive? && sorted_group_scores[index - 1].position == sorted_group_scores[index].position
+      return index + 1 if index < sorted_group_scores.size - 1 &&
+        sorted_group_scores[index + 1].position == sorted_group_scores[index].position
+      return index - 1 if index.positive?
+      return index + 1 if sorted_group_scores.size > 1
+
+      nil
+    end
+
+    def unresolved_tie_crosses_advancing_cutoff?(sorted_group_scores, group_score, advancing_slots)
+      return false if advancing_slots.zero?
+
+      cluster = tie_cluster_for(sorted_group_scores, group_score)
+      occupied_slots = (cluster[:start_index] + 1)..(cluster[:end_index] + 1)
+      occupied_slots.begin <= advancing_slots && occupied_slots.end > advancing_slots
+    end
+
+    def tie_cluster_for(sorted_group_scores, group_score)
+      index = sorted_group_scores.index(group_score)
+      position = group_score.position
+
+      start_index = index
+      start_index -= 1 while start_index.positive? && sorted_group_scores[start_index - 1].position == position
+
+      end_index = index
+      while end_index < sorted_group_scores.size - 1 && sorted_group_scores[end_index + 1].position == position
+        end_index += 1
+      end
+
+      { start_index: start_index, end_index: end_index }
+    end
+
+    def advancing_slots_for_group(group)
+      group_stage = group.stage
+      return 0 if group_stage.nil? || group_stage.level != -1 || group_stage.tournament.nil?
+
+      groups = group_stage.groups.sort_by(&:number)
+      group_index = groups.index(group)
+      return 0 if group_index.nil?
+
+      total_advancing_teams = calculate_advancing_teams_amount(group_stage)
+      if special_case_for_po2?(group_stage.tournament.teams.size, total_advancing_teams)
+        total_advancing_teams / groups.size
+      else
+        base_slots = total_advancing_teams / groups.size
+        extra_slot_groups = total_advancing_teams % groups.size
+        base_slots + (group_index < extra_slot_groups ? 1 : 0)
+      end
     end
   end
 end
