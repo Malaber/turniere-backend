@@ -9,4 +9,5 @@ COPY . /app
 # Duplicate production environment to beta environment
 COPY config/environments/production.rb config/environments/beta.rb
 ENV RAILS_ENV production
+EXPOSE 3000
 CMD bundle exec rails db:migrate && bundle exec rails s -p 3000 -b 0.0.0.0

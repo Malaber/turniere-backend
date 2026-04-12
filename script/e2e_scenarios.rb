@@ -1,0 +1,47 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require 'json'
+require 'optparse'
+require_relative '../e2e/lib/scenario_runner'
+
+options = {
+  base_url: ENV.fetch('TURNIERE_E2E_BASE_URL', 'http://127.0.0.1:3000'),
+  stop_at: nil,
+  team_count: 8,
+  email: ENV['TURNIERE_E2E_EMAIL'],
+  password: ENV['TURNIERE_E2E_PASSWORD'],
+  username: ENV['TURNIERE_E2E_USERNAME']
+}
+
+OptionParser.new do |parser|
+  parser.banner = 'Usage: script/e2e_scenarios.rb SCENARIO [options]'
+
+  parser.on('--base-url URL', 'API base URL') { |value| options[:base_url] = value }
+  parser.on('--stop-at CHECKPOINT', 'Stop scenario at a named checkpoint') { |value| options[:stop_at] = value.to_sym }
+  parser.on('--team-count COUNT', Integer, 'Team count for playoff_only scenario') { |value| options[:team_count] = value }
+  parser.on('--email EMAIL', 'Confirmed E2E user email') { |value| options[:email] = value }
+  parser.on('--password PASSWORD', 'Confirmed E2E user password') { |value| options[:password] = value }
+  parser.on('--username USERNAME', 'Confirmed E2E user username') { |value| options[:username] = value }
+end.parse!
+
+scenario = ARGV.shift or abort('Missing scenario name')
+runner = TurniereE2E::ScenarioRunner.new(
+  base_url: options[:base_url],
+  email: options[:email],
+  password: options[:password],
+  username: options[:username]
+)
+
+result = case scenario
+         when 'group_stage_main_usecase'
+           runner.run_group_stage_main_usecase(stop_at: options[:stop_at] || :final_finish_attempted)
+         when 'group_stage_intermediate_round'
+           runner.run_group_stage_intermediate_round(stop_at: options[:stop_at] || :final_finish_attempted)
+         when 'playoff_only'
+           runner.run_playoff_only(team_count: options[:team_count], stop_at: options[:stop_at] || :completed)
+         else
+           abort("Unknown scenario #{scenario.inspect}")
+         end
+
+puts JSON.pretty_generate(result)
