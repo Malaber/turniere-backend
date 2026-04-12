@@ -7,7 +7,6 @@ require 'time'
 module TurniereE2E
   class ScenarioRunner
     DEFAULT_PASSWORD = 'password123'.freeze
-    FINAL_FINISH_ERROR = 'Moving Team one stage down failed'
 
     attr_reader :client
 
@@ -65,12 +64,7 @@ module TurniereE2E
       return result(session: session, tournament: tournament, checkpoints: checkpoints, stop_at: stop_at) if stop_at == :before_final_finish_attempt
 
       final_match = final_match_of!(tournament)
-      finish_attempt = play_match!(
-        final_match,
-        winner_name: preferred_playoff_winner_name(final_match),
-        expected_finish_status: 422,
-        expected_finish_error: FINAL_FINISH_ERROR
-      )
+      finish_attempt = play_match!(final_match, winner_name: preferred_playoff_winner_name(final_match))
       tournament = fetch_tournament!(tournament.fetch(:id))
       checkpoints[:final_finish_attempted] = {
         finish_attempt: finish_attempt,
@@ -103,12 +97,7 @@ module TurniereE2E
       return result(session: session, tournament: tournament, checkpoints: checkpoints, stop_at: stop_at) if stop_at == :before_final_finish_attempt
 
       final_match = final_match_of!(tournament)
-      finish_attempt = play_match!(
-        final_match,
-        winner_name: preferred_playoff_winner_name(final_match),
-        expected_finish_status: 422,
-        expected_finish_error: FINAL_FINISH_ERROR
-      )
+      finish_attempt = play_match!(final_match, winner_name: preferred_playoff_winner_name(final_match))
       tournament = fetch_tournament!(tournament.fetch(:id))
       checkpoints[:final_finish_attempted] = {
         finish_attempt: finish_attempt,

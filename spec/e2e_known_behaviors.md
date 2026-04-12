@@ -20,18 +20,6 @@ The reusable scenario script supports this through:
 
 Frontend tests can use the same script against a live backend as long as those credentials point to a confirmed account on that backend.
 
-## Group-stage tournaments cannot finish the playoff final through the normal match endpoint
-
-Observed and covered by `spec/e2e/http/tournament_lifecycle_spec.rb` and `script/e2e_scenarios.rb`:
-
-- in tournaments that started with a group stage, the playoff final can be started and scored
-- but `PATCH /matches/:id` with `state=finished` on that final returns:
-  - status `422`
-  - error `"Moving Team one stage down failed"`
-- the final remains `in_progress`
-
-This appears to happen because playoff stages count down to level `0`, while the old group stage still exists at level `-1`. The final-finish flow looks for a "stage below" using `current_stage.level - 1`, which resolves to the group stage for finals in group-stage tournaments. The E2E suite preserves this current behavior instead of changing backend code.
-
 ## Group stage to playoff conversion with 3 groups and `playoff_teams_amount = 4`
 
 Observed and covered by `spec/e2e/http/tournament_lifecycle_spec.rb` and `script/e2e_scenarios.rb`:

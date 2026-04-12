@@ -70,7 +70,9 @@ class PlayoffStageService
     # @return [Array] the objects that changed and need to be saved
     def populate_match_below(current_match)
       current_stage = current_match.stage
-      next_stage = current_stage.tournament.stages.find { |s| s.level == current_stage.level - 1 }
+      next_stage = current_stage.tournament.stages
+                                .select { |stage| stage.matches.any? && stage.level < current_stage.level }
+                                .max_by(&:level)
       # return if next stage does not exist (there are no matches after the finale)
       return [] if next_stage.nil?
 
