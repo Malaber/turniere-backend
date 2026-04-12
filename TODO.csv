@@ -15,7 +15,7 @@ Tournament: group pairing logic,"WICHTIG UND EZ: gruppenphase in der gleichen gr
 Matches: auto table assignment,"beim eintragen einer runde direkt den nächsten tisch anzeigen",Story,Medium,To Do,Frontend,
 Tournament: 3rd place match,"spiel um platz 3",Story,Low,To Do,Backend,
 Tournament: edgecase advancing >50%,"edgecase wenn mehr als die hälfte der teams weiterkommen bedenken bzw zumindest abfangen (hier ist gemeint dass es aktuell spezialcode für po2 turniere gibt bei denen immer die hälfte weiterkommt, es sollte aber auch _irgendwie_ für alle turniere funktionieren, ist nur out of scope für bpwstr)",Task,Low,To Do,Backend,
-Timer: splash on end,"Timer groß werden lassen als splashscreen wenn er ausläuft",Story,Low,To Do,Frontend,Beamer
+47: Timer: splash on end,"Timer groß werden lassen als splashscreen wenn er ausläuft",Story,Low,To Do,Frontend,Beamer
 Infra: bottle holders,"Flaschenhalter für die Techniktische",Task,Low,To Do,infra,
 Admin: timer UI cleanup,"timer end im admin frontend hübsch machen (aktuell hardcoded startwert)",Task,Low,To Do,Frontend,Admin
 Search: focus highlight,"turniere-match on focus suche markieren",Task,Low,To Do,Frontend,
