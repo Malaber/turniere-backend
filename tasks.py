@@ -8,6 +8,7 @@ import subprocess
 import time
 import urllib.request
 import urllib.error
+from urllib.parse import urlparse
 from pathlib import Path
 
 
@@ -20,6 +21,9 @@ BLACKBOX_INTERNAL_BASE_URL = "http://app:3000"
 E2E_EMAIL = "e2e@example.com"
 E2E_PASSWORD = "password123"
 E2E_USERNAME = "e2e-user"
+E2E_ALT_EMAIL = "e2e-alt@example.com"
+E2E_ALT_PASSWORD = "password123"
+E2E_ALT_USERNAME = "e2e-alt-user"
 
 PRODUCTION_TAG = "registry.gitlab.com/turniere/turniere-backend/production/commits:local"
 DEVELOPMENT_TAG = "registry.gitlab.com/turniere/turniere-backend/development/commits:local"
@@ -277,9 +281,9 @@ def _start_server(command, env, log_path="/tmp/turniere-e2e-server.log"):
     return process, log_handle
 
 
-def _start_test_server():
+def _start_test_server(host=SERVER_HOST, port=SERVER_PORT):
     return _start_server(
-        f"{_bundle_exec('rails', 's')} -e test -b {SERVER_HOST} -p {SERVER_PORT}",
+        f"{_bundle_exec('rails', 's')} -e test -b {host} -p {port}",
         _env(),
     )
 
@@ -425,6 +429,9 @@ def test_http_e2e(
     email=E2E_EMAIL,
     password=E2E_PASSWORD,
     username=E2E_USERNAME,
+    alt_email=E2E_ALT_EMAIL,
+    alt_password=E2E_ALT_PASSWORD,
+    alt_username=E2E_ALT_USERNAME,
 ):
     """Run HTTP E2E specs against an already running backend."""
     c.run(
@@ -434,6 +441,9 @@ def test_http_e2e(
             TURNIERE_E2E_EMAIL=email,
             TURNIERE_E2E_PASSWORD=password,
             TURNIERE_E2E_USERNAME=username,
+            TURNIERE_E2E_ALT_EMAIL=alt_email,
+            TURNIERE_E2E_ALT_PASSWORD=alt_password,
+            TURNIERE_E2E_ALT_USERNAME=alt_username,
         ),
         pty=True,
     )
@@ -446,15 +456,31 @@ def verify_http(
     email=E2E_EMAIL,
     password=E2E_PASSWORD,
     username=E2E_USERNAME,
+    alt_email=E2E_ALT_EMAIL,
+    alt_password=E2E_ALT_PASSWORD,
+    alt_username=E2E_ALT_USERNAME,
 ):
     """Boot a local test server, then run the HTTP E2E suite against it."""
-    db_migrate(c)
+    db_migrate(c, env="test")
     bootstrap_e2e_user(c, email=email, password=password, username=username)
+    bootstrap_e2e_user(c, email=alt_email, password=alt_password, username=alt_username)
+    parsed_base_url = urlparse(base_url)
+    server_host = parsed_base_url.hostname or "127.0.0.1"
+    server_port = parsed_base_url.port or 3000
 
-    process, log_handle = _start_test_server()
+    process, log_handle = _start_test_server(host=server_host, port=server_port)
     try:
         _wait_for_http(base_url=base_url, timeout=60)
-        test_http_e2e(c, base_url=base_url, email=email, password=password, username=username)
+        test_http_e2e(
+            c,
+            base_url=base_url,
+            email=email,
+            password=password,
+            username=username,
+            alt_email=alt_email,
+            alt_password=alt_password,
+            alt_username=alt_username,
+        )
     finally:
         _stop_process(process, log_handle)
 
