@@ -13,6 +13,9 @@ python jira_bulk_import.py \
   --project TURN \
   --csv issues.csv \
   --create-missing-components
+
+Optional:
+  --default-component General
 """
 
 from __future__ import annotations
@@ -84,7 +87,6 @@ class JiraClient:
         )
 
     def get_project_components(self, project_key: str) -> dict[str, dict[str, Any]]:
-        # GET /rest/api/3/project/{projectKeyOrId}/components
         resp = self.get(f"/rest/api/3/project/{project_key}/components")
         items = resp.json()
         return {item["name"].strip().lower(): item for item in items}
@@ -98,7 +100,6 @@ class JiraClient:
         return resp.json()
 
     def get_issue_types_for_project(self, project_key: str) -> dict[str, dict[str, Any]]:
-        # GET /rest/api/3/issue/createmeta/{projectIdOrKey}/issuetypes
         resp = self.get(f"/rest/api/3/issue/createmeta/{project_key}/issuetypes")
         data = resp.json()
 
@@ -110,7 +111,6 @@ class JiraClient:
         return result
 
     def get_create_fields_metadata(self, project_key: str, issue_type_id: str) -> dict[str, Any]:
-        # GET /rest/api/3/issue/createmeta/{projectIdOrKey}/issuetypes/{issueTypeId}
         resp = self.get(f"/rest/api/3/issue/createmeta/{project_key}/issuetypes/{issue_type_id}")
         data = resp.json()
         return data.get("fields", {})
@@ -132,6 +132,11 @@ def parse_args() -> argparse.Namespace:
         "--create-missing-components",
         action="store_true",
         help="Create missing project components automatically",
+    )
+    parser.add_argument(
+        "--default-component",
+        default="General",
+        help="Fallback Jira component to use when a CSV row has no component",
     )
     parser.add_argument(
         "--dry-run",
@@ -163,7 +168,6 @@ def read_csv_issues(csv_path: str) -> list[CsvIssue]:
         if not row or not any(cell.strip() for cell in row):
             continue
 
-        # Pad short rows
         padded = row + [""] * max(0, 7 - len(row))
 
         summary = padded[0].strip()
@@ -178,8 +182,9 @@ def read_csv_issues(csv_path: str) -> list[CsvIssue]:
             print(f"Skipping row {idx}: empty Summary", file=sys.stderr)
             continue
 
-        components = []
+        components: list[str] = []
         for comp in (component_1, component_2):
+            comp = comp.strip()
             if comp and comp not in components:
                 components.append(comp)
 
@@ -233,12 +238,14 @@ def ensure_components(
     project_key: str,
     issues: list[CsvIssue],
     create_missing: bool,
+    default_component: str,
 ) -> dict[str, dict[str, Any]]:
     existing = jira.get_project_components(project_key)
 
     needed_names: list[str] = []
     for issue in issues:
-        for comp in issue.components:
+        issue_components = issue.components or [default_component]
+        for comp in issue_components:
             key = normalize(comp)
             if key and key not in existing and comp not in needed_names:
                 needed_names.append(comp)
@@ -265,6 +272,7 @@ def build_issue_payload(
     issue_types_by_name: dict[str, dict[str, Any]],
     create_fields_by_issue_type_id: dict[str, dict[str, Any]],
     components_by_name: dict[str, dict[str, Any]],
+    default_component: str,
 ) -> dict[str, Any]:
     work_type_key = normalize(issue.work_type)
     if work_type_key not in issue_types_by_name:
@@ -290,21 +298,18 @@ def build_issue_payload(
     if issue.priority and "priority" in fields_meta:
         fields["priority"] = {"name": issue.priority}
 
-    if issue.components and "components" in fields_meta:
-        comps = []
-        for comp_name in issue.components:
-            key = normalize(comp_name)
-            component = components_by_name.get(key)
-            if not component:
-                raise RuntimeError(
-                    f"Component '{comp_name}' not found for issue '{issue.summary}'"
-                )
-            comps.append({"id": component["id"]})
-        fields["components"] = comps
+    effective_components = issue.components or [default_component]
 
-    # Intentionally not sending "status".
-    # Jira creation should start in the workflow default state unless you add
-    # transition logic after creation.
+    comps = []
+    for comp_name in effective_components:
+        key = normalize(comp_name)
+        component = components_by_name.get(key)
+        if not component:
+            raise RuntimeError(
+                f"Component '{comp_name}' not found for issue '{issue.summary}'"
+            )
+        comps.append({"id": component["id"]})
+    fields["components"] = comps
 
     return {"fields": fields}
 
@@ -350,6 +355,7 @@ def main() -> int:
         project_key=args.project,
         issues=issues,
         create_missing=args.create_missing_components,
+        default_component=args.default_component,
     )
 
     payloads: list[dict[str, Any]] = []
@@ -361,6 +367,7 @@ def main() -> int:
                 issue_types_by_name=issue_types_by_name,
                 create_fields_by_issue_type_id=create_fields_by_issue_type_id,
                 components_by_name=components_by_name,
+                default_component=args.default_component,
             )
         )
 
@@ -396,7 +403,6 @@ def main() -> int:
         created_total += len(created)
         error_total += len(errors)
 
-        # Gentle pause between batches to avoid hammering the API.
         time.sleep(0.5)
 
     print()
@@ -414,11 +420,3 @@ if __name__ == "__main__":
     except Exception as exc:
         print(f"\nFATAL: {exc}", file=sys.stderr)
         raise SystemExit(1)
-
-# python jira_bulk_import.py \
-#   --site https://YOURDOMAIN.atlassian.net \
-#   --email you@example.com \
-#   --api-token YOUR_API_TOKEN \
-#   --project TUR \
-#   --csv TODO.csv \
-#   --create-missing-components
