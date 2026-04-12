@@ -1,0 +1,32 @@
+Summary,Description,Issue Type,Priority,Labels
+Backend: advancing flag for team,"Original: - backend könnte ""advancing"" an ein team mit dranschreiben; das könnte das frontend anzeigen ✅",Story,Medium,backend
+Beamer: query param support,"Original: - alle funktionen der beamer ansichten müssen per query param gehen; beamer dann headless möglich (raspberry ohne maus/tastatur); noch besser: Beamer ansicht einfach /beamer und das backend entscheidet was geht",Story,High,frontend beamer
+Frontend: remember team,"Original: - feature im frontend für ""team merken"" damit man automatisch zur eigenen gruppe/aktuellstes game scrollt",Story,Medium,frontend
+Beamer: show round timer,"Original: - timer auf dem beamer anzeigen für aktuelle runde ✅",Story,Medium,beamer
+Beamer: filter current round,"Original: - filter für ""aktuelle runde"" für den beamer",Story,Medium,beamer
+Beamer: fullscreen mode,"Original: - beamer modus (vollbild ohne cursor) ✅",Task,Low,beamer
+Beamer: QR codes,"Original: - qr codes drucken für ergebnisausgabe und auf allen beamern anzeigen",Story,Medium,beamer backend
+Admin: auto refresh,"Original: - admin frontend automatisch aktualisieren",Story,Medium,frontend admin
+Admin: data age indicator,"Original: - admin frontend anzeigen wie ""alt"" die daten sind, also wann wurde die seite zuletzt aktualisiert",Story,Low,frontend admin
+Matches: next matches labeling,"Original: - näcshte spiele sollten anzeigen wer da spielt (team a / team b) wenns direkt drunter ist und ansonsten ""gewinner achtelfinale 3""",Story,Medium,frontend
+Playoff: initial labeling,"Original: - erste playoff spiele sollten ""1. gruppe 15 vs 2. gruppe 16"" anzeigen",Story,Medium,backend frontend
+Admin: show tables,"Original: - admin frontend muss tische auch anzeigen",Story,Medium,frontend admin
+Tournament: group pairing logic,"Original: - WICHTIG UND EZ: gruppenphase in der gleichen gruppe sollten erst finale gegeneinander spielen (dazu nicht aus der nächsten gruppe sondern einmal advancing teams von vorne und einmal von hinten, oder offset von hälfte der weiterkommenden teams) ✅",Story,High,backend
+Matches: auto table assignment,"Original: - beim eintragen einer runde direkt den nächsten tisch anzeigen",Story,Medium,frontend
+Tournament: 3rd place match,"Original: - spiel um platz 3",Story,Low,backend
+Tournament: edgecase advancing >50%,"Original: - edgecase wenn mehr als die hälfte der teams weiterkommen bedenken bzw zumindest abfangen (hier ist gemeint dass es aktuell spezialcode für po2 turniere gibt bei denen immer die hälfte weiterkommt, es sollte aber auch _irgendwie_ für alle turniere funktionieren, ist nur out of scope für bpwstr)",Task,Low,backend
+Timer: splash on end,"Original: - Timer groß werden lassen als splashscreen wenn er ausläuft",Story,Low,frontend beamer
+Infra: bottle holders,"Original: - Flaschenhalter für die Techniktische",Task,Low,infra
+Admin: timer UI cleanup,"Original: - timer end im admin frontend hübsch machen (aktuell hardcoded startwert)",Task,Low,frontend admin
+Search: focus highlight,"Original: - turniere-match on focus suche markieren",Task,Low,frontend
+UI: fullscreen spacing,"Original: - vollbildansicht anpassen, dass sie auch abstände oben hat (die navbar oben is ja weg)",Task,Low,frontend
+Matches: out-of-order handling,"Original: - damit klarkommen wenn matches aus der reihe gespielt werden (ein match stoppen, anderes match starten, neue matches starten muss entsprechend auch noch funktionieren)",Story,High,backend frontend
+Admin: tables + prompts,"Original: - tabellen im admin fe anzeigen, leute fragen beim ergebnis abgeben nach",Story,Medium,frontend admin
+Rename: Live -> Läuft noch,"Original: - ""Live"" in ""Läuft noch"" umgenennen",Task,Low,frontend
+Timer: unset function,"Original: - funktion timer unset",Task,Low,backend
+Timer: count up mode,"Original: - alternativer timer der hochzählt, statt runter für viertelfinale etc.",Story,Low,frontend
+Beamer: show stage,"Original: - auf fullscreen matches ansicht die stage anzeigen (8tel, 4tel, etc.)",Story,Low,frontend beamer
+Ranking: tie-breaker logic,"Original: - direkten vergleich werten, wenn alles gleich ist sonst",Story,High,backend
+Ranking: tie resolution,"Original: - bei gleichstand für stechen einen punkt vergeben (oder sonstwie, absprechen mit bpwstr)",Story,Medium,backend
+Bug: playoff refresh broken,"Original: - bug: refresh war kaputt in viertelfinale, halbfinale, finale",Bug,High,frontend
+Matches: set winner + end last match,"Original: - sieger setzen können; letztes spiel beenden können",Story,High,backend
