@@ -3,7 +3,6 @@
 class MatchesController < ApplicationController
   before_action :set_match, only: %i[show update]
   before_action :set_group, only: %i[create]
-  before_action :authenticate_user!, only: %i[create update]
   before_action :validate_params, only: %i[update]
   before_action -> { require_owner! @match.owner }, only: %i[update]
   before_action -> { require_owner! @group.owner }, only: %i[create]
