@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class MatchSerializer < ApplicationSerializer
-  attributes :state, :position, :winner
+  attributes :state, :position, :winner, :decider
 
   def winner
     ActiveModelSerializers::SerializableResource.new(object.winner).as_json

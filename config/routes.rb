@@ -9,6 +9,9 @@ Rails.application.routes.draw do
   resources :matches, only: %i[show update] do
     resources :bets, only: %i[index create]
   end
+  resources :groups, only: %i[show] do
+    resources :matches, only: %i[create]
+  end
   resources :stages, only: %i[show update]
   resources :teams, only: %i[show update]
   resources :tournaments do
@@ -20,7 +23,5 @@ Rails.application.routes.draw do
     end
   end
   resources :match_scores, only: %i[show update]
-  resources :groups, only: %i[show]
-
   get 'healthz', to: 'health#index'
 end

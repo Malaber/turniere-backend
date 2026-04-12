@@ -2,8 +2,11 @@
 
 class MatchesController < ApplicationController
   before_action :set_match, only: %i[show update]
+  before_action :set_group, only: %i[create]
+  before_action :authenticate_user!, only: %i[create update]
   before_action :validate_params, only: %i[update]
   before_action -> { require_owner! @match.owner }, only: %i[update]
+  before_action -> { require_owner! @group.owner }, only: %i[create]
   before_action :set_tournament, only: %i[index]
 
   # GET/tournaments/1/matches
@@ -42,6 +45,20 @@ class MatchesController < ApplicationController
   # GET /matches/1
   def show
     render json: @match, include: %w[match_scores.points match_scores.team bets]
+  end
+
+  # POST /groups/:group_id/matches
+  def create
+    match = build_decider_match
+
+    if match.errors.any?
+      render json: match.errors, status: :unprocessable_entity
+    elsif match.save
+      UpdateGroupsGroupScoresAndSave.call(group: @group)
+      render json: match, include: %w[match_scores.team group], status: :created
+    else
+      render json: match.errors, status: :unprocessable_entity
+    end
   end
 
   # PATCH/PUT /matches/1
@@ -112,7 +129,32 @@ class MatchesController < ApplicationController
     @tournament = Tournament.find(params[:tournament_id])
   end
 
+  def set_group
+    @group = Group.find(params[:group_id])
+  end
+
   def match_params
     params.slice(:state).permit!
+  end
+
+  def create_match_params
+    params.slice(:team_ids).permit(team_ids: [])
+  end
+
+  def build_decider_match
+    team_ids = create_match_params[:team_ids].to_a.map(&:to_i).uniq
+    teams = @group.teams.select { |team| team_ids.include?(team.id) }
+
+    Match.new(
+      group: @group,
+      state: :not_started,
+      position: (@group.matches.maximum(:position) || -1) + 1,
+      decider: true,
+      match_scores: teams.map { |team| MatchScore.new(team: team) }
+    ).tap do |match|
+      if team_ids.size != 2 || teams.size != 2
+        match.errors.add(:team_ids, 'must contain exactly two teams from this group')
+      end
+    end
   end
 end

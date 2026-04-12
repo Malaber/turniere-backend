@@ -69,7 +69,10 @@ RSpec.describe GroupScore, type: :model do
       expect(group_score_a.comparison_reason_against(group_score_b)).to eq(
         resolved_by: :group_points,
         tied: false,
-        direct_comparison_result: nil
+        direct_comparison_result: nil,
+        hidden_points_result: :not_played,
+        direct_comparison_match_id: nil,
+        decider_match_id: nil
       )
     end
 
@@ -83,7 +86,10 @@ RSpec.describe GroupScore, type: :model do
       expect(group_score_a.comparison_reason_against(group_score_b)).to eq(
         resolved_by: :direct_comparison,
         tied: false,
-        direct_comparison_result: :won
+        direct_comparison_result: :won,
+        hidden_points_result: :not_played,
+        direct_comparison_match_id: group.matches.last.id,
+        decider_match_id: nil
       )
     end
 
@@ -97,7 +103,31 @@ RSpec.describe GroupScore, type: :model do
       expect(group_score_a.comparison_reason_against(group_score_b)).to eq(
         resolved_by: :tie,
         tied: true,
-        direct_comparison_result: :draw
+        direct_comparison_result: :draw,
+        hidden_points_result: :not_played,
+        direct_comparison_match_id: group.matches.last.id,
+        decider_match_id: nil
+      )
+    end
+
+    it 'falls back to hidden points when direct comparison is still tied' do
+      group_score_b.update!(group_points: 6)
+      create(:group_match, group: group, state: :finished).tap do |match|
+        create(:match_score, match: match, team: team_a, points: 2)
+        create(:match_score, match: match, team: team_b, points: 2)
+      end
+      create(:group_match, group: group, state: :finished, decider: true).tap do |match|
+        create(:match_score, match: match, team: team_a, hidden_points: 3)
+        create(:match_score, match: match, team: team_b, hidden_points: 1)
+      end
+
+      expect(group_score_a.comparison_reason_against(group_score_b)).to eq(
+        resolved_by: :hidden_points,
+        tied: false,
+        direct_comparison_result: :draw,
+        hidden_points_result: :won,
+        direct_comparison_match_id: group.matches.reject(&:decider?).last.id,
+        decider_match_id: group.matches.select(&:decider?).last.id
       )
     end
   end

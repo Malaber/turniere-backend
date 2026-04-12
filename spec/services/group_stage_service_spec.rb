@@ -246,6 +246,7 @@ RSpec.describe GroupStageService do
         resolved_by: 'direct_comparison',
         compared_with_team_id: team_b.id,
         direct_comparison_result: 'won',
+        hidden_points_result: 'not_played',
         tied: false,
         needs_decider_match: false
       )
@@ -253,6 +254,7 @@ RSpec.describe GroupStageService do
         resolved_by: 'direct_comparison',
         compared_with_team_id: team_a.id,
         direct_comparison_result: 'lost',
+        hidden_points_result: 'not_played',
         tied: false,
         needs_decider_match: false
       )
@@ -277,12 +279,14 @@ RSpec.describe GroupStageService do
       expect(GroupStageService.ranking_decision_for(score_a)).to include(
         resolved_by: 'tie',
         direct_comparison_result: 'draw',
+        hidden_points_result: 'not_played',
         tied: true,
         needs_decider_match: true
       )
       expect(GroupStageService.ranking_decision_for(score_b)).to include(
         resolved_by: 'tie',
         direct_comparison_result: 'draw',
+        hidden_points_result: 'not_played',
         tied: true,
         needs_decider_match: true
       )
@@ -301,12 +305,43 @@ RSpec.describe GroupStageService do
       expect([score_a.position, score_b.position, score_c.position, score_d.position]).to eq([1, 2, 3, 3])
       expect(GroupStageService.ranking_decision_for(score_c)).to include(
         resolved_by: 'tie',
+        hidden_points_result: 'not_played',
         tied: true,
         needs_decider_match: false
       )
       expect(GroupStageService.ranking_decision_for(score_d)).to include(
         resolved_by: 'tie',
+        hidden_points_result: 'not_played',
         tied: true,
+        needs_decider_match: false
+      )
+    end
+
+    it 'uses the decider hidden points to resolve a cutoff tie' do
+      tournament.update!(playoff_teams_amount: 1, instant_finalists_amount: 1, intermediate_round_participants_amount: 0)
+
+      create(:group_match, group: group, state: :finished).tap do |match|
+        create(:match_score, match: match, team: team_a, points: 2)
+        create(:match_score, match: match, team: team_b, points: 2)
+      end
+      create(:group_match, group: group, state: :finished, decider: true).tap do |match|
+        create(:match_score, match: match, team: team_a, hidden_points: 5)
+        create(:match_score, match: match, team: team_b, hidden_points: 3)
+      end
+
+      score_a = create(:group_score, group: group, team: team_a, group_points: 7, scored_points: 4, received_points: 1)
+      score_b = create(:group_score, group: group, team: team_b, group_points: 7, scored_points: 4, received_points: 1)
+      score_c = create(:group_score, group: group, team: team_c, group_points: 3, scored_points: 2, received_points: 3)
+      score_d = create(:group_score, group: group, team: team_d, group_points: 0, scored_points: 1, received_points: 7)
+
+      GroupStageService.send(:recalculate_position_of_group_scores!, [score_a, score_b, score_c, score_d]).each(&:save!)
+
+      expect([score_a.position, score_b.position, score_c.position, score_d.position]).to eq([1, 2, 3, 4])
+      expect(GroupStageService.ranking_decision_for(score_a)).to include(
+        resolved_by: 'hidden_points',
+        direct_comparison_result: 'draw',
+        hidden_points_result: 'won',
+        tied: false,
         needs_decider_match: false
       )
     end

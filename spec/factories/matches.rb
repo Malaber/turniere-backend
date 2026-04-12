@@ -44,6 +44,10 @@ FactoryBot.define do
   factory :group_match, class: Match do
     group
     position { 0 }
+
+    trait :decider do
+      decider { true }
+    end
     factory :filled_group_match do
       transient do
         match_scores_count { 2 }

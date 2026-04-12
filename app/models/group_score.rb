@@ -23,6 +23,8 @@ class GroupScore < ApplicationRecord
         public_send(COMPARISON_ATTRIBUTES[comparison_reason[:resolved_by]])
     when :direct_comparison
       comparison_reason[:direct_comparison_result] == :won ? -1 : 1
+    when :hidden_points
+      comparison_reason[:hidden_points_result] == :won ? -1 : 1
     else
       0
     end
@@ -36,16 +38,23 @@ class GroupScore < ApplicationRecord
       return {
         resolved_by: reason,
         tied: false,
-        direct_comparison_result: nil
+        direct_comparison_result: nil,
+        hidden_points_result: :not_played,
+        direct_comparison_match_id: nil,
+        decider_match_id: nil
       }
     end
 
     direct_comparison_result = direct_comparison_result_against(other)
+    hidden_points_result = hidden_points_result_against(other)
 
     {
-      resolved_by: direct_comparison_result.nil? ? :tie : :direct_comparison,
-      tied: direct_comparison_result.nil?,
-      direct_comparison_result: direct_comparison_result || direct_comparison_tie_reason_against(other)
+      resolved_by: resolved_by_for(direct_comparison_result, hidden_points_result),
+      tied: direct_comparison_result.nil? && hidden_points_result.nil?,
+      direct_comparison_result: direct_comparison_result || direct_comparison_tie_reason_against(other),
+      hidden_points_result: hidden_points_result || hidden_points_tie_reason_against(other),
+      direct_comparison_match_id: direct_comparison_match_against(other)&.id,
+      decider_match_id: decider_match_against(other)&.id
     }
   end
 
@@ -68,11 +77,47 @@ class GroupScore < ApplicationRecord
     :draw
   end
 
+  def hidden_points_result_against(other)
+    decider_match = decider_match_against(other)
+    return nil if decider_match.nil? || !decider_match.finished?
+
+    team_hidden_points = decider_match.hidden_points_of(team)
+    other_team_hidden_points = decider_match.hidden_points_of(other.team)
+    return :won if team_hidden_points > other_team_hidden_points
+    return :lost if team_hidden_points < other_team_hidden_points
+
+    nil
+  end
+
+  def hidden_points_tie_reason_against(other)
+    decider_match = decider_match_against(other)
+    return :not_played if decider_match.nil? || !decider_match.finished?
+
+    :draw
+  end
+
   private
 
+  def resolved_by_for(direct_comparison_result, hidden_points_result)
+    return :direct_comparison unless direct_comparison_result.nil?
+    return :hidden_points unless hidden_points_result.nil?
+
+    :tie
+  end
+
   def direct_comparison_match_against(other)
-    group.matches.reload.find do |match|
-      match.finished? && match.teams.include?(team) && match.teams.include?(other.team)
-    end
+    comparison_match_against(other, decider: false)
+  end
+
+  def decider_match_against(other)
+    comparison_match_against(other, decider: true)
+  end
+
+  def comparison_match_against(other, decider:)
+    group.matches.reload
+         .select do |match|
+           match.decider? == decider && match.teams.include?(team) && match.teams.include?(other.team)
+         end
+         .max_by(&:position)
   end
 end

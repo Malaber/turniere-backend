@@ -112,10 +112,36 @@ class GroupStageService
         compared_with_team_id: compared_group_score.team.id,
         compared_with_team_name: compared_group_score.team.name,
         direct_comparison_result: comparison_reason[:direct_comparison_result].to_s,
+        direct_comparison_match_id: comparison_reason[:direct_comparison_match_id],
+        hidden_points_result: comparison_reason[:hidden_points_result].to_s,
+        decider_match_id: comparison_reason[:decider_match_id],
         tied: comparison_reason[:tied],
         needs_decider_match: comparison_reason[:tied] &&
           unresolved_tie_crosses_advancing_cutoff?(sorted_group_scores, group_score, advancing_slots_for_group(group_score.group))
       }
+    end
+
+    def blocking_ties_for(group_stage)
+      return [] if group_stage.nil?
+
+      group_stage.groups.flat_map do |group|
+        sorted_scores = group.group_scores.reload.sort
+        sorted_scores.filter_map do |group_score|
+          decision = ranking_decision_for(group_score)
+          next unless decision&.fetch(:needs_decider_match, false)
+
+          comparison_team_id = decision[:compared_with_team_id]
+          next if comparison_team_id.nil? || group_score.team.id > comparison_team_id
+
+          {
+            group_id: group.id,
+            group_number: group.number,
+            team_ids: [group_score.team.id, comparison_team_id],
+            team_names: [group_score.team.name, decision[:compared_with_team_name]],
+            ranking_decision: decision
+          }
+        end
+      end
     end
 
     # Returns all teams advancing to playoff stage from given group stage
