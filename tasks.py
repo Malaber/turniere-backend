@@ -44,6 +44,10 @@ def _env(**overrides):
     return env
 
 
+def _rails_env(env=None):
+    return str(env or os.environ.get("RAILS_ENV", "development"))
+
+
 def _bundle_command(*parts):
     return " ".join(["bundle", f"_{BUNDLER_VERSION}_", *parts])
 
@@ -306,15 +310,15 @@ def setup(c):
 
 
 @task(name="db-migrate")
-def db_migrate(c, env="development"):
+def db_migrate(c, env=None):
     """Run database migrations locally."""
-    c.run(f"RAILS_ENV={env} {_bundle_exec('rails', 'db:migrate')}", pty=True)
+    c.run(f"RAILS_ENV={_rails_env(env)} {_bundle_exec('rails', 'db:migrate')}", pty=True)
 
 
 @task
-def server(c, host=SERVER_HOST, port=SERVER_PORT, env="development"):
+def server(c, host=SERVER_HOST, port=SERVER_PORT, env=None):
     """Start the backend locally in development."""
-    c.run(f"RAILS_ENV={env} {_bundle_exec('rails', 's')} -b {host} -p {port}", pty=True)
+    c.run(f"RAILS_ENV={_rails_env(env)} {_bundle_exec('rails', 's')} -b {host} -p {port}", pty=True)
 
 
 @task(name="start-local")
@@ -330,7 +334,7 @@ def start_local(c, host=SERVER_HOST, port=SERVER_PORT, bootstrap_user=False):
 @task(name="server-test")
 def server_test(c, host=SERVER_HOST, port=SERVER_PORT):
     """Start the backend locally in test mode."""
-    c.run(f"RAILS_ENV=test {_bundle_exec('rails', 's')} -b {host} -p {port}", pty=True)
+    server(c, host=host, port=port, env="test")
 
 
 @task
