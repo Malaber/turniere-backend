@@ -191,6 +191,125 @@ RSpec.describe GroupStageService do
         end
       end
     end
+
+    it 'uses the direct comparison when the first three criteria are tied' do
+      group = create(:group, match_count: 0)
+      team_a = create(:team)
+      team_b = create(:team)
+
+      create(:group_match, group: group, state: :finished).tap do |match|
+        create(:match_score, match: match, team: team_a, points: 4)
+        create(:match_score, match: match, team: team_b, points: 2)
+      end
+
+      create(:group_score, group: group, team: team_a, group_points: 3, scored_points: 4, received_points: 2)
+      create(:group_score, group: group, team: team_b, group_points: 3, scored_points: 4, received_points: 2)
+
+      expect(GroupStageService.teams_sorted_by_group_scores(group.reload)).to eq([team_a, team_b])
+    end
+  end
+
+  describe '.ranking_decision_for' do
+    let(:tournament) do
+      create(:prepared_group_stage_tournament,
+             teams_count: 0,
+             playoff_teams_amount: 2,
+             instant_finalists_amount: 2,
+             intermediate_round_participants_amount: 0,
+             group_stage: group_stage)
+    end
+    let(:group_stage) { create(:group_stage, tournament: create(:tournament, teams_count: 0), group_count: 0) }
+    let(:group) { create(:group, stage: group_stage, match_count: 0, number: 1) }
+    let(:team_a) { create(:team, tournament: tournament, name: 'A') }
+    let(:team_b) { create(:team, tournament: tournament, name: 'B') }
+    let(:team_c) { create(:team, tournament: tournament, name: 'C') }
+    let(:team_d) { create(:team, tournament: tournament, name: 'D') }
+
+    before do
+      group_stage.groups = [group]
+      group_stage.level = -1
+      group_stage.save!
+    end
+
+    it 'returns direct-comparison metadata for teams separated by head-to-head' do
+      create(:group_match, group: group, state: :finished).tap do |match|
+        create(:match_score, match: match, team: team_a, points: 4)
+        create(:match_score, match: match, team: team_b, points: 2)
+      end
+
+      score_a = create(:group_score, group: group, team: team_a, group_points: 3, scored_points: 4, received_points: 2)
+      score_b = create(:group_score, group: group, team: team_b, group_points: 3, scored_points: 4, received_points: 2)
+
+      GroupStageService.send(:recalculate_position_of_group_scores!, [score_a, score_b]).each(&:save!)
+
+      expect(GroupStageService.ranking_decision_for(score_a)).to include(
+        resolved_by: 'direct_comparison',
+        compared_with_team_id: team_b.id,
+        direct_comparison_result: 'won',
+        tied: false,
+        needs_decider_match: false
+      )
+      expect(GroupStageService.ranking_decision_for(score_b)).to include(
+        resolved_by: 'direct_comparison',
+        compared_with_team_id: team_a.id,
+        direct_comparison_result: 'lost',
+        tied: false,
+        needs_decider_match: false
+      )
+    end
+
+    it 'keeps shared positions and requests a decider only when an unresolved tie crosses the cutoff' do
+      tournament.update!(playoff_teams_amount: 1, instant_finalists_amount: 1, intermediate_round_participants_amount: 0)
+
+      create(:group_match, group: group, state: :finished).tap do |match|
+        create(:match_score, match: match, team: team_a, points: 2)
+        create(:match_score, match: match, team: team_b, points: 2)
+      end
+
+      score_a = create(:group_score, group: group, team: team_a, group_points: 7, scored_points: 4, received_points: 1)
+      score_b = create(:group_score, group: group, team: team_b, group_points: 7, scored_points: 4, received_points: 1)
+      score_c = create(:group_score, group: group, team: team_c, group_points: 3, scored_points: 2, received_points: 3)
+      score_d = create(:group_score, group: group, team: team_d, group_points: 0, scored_points: 1, received_points: 7)
+
+      GroupStageService.send(:recalculate_position_of_group_scores!, [score_a, score_b, score_c, score_d]).each(&:save!)
+
+      expect([score_a.position, score_b.position, score_c.position, score_d.position]).to eq([1, 1, 3, 4])
+      expect(GroupStageService.ranking_decision_for(score_a)).to include(
+        resolved_by: 'tie',
+        direct_comparison_result: 'draw',
+        tied: true,
+        needs_decider_match: true
+      )
+      expect(GroupStageService.ranking_decision_for(score_b)).to include(
+        resolved_by: 'tie',
+        direct_comparison_result: 'draw',
+        tied: true,
+        needs_decider_match: true
+      )
+    end
+
+    it 'marks unresolved ties outside the advancing cutoff without requesting a decider' do
+      tournament.update!(playoff_teams_amount: 2, instant_finalists_amount: 2, intermediate_round_participants_amount: 0)
+
+      score_a = create(:group_score, group: group, team: team_a, group_points: 9, scored_points: 5, received_points: 1, position: 1)
+      score_b = create(:group_score, group: group, team: team_b, group_points: 6, scored_points: 4, received_points: 2, position: 2)
+      score_c = create(:group_score, group: group, team: team_c, group_points: 3, scored_points: 2, received_points: 3)
+      score_d = create(:group_score, group: group, team: team_d, group_points: 3, scored_points: 2, received_points: 3)
+
+      GroupStageService.send(:recalculate_position_of_group_scores!, [score_a, score_b, score_c, score_d]).each(&:save!)
+
+      expect([score_a.position, score_b.position, score_c.position, score_d.position]).to eq([1, 2, 3, 3])
+      expect(GroupStageService.ranking_decision_for(score_c)).to include(
+        resolved_by: 'tie',
+        tied: true,
+        needs_decider_match: false
+      )
+      expect(GroupStageService.ranking_decision_for(score_d)).to include(
+        resolved_by: 'tie',
+        tied: true,
+        needs_decider_match: false
+      )
+    end
   end
 
   describe '#get_advancing_teams' do
