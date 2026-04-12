@@ -133,6 +133,30 @@ module TurniereE2E
       result(session: session, tournament: tournament, checkpoints: checkpoints, stop_at: stop_at)
     end
 
+    def run_group_direct_comparison_tiebreak(case_name:, stop_at: :group_scores)
+      session = register_session!
+      tournament = create_tournament!(
+        create_group_stage_payload(group_count: 1, teams_per_group: 4, playoff_teams_amount: 2)
+      )
+
+      checkpoints = {
+        created: summarize_tournament(tournament)
+      }
+      return result(session: session, tournament: tournament, checkpoints: checkpoints, stop_at: stop_at) if stop_at == :created
+
+      group = group_stage_of!(tournament).fetch(:groups).first
+      play_group_matches_with_explicit_scores!(group, group_direct_comparison_score_plan(case_name))
+
+      group = get!("/groups/#{group.fetch(:id)}")
+      checkpoints[:group_scores] = {
+        ordered_group_scores: ordered_group_scores(group),
+        team_positions: team_positions(group)
+      }
+
+      tournament = fetch_tournament!(tournament.fetch(:id))
+      result(session: session, tournament: tournament, checkpoints: checkpoints, stop_at: stop_at)
+    end
+
     def wait_for_healthcheck!(timeout_seconds: 30)
       started_at = Time.now
       loop do
@@ -255,6 +279,34 @@ module TurniereE2E
       }
     end
 
+    def play_match_with_points!(match, points_by_team_name:, expected_finish_status: 200, expected_finish_error: nil)
+      started = client.patch("/matches/#{match.fetch(:id)}", body: { state: 'in_progress' })
+      expect_status!(started, 200, "start match #{match.fetch(:id)}")
+
+      refreshed_match = fetch_match!(match.fetch(:id))
+      refreshed_match.fetch(:match_scores).each do |score|
+        team_name = score.dig(:team, :name)
+        points = points_by_team_name.fetch(team_name) do
+          raise "missing score for #{team_name.inspect} in match #{match.fetch(:id)}"
+        end
+        updated_score = client.patch("/match_scores/#{score.fetch(:id)}", body: { points: points })
+        expect_status!(updated_score, 200, "update match_score #{score.fetch(:id)}")
+      end
+
+      finished = client.patch("/matches/#{match.fetch(:id)}", body: { state: 'finished' })
+      expect_status!(finished, expected_finish_status, "finish match #{match.fetch(:id)}")
+      if expected_finish_error
+        actual_error = finished.fetch(:json).fetch(:error)
+        raise "expected finish error #{expected_finish_error.inspect}, got #{actual_error.inspect}" unless actual_error == expected_finish_error
+      end
+
+      {
+        match_id: match.fetch(:id),
+        status: finished.fetch(:status),
+        body: finished.fetch(:json)
+      }
+    end
+
     def fetch_match!(match_id)
       response = client.get("/matches/#{match_id}")
       expect_status!(response, 200, "fetch match #{match_id}")
@@ -290,6 +342,20 @@ module TurniereE2E
       match.fetch(:match_scores)
            .map { |score| score.dig(:team, :name) }
            .min_by { |name| [seed_identifier_for(name), name] }
+    end
+
+    def play_group_matches_with_explicit_scores!(group, score_plan)
+      matches_by_teams = group.fetch(:matches).each_with_object({}) do |match, memo|
+        team_names = match.fetch(:match_scores).map { |score| score.dig(:team, :name) }.sort
+        memo[team_names] = match
+      end
+
+      score_plan.each do |team_names, points_by_team_name|
+        match = matches_by_teams.fetch(team_names.sort) do
+          raise "match for #{team_names.inspect} not found"
+        end
+        play_match_with_points!(match, points_by_team_name: points_by_team_name)
+      end
     end
 
     def preferred_playoff_winner_name(match)
@@ -333,6 +399,61 @@ module TurniereE2E
         public: false,
         teams: team_count.times.map { |index| { name: "G0-S#{index + 1}" } }
       }
+    end
+
+    def ordered_group_scores(group)
+      group.fetch(:group_scores)
+           .sort_by { |score| [score.fetch(:position), score.dig(:team, :name)] }
+           .map do |score|
+        {
+          team_name: score.dig(:team, :name),
+          position: score.fetch(:position),
+          group_points: score.fetch(:group_points),
+          difference_in_points: score.fetch(:difference_in_points),
+          scored_points: score.fetch(:scored_points),
+          received_points: score.fetch(:received_points)
+        }
+      end
+    end
+
+    def team_positions(group)
+      group.fetch(:group_scores).each_with_object({}) do |score, memo|
+        memo[score.dig(:team, :name)] = score.fetch(:position)
+      end
+    end
+
+    def group_direct_comparison_score_plan(case_name)
+      case case_name.to_sym
+      when :won
+        {
+          %w[G1-S1 G1-S2] => { 'G1-S1' => 2, 'G1-S2' => 1 },
+          %w[G1-S1 G1-S3] => { 'G1-S1' => 3, 'G1-S3' => 0 },
+          %w[G1-S1 G1-S4] => { 'G1-S1' => 0, 'G1-S4' => 1 },
+          %w[G1-S2 G1-S3] => { 'G1-S2' => 2, 'G1-S3' => 0 },
+          %w[G1-S2 G1-S4] => { 'G1-S2' => 2, 'G1-S4' => 0 },
+          %w[G1-S3 G1-S4] => { 'G1-S3' => 1, 'G1-S4' => 0 }
+        }
+      when :lost
+        {
+          %w[G1-S1 G1-S2] => { 'G1-S1' => 1, 'G1-S2' => 2 },
+          %w[G1-S1 G1-S3] => { 'G1-S1' => 2, 'G1-S3' => 0 },
+          %w[G1-S1 G1-S4] => { 'G1-S1' => 2, 'G1-S4' => 0 },
+          %w[G1-S2 G1-S3] => { 'G1-S2' => 1, 'G1-S3' => 0 },
+          %w[G1-S2 G1-S4] => { 'G1-S2' => 2, 'G1-S4' => 1 },
+          %w[G1-S3 G1-S4] => { 'G1-S3' => 1, 'G1-S4' => 0 }
+        }
+      when :drawn
+        {
+          %w[G1-S1 G1-S2] => { 'G1-S1' => 1, 'G1-S2' => 1 },
+          %w[G1-S1 G1-S3] => { 'G1-S1' => 2, 'G1-S3' => 0 },
+          %w[G1-S1 G1-S4] => { 'G1-S1' => 1, 'G1-S4' => 0 },
+          %w[G1-S2 G1-S3] => { 'G1-S2' => 2, 'G1-S3' => 0 },
+          %w[G1-S2 G1-S4] => { 'G1-S2' => 1, 'G1-S4' => 0 },
+          %w[G1-S3 G1-S4] => { 'G1-S3' => 1, 'G1-S4' => 0 }
+        }
+      else
+        raise "unknown direct comparison case #{case_name.inspect}"
+      end
     end
 
     def summarize_tournament(tournament)

@@ -59,6 +59,62 @@ RSpec.describe 'Tournament lifecycle HTTP E2E' do
     expect(final_attempt.dig(:body, :error)).to eq('Moving Team one stage down failed')
   end
 
+  {
+    won: [1, 2],
+    lost: [2, 1],
+    drawn: [1, 1]
+  }.each do |direct_result, expected_positions|
+    it "applies the direct-comparison tiebreak over HTTP when team A #{direct_result} the head-to-head" do
+      result = runner.run_group_direct_comparison_tiebreak(case_name: direct_result)
+
+      positions = result.dig(:checkpoints, :group_scores, :team_positions)
+      ordered_scores = result.dig(:checkpoints, :group_scores, :ordered_group_scores)
+
+      expect(positions.fetch('G1-S1')).to eq(expected_positions[0])
+      expect(positions.fetch('G1-S2')).to eq(expected_positions[1])
+
+      if direct_result == :drawn
+        expect(ordered_scores[0].slice(:team_name, :position, :group_points, :difference_in_points, :scored_points, :received_points))
+          .to eq(
+            team_name: 'G1-S1',
+            position: 1,
+            group_points: 7,
+            difference_in_points: 3,
+            scored_points: 4,
+            received_points: 1
+          )
+        expect(ordered_scores[1].slice(:team_name, :position, :group_points, :difference_in_points, :scored_points, :received_points))
+          .to eq(
+            team_name: 'G1-S2',
+            position: 1,
+            group_points: 7,
+            difference_in_points: 3,
+            scored_points: 4,
+            received_points: 1
+          )
+      else
+        expect(ordered_scores[0].slice(:team_name, :position, :group_points, :difference_in_points, :scored_points, :received_points))
+          .to eq(
+            team_name: expected_positions[0] == 1 ? 'G1-S1' : 'G1-S2',
+            position: 1,
+            group_points: 6,
+            difference_in_points: 3,
+            scored_points: 5,
+            received_points: 2
+          )
+        expect(ordered_scores[1].slice(:team_name, :position, :group_points, :difference_in_points, :scored_points, :received_points))
+          .to eq(
+            team_name: expected_positions[0] == 1 ? 'G1-S2' : 'G1-S1',
+            position: 2,
+            group_points: 6,
+            difference_in_points: 3,
+            scored_points: 5,
+            received_points: 2
+          )
+      end
+    end
+  end
+
   [2, 3, 5, 8].each do |team_count|
     it "drives a #{team_count}-team playoff-only tournament over HTTP to completion" do
       result = runner.run_playoff_only(team_count: team_count)

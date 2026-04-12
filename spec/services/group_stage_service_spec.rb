@@ -191,6 +191,22 @@ RSpec.describe GroupStageService do
         end
       end
     end
+
+    it 'uses the direct comparison when the first three criteria are tied' do
+      group = create(:group, match_count: 0)
+      team_a = create(:team)
+      team_b = create(:team)
+
+      create(:group_match, group: group, state: :finished).tap do |match|
+        create(:match_score, match: match, team: team_a, points: 4)
+        create(:match_score, match: match, team: team_b, points: 2)
+      end
+
+      create(:group_score, group: group, team: team_a, group_points: 3, scored_points: 4, received_points: 2)
+      create(:group_score, group: group, team: team_b, group_points: 3, scored_points: 4, received_points: 2)
+
+      expect(GroupStageService.teams_sorted_by_group_scores(group.reload)).to eq([team_a, team_b])
+    end
   end
 
   describe '#get_advancing_teams' do
