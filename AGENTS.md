@@ -9,6 +9,34 @@ For routine development, verification, Docker, and E2E work, agents should use
 
 Use `tasks.py` and run commands through `inv ...` instead of ad-hoc shell commands for routine work.
 
+## Local Setup
+
+Assume Ruby is already installed at the version from `.ruby-version`.
+
+For local development, the preferred path is:
+
+- `inv setup`
+- `inv start-local`
+
+`inv setup` installs the Bundler version pinned in `Gemfile.lock`, configures Bundler for local development (`development test`, without `production`), and runs `bundle install`.
+
+`inv start-local` runs the normal local bootstrap flow:
+
+- `inv setup`
+- `inv db-migrate`
+- optional local user bootstrap via `--bootstrap-user`
+- Rails server start on `0.0.0.0:3000`
+
+Useful local commands:
+
+- `inv setup`
+- `inv db-migrate`
+- `inv server`
+- `inv start-local`
+- `inv start-local --bootstrap-user`
+- `inv bootstrap-dev-user`
+- `inv bootstrap-e2e-user`
+
 Examples:
 
 - `inv db-migrate`
@@ -21,6 +49,16 @@ Examples:
 - `inv docker-build-all`
 - `inv docker-test-shard --node-index=3 --node-total=8`
 - `inv docker-test-http-e2e`
+
+For local E2E-style startup with a usable login, prefer:
+
+- `inv start-local --bootstrap-user`
+
+Default local bootstrap credentials:
+
+- email: `e2e@example.com`
+- password: `password123`
+- username: `e2e-user`
 
 The GitLab CI pipeline is expected to use these tasks as well.
 In CI, blackbox E2E should prefer the documented GitLab service-to-service model with `FF_NETWORK_PER_BUILD: "true"` when the production image needs to talk to a Postgres sidecar.
