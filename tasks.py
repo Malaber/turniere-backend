@@ -26,7 +26,6 @@ E2E_ALT_PASSWORD = "password123"
 E2E_ALT_USERNAME = "e2e-alt-user"
 
 PRODUCTION_TAG = "registry.gitlab.com/turniere/turniere-backend/production/commits:local"
-DEVELOPMENT_TAG = "registry.gitlab.com/turniere/turniere-backend/development/commits:local"
 TEST_TAG = "registry.gitlab.com/turniere/turniere-backend/test/commits:local"
 BLACKBOX_COMPOSE_FILE = "docker-compose.blackbox.yml"
 BLACKBOX_PROJECT = "turniere-blackbox"
@@ -642,15 +641,6 @@ def docker_build_production(c, tag=PRODUCTION_TAG):
     c.run(f"docker build -t {tag} -f docker/production/Dockerfile .", pty=True)
 
 
-@task(name="docker-build-development")
-def docker_build_development(c, tag=DEVELOPMENT_TAG):
-    """Build the development Docker image."""
-    c.run(
-        f"docker build --build-arg base_commit=local -t {tag} -f docker/development/Dockerfile .",
-        pty=True,
-    )
-
-
 @task(name="docker-build-test")
 def docker_build_test(c, tag=TEST_TAG):
     """Build the test Docker image."""
@@ -659,9 +649,8 @@ def docker_build_test(c, tag=TEST_TAG):
 
 @task(name="docker-build-all")
 def docker_build_all(c):
-    """Build the production, development, and test Docker images."""
+    """Build the production and test Docker images."""
     docker_build_production(c)
-    docker_build_development(c)
     docker_build_test(c)
 
 
