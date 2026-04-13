@@ -40,6 +40,8 @@ BLACKBOX_MAILGUN_DOMAIN = "blackbox.example.com"
 SPEC_ROOT = Path("spec")
 E2E_SPEC_ROOT = SPEC_ROOT / "e2e" / "http"
 BUNDLER_VERSION = Path("Gemfile.lock").read_text(encoding="utf-8").split("BUNDLED WITH", 1)[1].strip().splitlines()[-1].strip()
+ROOT = Path(__file__).resolve().parent
+DB_DIR = ROOT / "db"
 
 
 def _env(**overrides):
@@ -50,6 +52,30 @@ def _env(**overrides):
 
 def _rails_env(env=None):
     return str(env or os.environ.get("RAILS_ENV", "development"))
+
+
+def _sqlite_db_path(env=None):
+    rails_env = _rails_env(env)
+
+    if rails_env == "development":
+        return DB_DIR / "development.sqlite3"
+    if rails_env == "test":
+        return DB_DIR / "test.sqlite3"
+
+    return None
+
+
+def _delete_sqlite_db(env=None):
+    db_path = _sqlite_db_path(env)
+    if db_path is None:
+        return None
+
+    for suffix in ("", "-shm", "-wal", ".journal"):
+        candidate = Path(f"{db_path}{suffix}")
+        if candidate.exists():
+            candidate.unlink()
+
+    return db_path
 
 
 def _bundle_command(*parts):
@@ -326,6 +352,21 @@ def db_migrate(c, env=None):
     c.run(f"RAILS_ENV={_rails_env(env)} {_bundle_exec('rails', 'db:migrate')}", pty=True)
 
 
+@task(name="db-reset")
+def db_reset(c, env="test"):
+    """Delete the local SQLite database for the requested non-production Rails env."""
+    rails_env = _rails_env(env)
+    if rails_env == "production":
+        raise ValueError("db-reset refuses to run in production")
+
+    deleted_path = _delete_sqlite_db(rails_env)
+    if deleted_path is None:
+        print(f"No local SQLite database configured for RAILS_ENV={rails_env}. Nothing deleted.")
+        return
+
+    print(f"Deleted {deleted_path}")
+
+
 @task
 def server(c, host=SERVER_HOST, port=SERVER_PORT, env=None):
     """Start the backend locally in development."""
@@ -345,6 +386,31 @@ def start_local(c, host=SERVER_HOST, port=SERVER_PORT, bootstrap_user=False):
 @task(name="server-test")
 def server_test(c, host=SERVER_HOST, port=SERVER_PORT):
     """Start the backend locally in test mode."""
+    server(c, host=host, port=port, env="test")
+
+
+@task(name="start-test-local")
+def start_test_local(
+    c,
+    host=SERVER_HOST,
+    port=SERVER_PORT,
+    bootstrap_user=True,
+    reset_db=True,
+    email=E2E_EMAIL,
+    password=E2E_PASSWORD,
+    username=E2E_USERNAME,
+    alt_email=E2E_ALT_EMAIL,
+    alt_password=E2E_ALT_PASSWORD,
+    alt_username=E2E_ALT_USERNAME,
+):
+    """Install deps, recreate the local test DB, bootstrap HTTP E2E users, and start the test server."""
+    setup(c)
+    if reset_db:
+        db_reset(c, env="test")
+    db_migrate(c, env="test")
+    if bootstrap_user:
+        bootstrap_e2e_user(c, email=email, password=password, username=username)
+        bootstrap_e2e_user(c, email=alt_email, password=alt_password, username=alt_username)
     server(c, host=host, port=port, env="test")
 
 
@@ -466,8 +532,11 @@ def verify_http(
     alt_email=E2E_ALT_EMAIL,
     alt_password=E2E_ALT_PASSWORD,
     alt_username=E2E_ALT_USERNAME,
+    reset_db=True,
 ):
     """Boot a local test server, then run the HTTP E2E suite against it."""
+    if reset_db:
+        db_reset(c, env="test")
     db_migrate(c, env="test")
     bootstrap_e2e_user(c, email=email, password=password, username=username)
     bootstrap_e2e_user(c, email=alt_email, password=alt_password, username=alt_username)

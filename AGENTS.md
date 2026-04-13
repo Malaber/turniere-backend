@@ -30,10 +30,12 @@ For local development, the preferred path is:
 Useful local commands:
 
 - `inv setup`
+- `inv db-reset --env=test`
 - `inv db-migrate`
 - `inv server`
 - `inv start-local`
 - `inv start-local --bootstrap-user`
+- `inv start-test-local`
 - `inv bootstrap-dev-user`
 - `inv bootstrap-e2e-user`
 
@@ -53,6 +55,11 @@ Examples:
 For local E2E-style startup with a usable login, prefer:
 
 - `inv start-local --bootstrap-user`
+- `inv start-test-local`
+
+`inv start-test-local` is preferred for cross-repo or Playwright-style local E2E runs.
+It recreates `db/test.sqlite3` on every run, re-migrates, bootstraps the default E2E
+users, and starts Rails in `test` mode on `0.0.0.0:3000`.
 
 Default local bootstrap credentials:
 
