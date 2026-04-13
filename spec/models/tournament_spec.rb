@@ -29,6 +29,7 @@ RSpec.describe Tournament, type: :model do
     it { should belong_to :user }
     it { should have_many :teams }
     it { should have_many :stages }
+    it { should have_many :beamers }
   end
 
   describe '#matches' do
