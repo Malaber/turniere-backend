@@ -11,6 +11,10 @@ class TournamentSyncPusher
     new(tournament).push!
   end
 
+  def self.push_snapshot!(tournament, snapshot)
+    new(tournament).push_snapshot!(snapshot)
+  end
+
   def initialize(tournament)
     @tournament = tournament
   end
@@ -18,7 +22,11 @@ class TournamentSyncPusher
   def push!
     return false unless tournament.sync_push_enabled?
 
-    response = perform_request(snapshot: TournamentSnapshotBuilder.build(tournament))
+    push_snapshot!(TournamentSnapshotBuilder.build(tournament))
+  end
+
+  def push_snapshot!(snapshot)
+    response = perform_request(snapshot: snapshot)
 
     unless response.is_a?(Net::HTTPSuccess)
       raise SyncFailed, "sync push failed with status #{response.code}: #{response.body}"

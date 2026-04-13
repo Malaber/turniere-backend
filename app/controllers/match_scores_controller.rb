@@ -35,8 +35,6 @@ class MatchScoresController < ApplicationController
   end
 
   def push_sync_if_needed!(tournament)
-    TournamentSyncPusher.push!(tournament)
-  rescue TournamentSyncPusher::SyncFailed => e
-    logger.warn("Tournament sync push failed for #{tournament.id}: #{e.message}")
+    TournamentSyncEnqueue.call(tournament)
   end
 end

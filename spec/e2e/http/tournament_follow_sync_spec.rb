@@ -38,7 +38,7 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
     expect(configure_sync[:status]).to eq(200)
 
     source = fetch_tournament(client: source_anonymous_client, tournament_id: source.fetch(:id))
-    follower = fetch_tournament(client: follower_anonymous_client, tournament_id: follower.fetch(:id))
+    follower = wait_for_tournament_sync!(source_tournament_id: source.fetch(:id), follower_tournament_id: follower.fetch(:id))
     expect(tournament_signature(follower)).to eq(tournament_signature(source))
 
     update_cutoff = source_owner_client.patch("/tournaments/#{source.fetch(:id)}", body: {
@@ -53,7 +53,7 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
     play_group_with_decider_lifecycle!(source_id: source.fetch(:id), groups: source_group_stage.fetch(:groups).sort_by { |group| group.fetch(:number) })
 
     source = fetch_tournament(client: source_anonymous_client, tournament_id: source.fetch(:id))
-    follower = fetch_tournament(client: follower_anonymous_client, tournament_id: follower.fetch(:id))
+    follower = wait_for_tournament_sync!(source_tournament_id: source.fetch(:id), follower_tournament_id: follower.fetch(:id))
     expect(tournament_signature(follower)).to eq(tournament_signature(source))
     expect(follower.fetch(:stages).map { |stage| stage.fetch(:level) }).to include(-1, 0, 1)
 
@@ -66,7 +66,7 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
     finish_playoff_bracket!(source_id: source.fetch(:id))
 
     source = fetch_tournament(client: source_anonymous_client, tournament_id: source.fetch(:id))
-    follower = fetch_tournament(client: follower_anonymous_client, tournament_id: follower.fetch(:id))
+    follower = wait_for_tournament_sync!(source_tournament_id: source.fetch(:id), follower_tournament_id: follower.fetch(:id))
     expect(tournament_signature(follower)).to eq(tournament_signature(source))
 
     disable_follower = follower_owner_client.patch("/tournaments/#{follower.fetch(:id)}", body: { read_only_mode: false })
@@ -125,6 +125,20 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
     response = client.get("/tournaments/#{tournament_id}")
     expect(response[:status]).to eq(200)
     response.fetch(:json)
+  end
+
+  def wait_for_tournament_sync!(source_tournament_id:, follower_tournament_id:, timeout: 30)
+    deadline = Time.now + timeout
+
+    loop do
+      source = fetch_tournament(client: source_anonymous_client, tournament_id: source_tournament_id)
+      follower = fetch_tournament(client: follower_anonymous_client, tournament_id: follower_tournament_id)
+      return follower if tournament_signature(source) == tournament_signature(follower)
+
+      raise "Follower did not catch up within #{timeout}s" if Time.now >= deadline
+
+      sleep 0.5
+    end
   end
 
   def play_group_with_decider_lifecycle!(source_id:, groups:)
