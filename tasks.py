@@ -17,6 +17,8 @@ SERVER_PORT = "3000"
 TEST_BASE_URL = f"http://127.0.0.1:{SERVER_PORT}"
 BLACKBOX_BASE_URL = TEST_BASE_URL
 BLACKBOX_INTERNAL_BASE_URL = "http://app:3000"
+BLACKBOX_SOURCE_INTERNAL_BASE_URL = "http://source-app:3000"
+BLACKBOX_FOLLOWER_INTERNAL_BASE_URL = "http://follower-app:3000"
 
 E2E_EMAIL = "e2e@example.com"
 E2E_PASSWORD = "password123"
@@ -31,6 +33,8 @@ BLACKBOX_COMPOSE_FILE = "docker-compose.blackbox.yml"
 BLACKBOX_PROJECT = "turniere-blackbox"
 BLACKBOX_POSTGRES_IMAGE = "postgres:16"
 BLACKBOX_DB_NAME = "turniere_blackbox"
+BLACKBOX_SOURCE_DB_NAME = "turniere_source_blackbox"
+BLACKBOX_FOLLOWER_DB_NAME = "turniere_follower_blackbox"
 BLACKBOX_DB_USER = "turniere"
 BLACKBOX_DB_PASSWORD = "turniere"
 BLACKBOX_SECRET_KEY_BASE = "turniere-blackbox-secret-key-base-please-change-in-real-prod"
@@ -269,8 +273,22 @@ def _shared_production_env():
     )
 
 
+def _production_env_for(db_host, db_name):
+    return _env(
+        RAILS_ENV="production",
+        POSTGRES_URL=f"postgres://{BLACKBOX_DB_USER}:{BLACKBOX_DB_PASSWORD}@{db_host}:5432/{db_name}",
+        POSTGRES_USERNAME=BLACKBOX_DB_USER,
+        POSTGRES_PASSWORD=BLACKBOX_DB_PASSWORD,
+        SECRET_KEY_BASE=BLACKBOX_SECRET_KEY_BASE,
+        MAILGUN_API_KEY=BLACKBOX_MAILGUN_API_KEY,
+        MAILGUN_DOMAIN=BLACKBOX_MAILGUN_DOMAIN,
+        RAILS_LOG_TO_STDOUT="1",
+        RAILS_SERVE_STATIC_FILES="1",
+    )
+
+
 def _run_blackbox_rspec(base_url, email, password, username, alt_email=E2E_ALT_EMAIL, alt_password=E2E_ALT_PASSWORD,
-                        alt_username=E2E_ALT_USERNAME):
+                        alt_username=E2E_ALT_USERNAME, spec_path="spec/e2e/http", extra_env=None):
     env = _env(
         TURNIERE_E2E_BASE_URL=base_url,
         TURNIERE_E2E_EMAIL=email,
@@ -280,7 +298,9 @@ def _run_blackbox_rspec(base_url, email, password, username, alt_email=E2E_ALT_E
         TURNIERE_E2E_ALT_PASSWORD=alt_password,
         TURNIERE_E2E_ALT_USERNAME=alt_username,
     )
-    command = ["bundle", "exec", "rspec", "spec/e2e/http", "--format", "documentation"]
+    if extra_env:
+      env.update(extra_env)
+    command = ["bundle", "exec", "rspec", spec_path, "--format", "documentation"]
     print(_format_command(command))
     result = _run_subprocess(command, env=env, capture_output=True, check=False)
     if result.stdout:
@@ -327,6 +347,19 @@ def _stop_process(process, log_handle):
         pass
     finally:
         log_handle.close()
+
+
+def _bootstrap_blackbox_users(c, env, email, password, username, alt_email, alt_password, alt_username):
+    c.run(
+        _bootstrap_user_command(email, password, username),
+        env=env,
+        pty=True,
+    )
+    c.run(
+        _bootstrap_user_command(alt_email, alt_password, alt_username),
+        env=env,
+        pty=True,
+    )
 
 
 @task
@@ -791,19 +824,59 @@ def blackbox_service(
     _wait_for_http(base_url=base_url, timeout=120)
 
     _print_header("Bootstrapping confirmed E2E user")
-    c.run(
-        _bootstrap_user_command(email, password, username),
-        env=_shared_production_env(),
-        pty=True,
-    )
-    c.run(
-        _bootstrap_user_command(alt_email, alt_password, alt_username),
-        env=_shared_production_env(),
-        pty=True,
-    )
+    _bootstrap_blackbox_users(c, _shared_production_env(), email, password, username, alt_email, alt_password, alt_username)
 
     _print_header("Running HTTP E2E against production image")
     _run_blackbox_rspec(base_url, email, password, username, alt_email, alt_password, alt_username)
+
+
+@task(name="blackbox-follow-service")
+def blackbox_follow_service(
+    c,
+    source_base_url=BLACKBOX_SOURCE_INTERNAL_BASE_URL,
+    follower_base_url=BLACKBOX_FOLLOWER_INTERNAL_BASE_URL,
+    email=E2E_EMAIL,
+    password=E2E_PASSWORD,
+    username=E2E_USERNAME,
+    alt_email=E2E_ALT_EMAIL,
+    alt_password=E2E_ALT_PASSWORD,
+    alt_username=E2E_ALT_USERNAME,
+):
+    """Run follower-sync HTTP E2E against two independent production app services."""
+    source_env = _production_env_for("source-postgres", BLACKBOX_SOURCE_DB_NAME)
+    follower_env = _production_env_for("follower-postgres", BLACKBOX_FOLLOWER_DB_NAME)
+
+    _print_header("Running source production database migrations")
+    c.run("bundle exec rails db:migrate", env=source_env, pty=True)
+
+    _print_header("Running follower production database migrations")
+    c.run("bundle exec rails db:migrate", env=follower_env, pty=True)
+
+    _print_header(f"Waiting for source app healthcheck at {source_base_url}")
+    _wait_for_http(base_url=source_base_url, timeout=120)
+
+    _print_header(f"Waiting for follower app healthcheck at {follower_base_url}")
+    _wait_for_http(base_url=follower_base_url, timeout=120)
+
+    _print_header("Bootstrapping confirmed E2E users on source and follower")
+    _bootstrap_blackbox_users(c, source_env, email, password, username, alt_email, alt_password, alt_username)
+    _bootstrap_blackbox_users(c, follower_env, email, password, username, alt_email, alt_password, alt_username)
+
+    _print_header("Running follower sync HTTP E2E against production images")
+    _run_blackbox_rspec(
+        source_base_url,
+        email,
+        password,
+        username,
+        alt_email,
+        alt_password,
+        alt_username,
+        spec_path="spec/e2e/http/tournament_follow_sync_spec.rb",
+        extra_env={
+            "TURNIERE_SOURCE_E2E_BASE_URL": source_base_url,
+            "TURNIERE_FOLLOWER_E2E_BASE_URL": follower_base_url,
+        },
+    )
 
 
 @task(name="blackbox-production")

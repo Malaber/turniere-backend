@@ -176,6 +176,25 @@ RSpec.describe TournamentsController, type: :controller do
         apply_authentication_headers_for @user
       end
 
+      context 'with read_only_mode=true' do
+        it 'creates an empty follower tournament without teams payload' do
+          expect do
+            post :create, params: {
+              name: 'Follower Tournament',
+              public: false,
+              read_only_mode: true,
+              sync_auth_token: 'shared-secret'
+            }
+          end.to change(Tournament, :count).by(1)
+
+          expect(response).to have_http_status(:created)
+          tournament = Tournament.find(deserialize_response(response)[:id])
+          expect(tournament.read_only_mode?).to eq(true)
+          expect(tournament.teams).to be_empty
+          expect(tournament.stages).to be_empty
+        end
+      end
+
       context 'with existing teams' do
         it 'creates a new Tournament' do
           expect do
@@ -361,6 +380,32 @@ RSpec.describe TournamentsController, type: :controller do
           expect(response.media_type).to eq('application/json')
         end
 
+        it 'allows sync config changes on read only tournaments' do
+          @tournament.update!(read_only_mode: true, sync_auth_token: 'old-token')
+
+          put :update, params: {
+            id: @tournament.to_param,
+            read_only_mode: false,
+            sync_target_url: 'https://remote.example.com/tournaments/1/sync_state',
+            sync_auth_token: 'new-token'
+          }
+
+          expect(response).to have_http_status(:ok)
+          @tournament.reload
+          expect(@tournament.read_only_mode?).to eq(false)
+          expect(@tournament.sync_target_url).to include('/sync_state')
+          expect(@tournament.sync_auth_token).to eq('new-token')
+        end
+
+        it 'blocks normal updates while tournament is read only' do
+          @tournament.update!(read_only_mode: true, sync_auth_token: 'shared-secret')
+
+          put :update, params: { id: @tournament.to_param, name: 'Should Not Work' }
+
+          expect(response).to have_http_status(:locked)
+          expect(deserialize_response(response)[:error]).to eq('Tournament is in read only follower mode')
+        end
+
         context 'any variable relevant for group stage to playoff transition changed' do
           before(:each) do
             @filled_tournament = create(:group_stage_tournament)
@@ -494,6 +539,14 @@ RSpec.describe TournamentsController, type: :controller do
           delete :destroy, params: { id: @tournament.to_param }
         end.to change(Team, :count).by(-@tournament.teams.size)
       end
+
+      it 'blocks destroy while tournament is read only' do
+        @tournament.update!(read_only_mode: true, sync_auth_token: 'shared-secret')
+
+        delete :destroy, params: { id: @tournament.to_param }
+
+        expect(response).to have_http_status(:locked)
+      end
     end
 
     context 'as another user' do
@@ -505,6 +558,55 @@ RSpec.describe TournamentsController, type: :controller do
         delete :destroy, params: { id: @tournament.to_param }
         expect(response).to have_http_status(:forbidden)
       end
+    end
+  end
+
+  describe 'PATCH #sync_state' do
+    before do
+      @tournament.update!(read_only_mode: true, sync_auth_token: 'shared-secret')
+    end
+
+    it 'imports a pushed snapshot' do
+      request.headers['Authorization'] = 'Bearer shared-secret'
+
+      patch :sync_state, params: {
+        id: @tournament.to_param,
+        snapshot: {
+          id: 123,
+          name: 'Synced Tournament',
+          code: 'abc123',
+          description: 'Synced description',
+          public: true,
+          playoff_teams_amount: 4,
+          instant_finalists_amount: 4,
+          intermediate_round_participants_amount: 0,
+          timer_end: nil,
+          teams: [{ id: 7, name: 'Alpha' }],
+          stages: [],
+          groups: [],
+          matches: [],
+          match_scores: [],
+          group_scores: []
+        }
+      }
+
+      expect(response).to have_http_status(:ok)
+      @tournament.reload
+      expect(@tournament.sync_source_tournament_id).to eq(123)
+      expect(@tournament.name).to eq('Synced Tournament')
+      expect(@tournament.teams.pluck(:name)).to eq(['Alpha'])
+    end
+
+    it 'rejects invalid tokens' do
+      request.headers['Authorization'] = 'Bearer wrong-token'
+
+      patch :sync_state, params: {
+        id: @tournament.to_param,
+        snapshot: { id: 123 }
+      }
+
+      expect(response).to have_http_status(:unauthorized)
+      expect(deserialize_response(response)[:error]).to eq('Invalid sync token')
     end
   end
 end

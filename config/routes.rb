@@ -20,6 +20,7 @@ Rails.application.routes.draw do
     member do
       get :timer_end
       patch :set_timer_end
+      patch :sync_state
     end
   end
   resources :match_scores, only: %i[show update]

@@ -9,6 +9,8 @@ class Tournament < ApplicationRecord
 
   validates :name, presence: true
   validates :code, presence: true, uniqueness: true
+  validates :sync_target_url, format: URI::DEFAULT_PARSER.make_regexp(%w[http https]), allow_blank: true
+  validate :sync_configuration_is_complete
 
   validate :playoff_teams_amount_is_positive_power_of_two
 
@@ -32,6 +34,14 @@ class Tournament < ApplicationRecord
     stages.find_by(level: -1)
   end
 
+  def sync_push_enabled?
+    sync_target_url.present? && sync_auth_token.present? && !read_only_mode?
+  end
+
+  def sync_accepts_push?
+    read_only_mode? && sync_auth_token.present?
+  end
+
   private
 
   def generate_code
@@ -48,5 +58,13 @@ class Tournament < ApplicationRecord
 
     errors.add(:playoff_teams_amount,
                'playoff_teams_amount needs to be a positive power of two')
+  end
+
+  def sync_configuration_is_complete
+    return if sync_target_url.blank? && sync_auth_token.blank?
+    return if sync_target_url.present? && sync_auth_token.present?
+    return if read_only_mode? && sync_auth_token.present? && sync_target_url.blank?
+
+    errors.add(:base, 'sync_target_url and sync_auth_token must be configured together')
   end
 end

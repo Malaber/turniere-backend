@@ -22,6 +22,10 @@ class Match < ApplicationRecord
     stage ? stage.owner : group.owner
   end
 
+  def tournament
+    stage ? stage.tournament : group.stage.tournament
+  end
+
   def current_leading_team
     return nil if match_scores.size < 2
     return nil if score_value_for(match_scores.first) == score_value_for(match_scores.second)

@@ -30,6 +30,16 @@ class ApplicationController < ActionController::API
     }, status: :forbidden
   end
 
+  def render_read_only_error
+    render json: {
+      error: 'Tournament is in read only follower mode'
+    }, status: :locked
+  end
+
+  def require_writable_tournament!(tournament)
+    render_read_only_error if tournament.read_only_mode?
+  end
+
   def render_not_found_error(exception)
     render json: { error: exception.to_s }, status: :not_found
   end

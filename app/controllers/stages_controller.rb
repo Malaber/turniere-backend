@@ -4,6 +4,7 @@ class StagesController < ApplicationController
   before_action :set_stage, only: %i[show update]
   before_action :authenticate_user!, only: %i[update]
   before_action -> { require_owner! @stage.owner }, only: %i[update]
+  before_action -> { require_writable_tournament!(@stage.tournament) }, only: %i[update]
 
   # GET /stages/1
   def show
@@ -23,6 +24,7 @@ class StagesController < ApplicationController
           handle_group_stage_end
 
           render json: @stage
+          push_sync_if_needed!(@stage.tournament)
         else
           render json: @stage.errors, status: :unprocessable_entity
           raise ActiveRecord::Rollback
@@ -74,5 +76,11 @@ class StagesController < ApplicationController
 
   def stage_params
     params.slice(:state).permit!
+  end
+
+  def push_sync_if_needed!(tournament)
+    TournamentSyncPusher.push!(tournament)
+  rescue TournamentSyncPusher::SyncFailed => e
+    logger.warn("Tournament sync push failed for #{tournament.id}: #{e.message}")
   end
 end

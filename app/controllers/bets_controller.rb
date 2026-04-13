@@ -3,6 +3,7 @@
 class BetsController < ApplicationController
   before_action :set_match, only: %i[index create]
   before_action :authenticate_user!, only: %i[create]
+  before_action -> { require_writable_tournament!(@match.tournament) }, only: %i[create]
   rescue_from UserServiceError, with: :handle_user_service_error
 
   def index

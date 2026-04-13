@@ -27,5 +27,9 @@ RSpec.describe TournamentsController, type: :routing do
     it 'routes to #destroy' do
       expect(delete: '/tournaments/1').to route_to('tournaments#destroy', id: '1')
     end
+
+    it 'routes to #sync_state' do
+      expect(patch: '/tournaments/1/sync_state').to route_to('tournaments#sync_state', id: '1')
+    end
   end
 end
