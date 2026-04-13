@@ -91,10 +91,27 @@ rails follow sync e2e spec:
   services:
     - name: postgres:16
       alias: source-postgres
+      variables:
+        POSTGRES_DB: turniere_source_blackbox
+        POSTGRES_USER: turniere
+        POSTGRES_PASSWORD: turniere
     - name: postgres:16
       alias: follower-postgres
+      variables:
+        POSTGRES_DB: turniere_follower_blackbox
+        POSTGRES_USER: turniere
+        POSTGRES_PASSWORD: turniere
     - name: $CI_REGISTRY_IMAGE/production/commits:$CI_COMMIT_SHA
       alias: source-app
+      variables:
+        POSTGRES_URL: postgres://turniere:turniere@source-postgres:5432/turniere_source_blackbox
+        POSTGRES_USERNAME: turniere
+        POSTGRES_PASSWORD: turniere
+        SECRET_KEY_BASE: turniere-blackbox-secret-key-base-please-change-in-real-prod
+        MAILGUN_API_KEY: blackbox-test-api-key
+        MAILGUN_DOMAIN: blackbox.example.com
+        RAILS_LOG_TO_STDOUT: "1"
+        RAILS_SERVE_STATIC_FILES: "1"
       command:
         - bundle
         - exec
@@ -106,6 +123,15 @@ rails follow sync e2e spec:
         - 0.0.0.0
     - name: $CI_REGISTRY_IMAGE/production/commits:$CI_COMMIT_SHA
       alias: follower-app
+      variables:
+        POSTGRES_URL: postgres://turniere:turniere@follower-postgres:5432/turniere_follower_blackbox
+        POSTGRES_USERNAME: turniere
+        POSTGRES_PASSWORD: turniere
+        SECRET_KEY_BASE: turniere-blackbox-secret-key-base-please-change-in-real-prod
+        MAILGUN_API_KEY: blackbox-test-api-key
+        MAILGUN_DOMAIN: blackbox.example.com
+        RAILS_LOG_TO_STDOUT: "1"
+        RAILS_SERVE_STATIC_FILES: "1"
       command:
         - bundle
         - exec
