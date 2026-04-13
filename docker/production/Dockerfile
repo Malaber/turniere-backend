@@ -5,13 +5,7 @@ RUN apt-get update -qq && apt-get install -y openssl git build-essential libpq-d
 WORKDIR /app
 COPY Gemfile* /app/
 RUN gem install bundler:2.3.13 && bundle config set deployment 'true' && bundle install
-COPY app /app/app
-COPY bin /app/bin
-COPY config /app/config
-COPY db /app/db
-COPY public /app/public
-COPY script /app/script
-COPY config.ru Rakefile /app/
+COPY . /app
 # Duplicate production environment to beta environment
 COPY config/environments/production.rb config/environments/beta.rb
 ENV RAILS_ENV production

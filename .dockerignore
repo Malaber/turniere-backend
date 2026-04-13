@@ -1,6 +1,9 @@
 .git
 tmp/**
 coverage/**
+db/*.sqlite3
+db/*.sqlite3-*
+db/*.sqlite3.*
 docker/**
 .gitignore
 .hound.yml
