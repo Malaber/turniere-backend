@@ -397,6 +397,22 @@ RSpec.describe TournamentsController, type: :controller do
           expect(@tournament.sync_auth_token).to eq('new-token')
         end
 
+        it 'allows follower takeover when only read_only_mode is disabled' do
+          @tournament.update!(read_only_mode: true, sync_auth_token: 'old-token')
+          request.headers['CONTENT_TYPE'] = 'application/json'
+
+          put :update, params: {
+            id: @tournament.to_param,
+            read_only_mode: false
+          }, as: :json
+
+          expect(response).to have_http_status(:ok)
+          @tournament.reload
+          expect(@tournament.read_only_mode?).to eq(false)
+          expect(@tournament.sync_target_url).to be_blank
+          expect(@tournament.sync_auth_token).to be_blank
+        end
+
         it 'blocks normal updates while tournament is read only' do
           @tournament.update!(read_only_mode: true, sync_auth_token: 'shared-secret')
 

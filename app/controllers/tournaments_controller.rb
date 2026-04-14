@@ -248,7 +248,7 @@ class TournamentsController < ApplicationController
   end
 
   def sync_config_only_update?
-    allowed = %w[id controller action read_only_mode sync_target_url sync_auth_token]
+    allowed = %w[id controller action format tournament read_only_mode sync_target_url sync_auth_token]
     (params.keys - allowed).empty?
   end
 
