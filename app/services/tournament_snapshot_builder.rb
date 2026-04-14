@@ -19,6 +19,7 @@ class TournamentSnapshotBuilder
       playoff_teams_amount: tournament.playoff_teams_amount,
       instant_finalists_amount: tournament.instant_finalists_amount,
       intermediate_round_participants_amount: tournament.intermediate_round_participants_amount,
+      sync_generated_at: Time.current.iso8601(6),
       timer_end: tournament.timer_end&.iso8601,
       teams: teams_payload,
       stages: stages_payload,

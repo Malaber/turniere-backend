@@ -23,6 +23,7 @@ class TournamentSnapshotImporter
   def import!
     Tournament.transaction do
       tournament.lock!
+      return tournament if stale_snapshot?
 
       existing_teams = tournament.teams.to_a
       existing_stages = tournament.stages.to_a
@@ -59,6 +60,7 @@ class TournamentSnapshotImporter
     root_attrs[:code] = tournament.code if code_taken_by_another_tournament?(root_attrs[:code])
     root_attrs[:timer_end] = parse_time(snapshot[:timer_end])
     root_attrs[:sync_source_tournament_id] = snapshot[:id]
+    root_attrs[:sync_last_imported_snapshot_at] = snapshot_generated_at
     tournament.update!(root_attrs)
   end
 
@@ -160,6 +162,17 @@ class TournamentSnapshotImporter
     return nil if value.blank?
 
     Time.zone.parse(value)
+  end
+
+  def snapshot_generated_at
+    parse_time(snapshot[:sync_generated_at])
+  end
+
+  def stale_snapshot?
+    return false if snapshot_generated_at.nil?
+    return false if tournament.sync_last_imported_snapshot_at.nil?
+
+    snapshot_generated_at <= tournament.sync_last_imported_snapshot_at
   end
 
   def code_taken_by_another_tournament?(code)

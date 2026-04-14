@@ -28,13 +28,16 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
   let(:follower_anonymous_client) { TurniereE2E::ApiClient.new(base_url: follower_base_url) }
 
   it 'pushes full source lifecycle into read only follower tournament' do
+    log_phase!('seed unrelated tournaments')
     source_noise = seed_unrelated_tournaments!(client: source_owner_client, prefix: 'Source Noise', range: 2..4)
     follower_noise = seed_unrelated_tournaments!(client: follower_owner_client, prefix: 'Follower Noise', range: 5..7)
 
+    log_phase!('create source and follower tournaments')
     source = create_group_stage_tournament(client: source_owner_client, public: false, name_prefix: 'Sync Source')
     follower = create_follower_tournament(client: follower_owner_client, public: true, name_prefix: 'Sync Follower')
     expect(source.fetch(:id)).not_to eq(follower.fetch(:id))
 
+    log_phase!('configure sync and verify initial replication')
     configure_sync = source_owner_client.patch("/tournaments/#{source.fetch(:id)}", body: {
                                           sync_target_url: "#{follower_base_url}/tournaments/#{follower.fetch(:id)}/sync_state",
                                           sync_auth_token: sync_token
@@ -47,6 +50,7 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
     expect(tournament_signature(follower)).to eq(tournament_signature(source))
     expect(synced_team_id_pairs(source: source, follower: follower)).not_to be_empty
 
+    log_phase!('tighten playoff cutoff and rename teams')
     update_cutoff = source_owner_client.patch("/tournaments/#{source.fetch(:id)}", body: {
                                          playoff_teams_amount: 4,
                                          instant_finalists_amount: 4,
@@ -68,9 +72,11 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
     follower_noise.concat(seed_unrelated_tournaments!(client: follower_owner_client, prefix: 'Follower Midway Noise', range: 3..4))
     exercise_unrelated_requests!(source_noise: source_noise, follower_noise: follower_noise)
 
+    log_phase!('play group stage with deciders')
     play_group_with_decider_lifecycle!(source_id: source.fetch(:id), groups: source_group_stage.fetch(:groups).sort_by { |group| group.fetch(:number) })
     exercise_unrelated_requests!(source_noise: source_noise, follower_noise: follower_noise)
 
+    log_phase!('verify playoff generation replicated')
     source = fetch_tournament(client: source_anonymous_client, tournament_id: source.fetch(:id))
     follower = wait_for_tournament_sync!(source_tournament_id: source.fetch(:id), follower_tournament_id: follower.fetch(:id))
     expect(tournament_signature(follower)).to eq(tournament_signature(source))
@@ -87,9 +93,11 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
     follower_noise.concat(seed_unrelated_tournaments!(client: follower_owner_client, prefix: 'Follower Playoff Noise', range: 2..5))
     exercise_unrelated_requests!(source_noise: source_noise, follower_noise: follower_noise)
 
+    log_phase!('finish playoff bracket')
     finish_playoff_bracket!(source_id: source.fetch(:id))
     exercise_unrelated_requests!(source_noise: source_noise, follower_noise: follower_noise)
 
+    log_phase!('verify final follower state and takeover')
     source = fetch_tournament(client: source_anonymous_client, tournament_id: source.fetch(:id))
     follower = wait_for_tournament_sync!(source_tournament_id: source.fetch(:id), follower_tournament_id: follower.fetch(:id))
     expect(tournament_signature(follower)).to eq(tournament_signature(source))
@@ -102,6 +110,11 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
     writable_team = follower_after_disable.fetch(:teams).first
     takeover_update = follower_owner_client.patch("/teams/#{writable_team.fetch(:id)}", body: { name: "#{writable_team.fetch(:name)} takeover" })
     expect(takeover_update[:status]).to eq(200)
+  end
+
+  def log_phase!(message)
+    puts "phase #{message}"
+    $stdout.flush
   end
 
   def login_client(base_url:, email:, password:)
