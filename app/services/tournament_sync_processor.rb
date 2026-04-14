@@ -6,6 +6,8 @@ class TournamentSyncProcessor
   end
 
   def process_due!
+    return unless queue_table_available?
+
     loop do
       entry = next_entry
       break if entry.nil?
@@ -29,5 +31,11 @@ class TournamentSyncProcessor
     entry.mark_synced!
   rescue TournamentSyncPusher::SyncFailed => e
     entry.reload.schedule_retry!(e.message)
+  end
+
+  def queue_table_available?
+    TournamentSyncQueueEntry.connection.data_source_exists?(TournamentSyncQueueEntry.table_name)
+  rescue ActiveRecord::ActiveRecordError, PG::Error
+    false
   end
 end

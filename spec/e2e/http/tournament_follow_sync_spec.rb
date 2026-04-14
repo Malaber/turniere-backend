@@ -199,7 +199,7 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
          .uniq { |team| team.fetch(:id) }
          .sort_by { |team| team.fetch(:name) }
          .each_with_index
-         .to_h { |(team, index)| [index + 1, team] }
+         .to_h { |team, index| [index + 1, team] }
   end
 
   def play_group_match!(group, team_a, team_b, score_a, score_b)
