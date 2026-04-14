@@ -95,11 +95,13 @@ module TurniereE2E
       end
 
       parsed_json = parse_json_body(response.body)
-      {
+      result = {
         status: response.code.to_i,
         json: parsed_json,
         headers: response.each_header.to_h
       }
+      store_auth_headers!(result)
+      result
     end
 
     def merged_headers(headers)
