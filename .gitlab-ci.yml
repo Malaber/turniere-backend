@@ -155,8 +155,6 @@ rails follow sync e2e spec:
       when: never
     - if: $SKIP_ALL_SPECS
       when: never
-    - if: $SKIP_E2E_SPEC
-      when: never
     - if: $SKIP_FOLLOW_E2E_SPEC
       when: never
     - if: $CI_PIPELINE_SOURCE != "push"
