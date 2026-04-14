@@ -19,6 +19,8 @@ BLACKBOX_BASE_URL = TEST_BASE_URL
 BLACKBOX_INTERNAL_BASE_URL = "http://app:3000"
 BLACKBOX_SOURCE_INTERNAL_BASE_URL = "http://source-app:3000"
 BLACKBOX_FOLLOWER_INTERNAL_BASE_URL = "http://follower-app:3000"
+BLACKBOX_SOURCE_HOST_PORT = "3002"
+BLACKBOX_FOLLOWER_HOST_PORT = "3003"
 
 E2E_EMAIL = "e2e@example.com"
 E2E_PASSWORD = "password123"
@@ -31,6 +33,8 @@ PRODUCTION_TAG = "registry.gitlab.com/turniere/turniere-backend/production/commi
 TEST_TAG = "registry.gitlab.com/turniere/turniere-backend/test/commits:local"
 BLACKBOX_COMPOSE_FILE = "docker-compose.blackbox.yml"
 BLACKBOX_PROJECT = "turniere-blackbox"
+BLACKBOX_FOLLOW_COMPOSE_FILE = "docker-compose.blackbox-follow.yml"
+BLACKBOX_FOLLOW_PROJECT = "turniere-blackbox-follow"
 BLACKBOX_POSTGRES_IMAGE = "postgres:16"
 BLACKBOX_DB_NAME = "turniere_blackbox"
 BLACKBOX_SOURCE_DB_NAME = "turniere_source_blackbox"
@@ -162,12 +166,43 @@ def _compose_env(
     )
 
 
+def _follow_compose_env(
+    source_host_port=BLACKBOX_SOURCE_HOST_PORT,
+    follower_host_port=BLACKBOX_FOLLOWER_HOST_PORT,
+    app_image=PRODUCTION_TAG,
+    runner_image=TEST_TAG,
+    postgres_image=BLACKBOX_POSTGRES_IMAGE,
+):
+    return _env(
+        TURNIERE_BLACKBOX_SOURCE_HOST_PORT=source_host_port,
+        TURNIERE_BLACKBOX_FOLLOWER_HOST_PORT=follower_host_port,
+        TURNIERE_BLACKBOX_APP_IMAGE=app_image,
+        TURNIERE_BLACKBOX_RUNNER_IMAGE=runner_image,
+        TURNIERE_BLACKBOX_POSTGRES_IMAGE=postgres_image,
+        TURNIERE_BLACKBOX_SOURCE_POSTGRES_DB=BLACKBOX_SOURCE_DB_NAME,
+        TURNIERE_BLACKBOX_FOLLOWER_POSTGRES_DB=BLACKBOX_FOLLOWER_DB_NAME,
+        TURNIERE_BLACKBOX_POSTGRES_USER=BLACKBOX_DB_USER,
+        TURNIERE_BLACKBOX_POSTGRES_PASSWORD=BLACKBOX_DB_PASSWORD,
+        TURNIERE_BLACKBOX_SECRET_KEY_BASE=BLACKBOX_SECRET_KEY_BASE,
+        TURNIERE_BLACKBOX_MAILGUN_API_KEY=BLACKBOX_MAILGUN_API_KEY,
+        TURNIERE_BLACKBOX_MAILGUN_DOMAIN=BLACKBOX_MAILGUN_DOMAIN,
+        TURNIERE_SOURCE_E2E_BASE_URL=BLACKBOX_SOURCE_INTERNAL_BASE_URL,
+        TURNIERE_FOLLOWER_E2E_BASE_URL=BLACKBOX_FOLLOWER_INTERNAL_BASE_URL,
+        TURNIERE_E2E_EMAIL=E2E_EMAIL,
+        TURNIERE_E2E_PASSWORD=E2E_PASSWORD,
+        TURNIERE_E2E_USERNAME=E2E_USERNAME,
+        TURNIERE_E2E_ALT_EMAIL=E2E_ALT_EMAIL,
+        TURNIERE_E2E_ALT_PASSWORD=E2E_ALT_PASSWORD,
+        TURNIERE_E2E_ALT_USERNAME=E2E_ALT_USERNAME,
+    )
+
+
 def _format_command(command):
     return " ".join(shlex.quote(part) for part in command)
 
 
-def _compose_run(compose_args, env, capture_output=False, check=True):
-    command = _docker_compose_cmd() + compose_args
+def _compose_run(compose_args, env, capture_output=False, check=True, project_name=BLACKBOX_PROJECT, compose_file=BLACKBOX_COMPOSE_FILE):
+    command = _docker_compose_cmd(project_name=project_name, compose_file=compose_file) + compose_args
     return _run_subprocess(command, env=env, capture_output=capture_output, check=check)
 
 
@@ -803,6 +838,222 @@ def docker_blackbox_test(
             output=result.stdout,
             stderr=result.stderr,
         )
+
+
+@task(name="docker-blackbox-follow-up")
+def docker_blackbox_follow_up(
+    c,
+    source_host_port=BLACKBOX_SOURCE_HOST_PORT,
+    follower_host_port=BLACKBOX_FOLLOWER_HOST_PORT,
+    app_image=PRODUCTION_TAG,
+    runner_image=TEST_TAG,
+    postgres_image=BLACKBOX_POSTGRES_IMAGE,
+    build=True,
+):
+    """Build Docker images, then boot source/follower Postgres and production apps for follower blackbox testing."""
+    if build:
+        docker_build_all(c)
+
+    env = _follow_compose_env(
+        source_host_port=source_host_port,
+        follower_host_port=follower_host_port,
+        app_image=app_image,
+        runner_image=runner_image,
+        postgres_image=postgres_image,
+    )
+
+    _print_header("Starting follower production blackbox stack")
+    _compose_run(
+        ["down", "-v", "--remove-orphans"],
+        env=env,
+        check=False,
+        project_name=BLACKBOX_FOLLOW_PROJECT,
+        compose_file=BLACKBOX_FOLLOW_COMPOSE_FILE,
+    )
+    _compose_run(
+        ["up", "-d", "source-postgres", "follower-postgres", "source-app", "follower-app"],
+        env=env,
+        project_name=BLACKBOX_FOLLOW_PROJECT,
+        compose_file=BLACKBOX_FOLLOW_COMPOSE_FILE,
+    )
+
+    source_base_url = f"http://127.0.0.1:{source_host_port}"
+    follower_base_url = f"http://127.0.0.1:{follower_host_port}"
+    _print_header(f"Waiting for source app healthcheck at {source_base_url}")
+    _wait_for_http(base_url=source_base_url, timeout=120)
+
+    _print_header(f"Waiting for follower app healthcheck at {follower_base_url}")
+    _wait_for_http(base_url=follower_base_url, timeout=120)
+
+    print("Follower production apps ready for blackbox E2E.")
+
+
+@task(name="docker-blackbox-follow-down")
+def docker_blackbox_follow_down(
+    c,
+    source_host_port=BLACKBOX_SOURCE_HOST_PORT,
+    follower_host_port=BLACKBOX_FOLLOWER_HOST_PORT,
+    app_image=PRODUCTION_TAG,
+    runner_image=TEST_TAG,
+    postgres_image=BLACKBOX_POSTGRES_IMAGE,
+):
+    """Stop and remove follower production blackbox stack."""
+    env = _follow_compose_env(
+        source_host_port=source_host_port,
+        follower_host_port=follower_host_port,
+        app_image=app_image,
+        runner_image=runner_image,
+        postgres_image=postgres_image,
+    )
+    _compose_run(
+        ["down", "-v", "--remove-orphans"],
+        env=env,
+        check=False,
+        project_name=BLACKBOX_FOLLOW_PROJECT,
+        compose_file=BLACKBOX_FOLLOW_COMPOSE_FILE,
+    )
+
+
+@task(name="docker-blackbox-follow-test")
+def docker_blackbox_follow_test(
+    c,
+    source_host_port=BLACKBOX_SOURCE_HOST_PORT,
+    follower_host_port=BLACKBOX_FOLLOWER_HOST_PORT,
+    app_image=PRODUCTION_TAG,
+    runner_image=TEST_TAG,
+    postgres_image=BLACKBOX_POSTGRES_IMAGE,
+):
+    """Run follower-sync HTTP E2E suite against running source/follower production blackbox stack."""
+    env = _follow_compose_env(
+        source_host_port=source_host_port,
+        follower_host_port=follower_host_port,
+        app_image=app_image,
+        runner_image=runner_image,
+        postgres_image=postgres_image,
+    )
+
+    _print_header("Running follower sync HTTP E2E against production images")
+    command = [
+        "run",
+        "--rm",
+        "e2e",
+        "inv",
+        "blackbox-follow-service",
+    ]
+    print(_format_command(_docker_compose_cmd(project_name=BLACKBOX_FOLLOW_PROJECT, compose_file=BLACKBOX_FOLLOW_COMPOSE_FILE) + command))
+    result = _compose_run(
+        command,
+        env=env,
+        capture_output=True,
+        check=False,
+        project_name=BLACKBOX_FOLLOW_PROJECT,
+        compose_file=BLACKBOX_FOLLOW_COMPOSE_FILE,
+    )
+    if result.stdout:
+        print(result.stdout.rstrip())
+    if result.stderr:
+        print(result.stderr.rstrip())
+
+    if result.returncode != 0:
+        raise subprocess.CalledProcessError(
+            result.returncode,
+            result.args,
+            output=result.stdout,
+            stderr=result.stderr,
+        )
+
+
+@task(name="docker-blackbox-follow-bootstrap-users")
+def docker_blackbox_follow_bootstrap_users(
+    c,
+    source_host_port=BLACKBOX_SOURCE_HOST_PORT,
+    follower_host_port=BLACKBOX_FOLLOWER_HOST_PORT,
+    app_image=PRODUCTION_TAG,
+    runner_image=TEST_TAG,
+    postgres_image=BLACKBOX_POSTGRES_IMAGE,
+):
+    """Bootstrap confirmed E2E users in local source/follower production blackbox DBs."""
+    env = _follow_compose_env(
+        source_host_port=source_host_port,
+        follower_host_port=follower_host_port,
+        app_image=app_image,
+        runner_image=runner_image,
+        postgres_image=postgres_image,
+    )
+
+    for app_service in ("source-app", "follower-app"):
+        _print_header(f"Bootstrapping confirmed E2E users in {app_service}")
+        for bootstrap_email, bootstrap_password, bootstrap_username in (
+            (E2E_EMAIL, E2E_PASSWORD, E2E_USERNAME),
+            (E2E_ALT_EMAIL, E2E_ALT_PASSWORD, E2E_ALT_USERNAME),
+        ):
+            bootstrap = _compose_run(
+                ["exec", "-T", app_service, "bash", "-lc", _bootstrap_user_command(bootstrap_email, bootstrap_password, bootstrap_username)],
+                env=env,
+                capture_output=True,
+                check=False,
+                project_name=BLACKBOX_FOLLOW_PROJECT,
+                compose_file=BLACKBOX_FOLLOW_COMPOSE_FILE,
+            )
+            if bootstrap.returncode != 0:
+                print(bootstrap.stdout or "", end="")
+                print(bootstrap.stderr or "", end="")
+                raise subprocess.CalledProcessError(
+                    bootstrap.returncode,
+                    bootstrap.args,
+                    output=bootstrap.stdout,
+                    stderr=bootstrap.stderr,
+                )
+
+
+@task(name="docker-blackbox-follow-run")
+def docker_blackbox_follow_run(
+    c,
+    source_host_port=BLACKBOX_SOURCE_HOST_PORT,
+    follower_host_port=BLACKBOX_FOLLOWER_HOST_PORT,
+    app_image=PRODUCTION_TAG,
+    runner_image=TEST_TAG,
+    postgres_image=BLACKBOX_POSTGRES_IMAGE,
+    build=True,
+    keep_running=False,
+):
+    """Build, boot, run follower-sync blackbox E2E, then tear down unless keep_running=true."""
+    exit_error = None
+    try:
+        docker_blackbox_follow_up(
+            c,
+            source_host_port=source_host_port,
+            follower_host_port=follower_host_port,
+            app_image=app_image,
+            runner_image=runner_image,
+            postgres_image=postgres_image,
+            build=build,
+        )
+        docker_blackbox_follow_test(
+            c,
+            source_host_port=source_host_port,
+            follower_host_port=follower_host_port,
+            app_image=app_image,
+            runner_image=runner_image,
+            postgres_image=postgres_image,
+        )
+    except subprocess.CalledProcessError as error:
+        exit_error = error
+        raise
+    finally:
+        if keep_running:
+            print("Keeping follower production blackbox stack running.")
+        else:
+            docker_blackbox_follow_down(
+                c,
+                source_host_port=source_host_port,
+                follower_host_port=follower_host_port,
+                app_image=app_image,
+                runner_image=runner_image,
+                postgres_image=postgres_image,
+            )
+        if exit_error is not None:
+            print("Follower blackbox run failed.")
 
 
 @task(name="blackbox-service")

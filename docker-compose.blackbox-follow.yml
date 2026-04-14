@@ -1,0 +1,86 @@
+services:
+  source-postgres:
+    image: ${TURNIERE_BLACKBOX_POSTGRES_IMAGE:-postgres:16}
+    environment:
+      POSTGRES_DB: ${TURNIERE_BLACKBOX_SOURCE_POSTGRES_DB:-turniere_source_blackbox}
+      POSTGRES_USER: ${TURNIERE_BLACKBOX_POSTGRES_USER:-turniere}
+      POSTGRES_PASSWORD: ${TURNIERE_BLACKBOX_POSTGRES_PASSWORD:-turniere}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - turniere-blackbox-follow-source-postgres:/var/lib/postgresql/data
+
+  follower-postgres:
+    image: ${TURNIERE_BLACKBOX_POSTGRES_IMAGE:-postgres:16}
+    environment:
+      POSTGRES_DB: ${TURNIERE_BLACKBOX_FOLLOWER_POSTGRES_DB:-turniere_follower_blackbox}
+      POSTGRES_USER: ${TURNIERE_BLACKBOX_POSTGRES_USER:-turniere}
+      POSTGRES_PASSWORD: ${TURNIERE_BLACKBOX_POSTGRES_PASSWORD:-turniere}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - turniere-blackbox-follow-follower-postgres:/var/lib/postgresql/data
+
+  source-app:
+    image: ${TURNIERE_BLACKBOX_APP_IMAGE:-registry.gitlab.com/turniere/turniere-backend/production/commits:local}
+    depends_on:
+      source-postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_URL: postgres://${TURNIERE_BLACKBOX_POSTGRES_USER:-turniere}:${TURNIERE_BLACKBOX_POSTGRES_PASSWORD:-turniere}@source-postgres:5432/${TURNIERE_BLACKBOX_SOURCE_POSTGRES_DB:-turniere_source_blackbox}
+      POSTGRES_USERNAME: ${TURNIERE_BLACKBOX_POSTGRES_USER:-turniere}
+      POSTGRES_PASSWORD: ${TURNIERE_BLACKBOX_POSTGRES_PASSWORD:-turniere}
+      SECRET_KEY_BASE: ${TURNIERE_BLACKBOX_SECRET_KEY_BASE:-turniere-blackbox-secret-key-base-please-change-in-real-prod}
+      MAILGUN_API_KEY: ${TURNIERE_BLACKBOX_MAILGUN_API_KEY:-blackbox-test-api-key}
+      MAILGUN_DOMAIN: ${TURNIERE_BLACKBOX_MAILGUN_DOMAIN:-blackbox.example.com}
+      RAILS_LOG_TO_STDOUT: "1"
+      RAILS_SERVE_STATIC_FILES: "1"
+    ports:
+      - "${TURNIERE_BLACKBOX_SOURCE_HOST_PORT:-3002}:3000"
+
+  follower-app:
+    image: ${TURNIERE_BLACKBOX_APP_IMAGE:-registry.gitlab.com/turniere/turniere-backend/production/commits:local}
+    depends_on:
+      follower-postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_URL: postgres://${TURNIERE_BLACKBOX_POSTGRES_USER:-turniere}:${TURNIERE_BLACKBOX_POSTGRES_PASSWORD:-turniere}@follower-postgres:5432/${TURNIERE_BLACKBOX_FOLLOWER_POSTGRES_DB:-turniere_follower_blackbox}
+      POSTGRES_USERNAME: ${TURNIERE_BLACKBOX_POSTGRES_USER:-turniere}
+      POSTGRES_PASSWORD: ${TURNIERE_BLACKBOX_POSTGRES_PASSWORD:-turniere}
+      SECRET_KEY_BASE: ${TURNIERE_BLACKBOX_SECRET_KEY_BASE:-turniere-blackbox-secret-key-base-please-change-in-real-prod}
+      MAILGUN_API_KEY: ${TURNIERE_BLACKBOX_MAILGUN_API_KEY:-blackbox-test-api-key}
+      MAILGUN_DOMAIN: ${TURNIERE_BLACKBOX_MAILGUN_DOMAIN:-blackbox.example.com}
+      RAILS_LOG_TO_STDOUT: "1"
+      RAILS_SERVE_STATIC_FILES: "1"
+    ports:
+      - "${TURNIERE_BLACKBOX_FOLLOWER_HOST_PORT:-3003}:3000"
+
+  e2e:
+    image: ${TURNIERE_BLACKBOX_RUNNER_IMAGE:-registry.gitlab.com/turniere/turniere-backend/test/commits:local}
+    depends_on:
+      source-app:
+        condition: service_started
+      follower-app:
+        condition: service_started
+    working_dir: /app
+    environment:
+      NO_PROXY: source-app,follower-app,source-postgres,follower-postgres,localhost,127.0.0.1
+      no_proxy: source-app,follower-app,source-postgres,follower-postgres,localhost,127.0.0.1
+      TURNIERE_SOURCE_E2E_BASE_URL: ${TURNIERE_SOURCE_E2E_BASE_URL:-http://source-app:3000}
+      TURNIERE_FOLLOWER_E2E_BASE_URL: ${TURNIERE_FOLLOWER_E2E_BASE_URL:-http://follower-app:3000}
+      TURNIERE_E2E_EMAIL: ${TURNIERE_E2E_EMAIL:-e2e@example.com}
+      TURNIERE_E2E_PASSWORD: ${TURNIERE_E2E_PASSWORD:-password123}
+      TURNIERE_E2E_USERNAME: ${TURNIERE_E2E_USERNAME:-e2e-user}
+      TURNIERE_E2E_ALT_EMAIL: ${TURNIERE_E2E_ALT_EMAIL:-e2e-alt@example.com}
+      TURNIERE_E2E_ALT_PASSWORD: ${TURNIERE_E2E_ALT_PASSWORD:-password123}
+      TURNIERE_E2E_ALT_USERNAME: ${TURNIERE_E2E_ALT_USERNAME:-e2e-alt-user}
+
+volumes:
+  turniere-blackbox-follow-source-postgres:
+  turniere-blackbox-follow-follower-postgres:
