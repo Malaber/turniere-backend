@@ -17,6 +17,7 @@ class Tournament < ApplicationRecord
   alias_attribute :owner, :user
 
   after_initialize :generate_code
+  before_validation :clear_follower_sync_token_when_disabling_read_only_mode
 
   def matches
     [stages.map(&:matches), stages.map { |s| s.groups.map(&:matches) }].flatten
@@ -66,5 +67,12 @@ class Tournament < ApplicationRecord
     return if read_only_mode? && sync_auth_token.present? && sync_target_url.blank?
 
     errors.add(:base, 'sync_target_url and sync_auth_token must be configured together')
+  end
+
+  def clear_follower_sync_token_when_disabling_read_only_mode
+    return if read_only_mode?
+    return if sync_target_url.present?
+
+    self.sync_auth_token = nil
   end
 end
