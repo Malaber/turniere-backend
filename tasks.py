@@ -239,6 +239,48 @@ def _print_header(title):
     print(f"\n== {title} ==", flush=True)
 
 
+def _blackbox_network_smoke(c, target_base_url):
+    command = [
+        "ruby",
+        "-rnet/http",
+        "-ruri",
+        "-e",
+        (
+            "uri = URI.parse(ARGV.fetch(0) + '/healthz'); "
+            "res = Net::HTTP.get_response(uri); "
+            "abort(\"healthcheck #{res.code}\") unless res.is_a?(Net::HTTPSuccess); "
+            "puts(\"network smoke ok #{uri}\")"
+        ),
+        target_base_url,
+    ]
+    c.run(_format_command(command), pty=True)
+
+
+def _blackbox_service_to_service_smoke(c, env, source_label, target_base_url):
+    command = [
+        "bundle",
+        "exec",
+        "rails",
+        "runner",
+        (
+            "require 'net/http'; "
+            "require 'uri'; "
+            "uri = URI.parse(ENV.fetch('BLACKBOX_SMOKE_TARGET_URL') + '/healthz'); "
+            "Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == 'https', open_timeout: 3, read_timeout: 3) do |http| "
+            "res = http.get(uri.request_uri); "
+            "abort(\"service smoke #{res.code}\") unless res.is_a?(Net::HTTPSuccess); "
+            "puts(\"service smoke ok #{ENV.fetch('BLACKBOX_SMOKE_SOURCE_LABEL')} -> #{uri}\"); "
+            "end"
+        ),
+    ]
+    smoke_env = env.copy()
+    smoke_env.update(
+        BLACKBOX_SMOKE_SOURCE_LABEL=source_label,
+        BLACKBOX_SMOKE_TARGET_URL=target_base_url,
+    )
+    c.run(_format_command(command), env=smoke_env, pty=True)
+
+
 def _bootstrap_user_command(email, password, username):
     return (
         f"{_bundle_exec('rails', 'runner')} "
@@ -1515,6 +1557,12 @@ def blackbox_follow_service(
 
     _print_header(f"Waiting for follower app healthcheck at {follower_base_url}")
     _wait_for_http(base_url=follower_base_url, timeout=120)
+
+    _print_header("Running source/follower network smoke")
+    _blackbox_network_smoke(c, source_base_url)
+    _blackbox_network_smoke(c, follower_base_url)
+    _blackbox_service_to_service_smoke(c, source_env, "source-app", follower_base_url)
+    _blackbox_service_to_service_smoke(c, follower_env, "follower-app", source_base_url)
 
     _print_header("Bootstrapping confirmed E2E users on source and follower")
     _bootstrap_blackbox_users(c, source_env, email, password, username, alt_email, alt_password, alt_username)

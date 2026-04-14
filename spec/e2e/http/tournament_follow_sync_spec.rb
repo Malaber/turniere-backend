@@ -213,7 +213,7 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
     end
   end
 
-  def wait_for_tournament_sync!(source_tournament_id:, follower_tournament_id:, timeout: 90)
+  def wait_for_tournament_sync!(source_tournament_id:, follower_tournament_id:, timeout: 20)
     deadline = Time.now + timeout
     last_progress_at = Time.now
 
@@ -222,7 +222,7 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
       follower = fetch_tournament(client: follower_anonymous_client, tournament_id: follower_tournament_id)
       return follower if tournament_signature(source) == tournament_signature(follower)
 
-      if Time.now - last_progress_at >= 5
+      if Time.now - last_progress_at >= 2
         puts "sync wait source=#{sync_progress_signature(source).inspect} follower=#{sync_progress_signature(follower).inspect}"
         $stdout.flush
         last_progress_at = Time.now

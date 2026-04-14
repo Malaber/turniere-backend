@@ -6,6 +6,7 @@ require 'uri'
 
 class TournamentSyncPusher
   class SyncFailed < StandardError; end
+  DEFAULT_HTTP_TIMEOUT = 5
 
   def self.push!(tournament)
     new(tournament).push!
@@ -55,7 +56,15 @@ class TournamentSyncPusher
     request.body = JSON.dump({ snapshot: snapshot })
 
     Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == 'https') do |http|
+      timeout = http_timeout_seconds
+      http.open_timeout = timeout
+      http.read_timeout = timeout
+      http.write_timeout = timeout if http.respond_to?(:write_timeout=)
       http.request(request)
     end
+  end
+
+  def http_timeout_seconds
+    ENV.fetch('TOURNAMENT_SYNC_HTTP_TIMEOUT_SECONDS', DEFAULT_HTTP_TIMEOUT).to_i
   end
 end
