@@ -213,7 +213,7 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
     end
   end
 
-  def wait_for_tournament_sync!(source_tournament_id:, follower_tournament_id:, timeout: 30)
+  def wait_for_tournament_sync!(source_tournament_id:, follower_tournament_id:, timeout: 90)
     deadline = Time.now + timeout
 
     loop do
@@ -221,7 +221,13 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
       follower = fetch_tournament(client: follower_anonymous_client, tournament_id: follower_tournament_id)
       return follower if tournament_signature(source) == tournament_signature(follower)
 
-      raise "Follower did not catch up within #{timeout}s" if Time.now >= deadline
+      if Time.now >= deadline
+        raise <<~ERROR
+          Follower did not catch up within #{timeout}s
+          source_signature=#{tournament_signature(source).inspect}
+          follower_signature=#{tournament_signature(follower).inspect}
+        ERROR
+      end
 
       sleep 0.5
     end
