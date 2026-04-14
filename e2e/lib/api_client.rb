@@ -120,7 +120,7 @@ module TurniereE2E
     end
 
     def store_auth_headers!(response)
-      %w[access-token client uid].each_with_object({}) do |key, auth_headers|
+      %w[access-token client uid expiry token-type authorization].each_with_object({}) do |key, auth_headers|
         auth_headers[key] = response[:headers][key] if response[:headers].key?(key)
       end.tap do |headers|
         @auth_headers = headers unless headers.empty?
