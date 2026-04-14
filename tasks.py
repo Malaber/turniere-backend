@@ -139,6 +139,35 @@ def _run_subprocess(command, env=None, capture_output=False, check=True):
     return completed
 
 
+def _run_subprocess_live(command, env=None, check=True):
+    process = subprocess.Popen(
+        command,
+        env=env,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        bufsize=1,
+    )
+
+    output_chunks = []
+    assert process.stdout is not None
+    for line in process.stdout:
+        output_chunks.append(line)
+        print(line, end="", flush=True)
+
+    process.wait()
+    stdout = "".join(output_chunks)
+    completed = subprocess.CompletedProcess(command, process.returncode, stdout=stdout, stderr="")
+    if check and completed.returncode != 0:
+        raise subprocess.CalledProcessError(
+            completed.returncode,
+            command,
+            output=completed.stdout,
+            stderr=completed.stderr,
+        )
+    return completed
+
+
 def _compose_env(
     host_port=SERVER_PORT,
     app_image=PRODUCTION_TAG,
@@ -207,7 +236,7 @@ def _compose_run(compose_args, env, capture_output=False, check=True, project_na
 
 
 def _print_header(title):
-    print(f"\n== {title} ==")
+    print(f"\n== {title} ==", flush=True)
 
 
 def _bootstrap_user_command(email, password, username):
@@ -336,12 +365,8 @@ def _run_blackbox_rspec(base_url, email, password, username, alt_email=E2E_ALT_E
     if extra_env:
       env.update(extra_env)
     command = ["bundle", "exec", "rspec", spec_path, "--format", "documentation"]
-    print(_format_command(command))
-    result = _run_subprocess(command, env=env, capture_output=True, check=False)
-    if result.stdout:
-        print(result.stdout.rstrip())
-    if result.stderr:
-        print(result.stderr.rstrip())
+    print(_format_command(command), flush=True)
+    result = _run_subprocess_live(command, env=env, check=False)
 
     report = _parse_rspec_report(f"{result.stdout}\n{result.stderr}")
     _print_header("Blackbox report")
@@ -940,19 +965,9 @@ def docker_blackbox_follow_test(
         "inv",
         "blackbox-follow-service",
     ]
-    print(_format_command(_docker_compose_cmd(project_name=BLACKBOX_FOLLOW_PROJECT, compose_file=BLACKBOX_FOLLOW_COMPOSE_FILE) + command))
-    result = _compose_run(
-        command,
-        env=env,
-        capture_output=True,
-        check=False,
-        project_name=BLACKBOX_FOLLOW_PROJECT,
-        compose_file=BLACKBOX_FOLLOW_COMPOSE_FILE,
-    )
-    if result.stdout:
-        print(result.stdout.rstrip())
-    if result.stderr:
-        print(result.stderr.rstrip())
+    full_command = _docker_compose_cmd(project_name=BLACKBOX_FOLLOW_PROJECT, compose_file=BLACKBOX_FOLLOW_COMPOSE_FILE) + command
+    print(_format_command(full_command), flush=True)
+    result = _run_subprocess_live(full_command, env=env, check=False)
 
     if result.returncode != 0:
         raise subprocess.CalledProcessError(

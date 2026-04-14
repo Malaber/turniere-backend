@@ -215,11 +215,18 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
 
   def wait_for_tournament_sync!(source_tournament_id:, follower_tournament_id:, timeout: 90)
     deadline = Time.now + timeout
+    last_progress_at = Time.now
 
     loop do
       source = fetch_tournament(client: source_anonymous_client, tournament_id: source_tournament_id)
       follower = fetch_tournament(client: follower_anonymous_client, tournament_id: follower_tournament_id)
       return follower if tournament_signature(source) == tournament_signature(follower)
+
+      if Time.now - last_progress_at >= 5
+        puts "sync wait source=#{sync_progress_signature(source).inspect} follower=#{sync_progress_signature(follower).inspect}"
+        $stdout.flush
+        last_progress_at = Time.now
+      end
 
       if Time.now >= deadline
         raise <<~ERROR
@@ -231,6 +238,13 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
 
       sleep 0.5
     end
+  end
+
+  def sync_progress_signature(tournament)
+    {
+      name: tournament.fetch(:name),
+      stages: tournament.fetch(:stages).map { |stage| [stage.fetch(:level), stage.fetch(:state)] }
+    }
   end
 
   def synced_team_id_pairs(source:, follower:)
