@@ -19,17 +19,19 @@ class StagesController < ApplicationController
         return
       end
 
+      synced_tournament = nil
       Stage.transaction do
         if @stage.update(stage_params)
           handle_group_stage_end
 
           render json: @stage
-          push_sync_if_needed!(@stage.tournament)
+          synced_tournament = @stage.tournament
         else
           render json: @stage.errors, status: :unprocessable_entity
           raise ActiveRecord::Rollback
         end
       end
+      push_sync_if_needed!(synced_tournament) unless synced_tournament.nil?
     else
       render json: {
         error: 'The state attribute may only be changed to finished'

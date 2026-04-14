@@ -85,6 +85,7 @@ class TournamentsController < ApplicationController
 
   # PATCH/PUT /tournaments/1
   def update
+    synced_tournament = nil
     Tournament.transaction do
       if only_playoff_teams_amount_changed
         @tournament.instant_finalists_amount, @tournament.intermediate_round_participants_amount =
@@ -94,13 +95,14 @@ class TournamentsController < ApplicationController
           )
       end
       if @tournament.update(tournament_params)
-        push_sync_if_needed!(@tournament)
+        synced_tournament = @tournament
         render json: @tournament
       else
         render json: @tournament.errors, status: :unprocessable_entity
         raise ActiveRecord::Rollback
       end
     end
+    push_sync_if_needed!(synced_tournament) unless synced_tournament.nil?
   end
 
   # DELETE /tournaments/1

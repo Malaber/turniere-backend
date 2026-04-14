@@ -66,6 +66,7 @@ class MatchesController < ApplicationController
   # PATCH/PUT /matches/1
   def update
     new_state = match_params['state']
+    synced_tournament = nil
 
     Match.transaction do
       if @match.update(match_params)
@@ -78,12 +79,13 @@ class MatchesController < ApplicationController
         end
 
         render json: @match
-        push_sync_if_needed!(@match.tournament)
+        synced_tournament = @match.tournament
       else
         render json: @match.errors, status: :unprocessable_entity
         raise ActiveRecord::Rollback
       end
     end
+    push_sync_if_needed!(synced_tournament) unless synced_tournament.nil?
   end
 
   private
