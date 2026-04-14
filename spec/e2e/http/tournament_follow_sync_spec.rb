@@ -228,7 +228,9 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
   end
 
   def synced_team_id_pairs(source:, follower:)
-    source_by_name = source.fetch(:teams).index_by { |team| team.fetch(:name) }
+    source_by_name = source.fetch(:teams).each_with_object({}) do |team, teams_by_name|
+      teams_by_name[team.fetch(:name)] = team
+    end
     follower.fetch(:teams).filter_map do |team|
       source_team = source_by_name[team.fetch(:name)]
       next if source_team.nil?
