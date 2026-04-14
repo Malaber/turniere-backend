@@ -56,7 +56,18 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
     exercise_unrelated_requests!(source_noise: source_noise, follower_noise: follower_noise)
 
     source_group_stage = fetch_tournament(client: source_anonymous_client, tournament_id: source.fetch(:id))
-                          .fetch(:stages).find { |stage| stage.fetch(:level) == -1 }
+                           .fetch(:stages).find { |stage| stage.fetch(:level) == -1 }
+    rename_source_tournament_teams!(
+      source_tournament_id: source.fetch(:id),
+      team_names: [
+        group_team_map(source_group_stage.fetch(:groups).first).fetch(1).fetch(:name),
+        group_team_map(source_group_stage.fetch(:groups).last).fetch(2).fetch(:name)
+      ]
+    )
+    source_noise.concat(seed_unrelated_tournaments!(client: source_owner_client, prefix: 'Source Midway Noise', range: 2..3))
+    follower_noise.concat(seed_unrelated_tournaments!(client: follower_owner_client, prefix: 'Follower Midway Noise', range: 3..4))
+    exercise_unrelated_requests!(source_noise: source_noise, follower_noise: follower_noise)
+
     play_group_with_decider_lifecycle!(source_id: source.fetch(:id), groups: source_group_stage.fetch(:groups).sort_by { |group| group.fetch(:number) })
     exercise_unrelated_requests!(source_noise: source_noise, follower_noise: follower_noise)
 
@@ -71,6 +82,10 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
     locked_team_update = follower_owner_client.patch("/teams/#{follower_team.fetch(:id)}", body: { name: 'Nope' })
     expect(locked_team_update[:status]).to eq(423)
     expect(locked_team_update.dig(:json, :error)).to eq('Tournament is in read only follower mode')
+
+    source_noise.concat(seed_unrelated_tournaments!(client: source_owner_client, prefix: 'Source Playoff Noise', range: 2..4))
+    follower_noise.concat(seed_unrelated_tournaments!(client: follower_owner_client, prefix: 'Follower Playoff Noise', range: 2..5))
+    exercise_unrelated_requests!(source_noise: source_noise, follower_noise: follower_noise)
 
     finish_playoff_bracket!(source_id: source.fetch(:id))
     exercise_unrelated_requests!(source_noise: source_noise, follower_noise: follower_noise)
@@ -183,6 +198,21 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
     expect(team_update[:status]).to eq(200)
   end
 
+  def rename_source_tournament_teams!(source_tournament_id:, team_names:)
+    tournament = fetch_tournament(client: source_anonymous_client, tournament_id: source_tournament_id)
+
+    team_names.each_with_index do |team_name, index|
+      team = tournament.fetch(:teams).find { |candidate| candidate.fetch(:name) == team_name }
+      expect(team).not_to be_nil
+
+      response = source_owner_client.patch("/teams/#{team.fetch(:id)}", body: {
+                                             name: "#{team.fetch(:name)} Renamed #{index + 1}"
+                                           })
+      expect(response[:status]).to eq(200)
+      tournament = fetch_tournament(client: source_anonymous_client, tournament_id: source_tournament_id)
+    end
+  end
+
   def wait_for_tournament_sync!(source_tournament_id:, follower_tournament_id:, timeout: 30)
     deadline = Time.now + timeout
 
@@ -210,7 +240,7 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
 
   def play_group_with_decider_lifecycle!(source_id:, groups:)
     groups.each_with_index do |group, index|
-      if index.zero?
+      if index < 2
         play_group_matches_for_decider!(group)
       else
         finish_group_clear_winner!(group)
@@ -223,22 +253,26 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
     stage_finish = source_owner_client.patch("/stages/#{group_stage.fetch(:id)}", body: { state: 'finished' })
     expect(stage_finish[:status]).to eq(422)
     expect(stage_finish.dig(:json, :error)).to eq('Playoffs cannot be generated yet because a decider match is required for an advancing place')
+    expect(stage_finish.dig(:json, :blocking_ties).size).to be >= 2
 
-    blocking_tie = stage_finish.dig(:json, :blocking_ties).first
-    decider_create = source_owner_client.post("/groups/#{blocking_tie.fetch(:group_id)}/matches", body: {
-                                         team_ids: blocking_tie.fetch(:team_ids)
-                                       })
-    expect(decider_create[:status]).to eq(201)
-    decider_match = decider_create.fetch(:json)
+    stage_finish.fetch(:json).fetch(:blocking_ties).each_with_index do |blocking_tie, index|
+      decider_create = source_owner_client.post("/groups/#{blocking_tie.fetch(:group_id)}/matches", body: {
+                                           team_ids: blocking_tie.fetch(:team_ids)
+                                         })
+      expect(decider_create[:status]).to eq(201)
+      decider_match = decider_create.fetch(:json)
 
-    start_decider = source_owner_client.patch("/matches/#{decider_match.fetch(:id)}", body: { state: 'in_progress' })
-    expect(start_decider[:status]).to eq(200)
-    decider_match.fetch(:match_scores).sort_by { |score| score.fetch(:id) }.each_with_index do |score, index|
-      response = source_owner_client.patch("/match_scores/#{score.fetch(:id)}", body: { hidden_points: index.zero? ? 5 : 3 })
-      expect(response[:status]).to eq(200)
+      start_decider = source_owner_client.patch("/matches/#{decider_match.fetch(:id)}", body: { state: 'in_progress' })
+      expect(start_decider[:status]).to eq(200)
+      decider_match.fetch(:match_scores).sort_by { |score| score.fetch(:id) }.each_with_index do |score, score_index|
+        response = source_owner_client.patch("/match_scores/#{score.fetch(:id)}", body: {
+                                               hidden_points: score_index.zero? ? 5 + index : 3
+                                             })
+        expect(response[:status]).to eq(200)
+      end
+      finish_decider = source_owner_client.patch("/matches/#{decider_match.fetch(:id)}", body: { state: 'finished' })
+      expect(finish_decider[:status]).to eq(200)
     end
-    finish_decider = source_owner_client.patch("/matches/#{decider_match.fetch(:id)}", body: { state: 'finished' })
-    expect(finish_decider[:status]).to eq(200)
 
     finish_stage_after_decider = source_owner_client.patch("/stages/#{group_stage.fetch(:id)}", body: { state: 'finished' })
     expect(finish_stage_after_decider[:status]).to eq(200)
