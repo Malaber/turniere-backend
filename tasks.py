@@ -1006,6 +1006,265 @@ def docker_blackbox_follow_bootstrap_users(
                 )
 
 
+@task(name="docker-blackbox-follow-debug-auth")
+def docker_blackbox_follow_debug_auth(
+    c,
+    source_host_port=BLACKBOX_SOURCE_HOST_PORT,
+    follower_host_port=BLACKBOX_FOLLOWER_HOST_PORT,
+    app_image=PRODUCTION_TAG,
+    runner_image=TEST_TAG,
+    postgres_image=BLACKBOX_POSTGRES_IMAGE,
+):
+    """Debug source/follower login and first authenticated create inside local follower blackbox runner."""
+    env = _follow_compose_env(
+        source_host_port=source_host_port,
+        follower_host_port=follower_host_port,
+        app_image=app_image,
+        runner_image=runner_image,
+        postgres_image=postgres_image,
+    )
+
+    script = """
+require_relative 'e2e/lib/api_client'
+
+def inspect_client(base_url)
+  client = TurniereE2E::ApiClient.new(base_url: base_url)
+  login = client.login!(email: ENV.fetch('TURNIERE_E2E_EMAIL'), password: ENV.fetch('TURNIERE_E2E_PASSWORD'))
+  puts({ base_url: base_url, login_status: login[:status], login_headers: login[:headers].slice('access-token', 'client', 'uid', 'expiry', 'token-type', 'authorization'), authenticated: client.authenticated? }.inspect)
+
+  create = client.post('/tournaments', body: {
+    name: "Debug #{base_url}",
+    description: 'Debug tournament',
+    public: false,
+    teams: [
+      { name: 'One' },
+      { name: 'Two' },
+      { name: 'Three' },
+      { name: 'Four' }
+    ]
+  })
+  puts({ base_url: base_url, create_status: create[:status], create_json: create[:json], create_headers: create[:headers].slice('access-token', 'client', 'uid', 'expiry', 'token-type', 'authorization') }.inspect)
+end
+
+inspect_client(ENV.fetch('TURNIERE_SOURCE_E2E_BASE_URL'))
+inspect_client(ENV.fetch('TURNIERE_FOLLOWER_E2E_BASE_URL'))
+"""
+    command = [
+        "run",
+        "--rm",
+        "e2e",
+        "ruby",
+        "-e",
+        script,
+    ]
+    print(_format_command(_docker_compose_cmd(project_name=BLACKBOX_FOLLOW_PROJECT, compose_file=BLACKBOX_FOLLOW_COMPOSE_FILE) + command))
+    result = _compose_run(
+        command,
+        env=env,
+        capture_output=True,
+        check=False,
+        project_name=BLACKBOX_FOLLOW_PROJECT,
+        compose_file=BLACKBOX_FOLLOW_COMPOSE_FILE,
+    )
+    if result.stdout:
+        print(result.stdout.rstrip())
+    if result.stderr:
+        print(result.stderr.rstrip())
+
+    if result.returncode != 0:
+        raise subprocess.CalledProcessError(
+            result.returncode,
+            result.args,
+            output=result.stdout,
+            stderr=result.stderr,
+        )
+
+
+@task(name="docker-blackbox-follow-debug-seed")
+def docker_blackbox_follow_debug_seed(
+    c,
+    source_host_port=BLACKBOX_SOURCE_HOST_PORT,
+    follower_host_port=BLACKBOX_FOLLOWER_HOST_PORT,
+    app_image=PRODUCTION_TAG,
+    runner_image=TEST_TAG,
+    postgres_image=BLACKBOX_POSTGRES_IMAGE,
+):
+    """Debug repeated mixed tournament creation inside local follower blackbox runner."""
+    env = _follow_compose_env(
+        source_host_port=source_host_port,
+        follower_host_port=follower_host_port,
+        app_image=app_image,
+        runner_image=runner_image,
+        postgres_image=postgres_image,
+    )
+
+    script = """
+require_relative 'e2e/lib/api_client'
+
+def create_playoff_payload(name)
+  {
+    name: name,
+    description: 'Debug playoff tournament',
+    public: false,
+    teams: [
+      { name: 'One' },
+      { name: 'Two' },
+      { name: 'Three' },
+      { name: 'Four' }
+    ]
+  }
+end
+
+def create_group_payload(name)
+  {
+    name: name,
+    description: 'Debug group tournament',
+    public: true,
+    group_stage: true,
+    playoff_teams_amount: 8,
+    teams: 4.times.flat_map do |group_index|
+      4.times.map do |seed_index|
+        { name: "#{name}-G#{group_index + 1}-S#{seed_index + 1}", group: group_index }
+      end
+    end
+  }
+end
+
+def inspect_seed(base_url)
+  client = TurniereE2E::ApiClient.new(base_url: base_url)
+  login = client.login!(email: ENV.fetch('TURNIERE_E2E_EMAIL'), password: ENV.fetch('TURNIERE_E2E_PASSWORD'))
+  puts({ base_url: base_url, login_status: login[:status], authenticated: client.authenticated? }.inspect)
+
+  [
+    ['playoff-1', create_playoff_payload('Debug Playoff 1')],
+    ['group-1', create_group_payload('Debug Group 1')],
+    ['playoff-2', create_playoff_payload('Debug Playoff 2')],
+    ['group-2', create_group_payload('Debug Group 2')]
+  ].each do |label, payload|
+    response = client.post('/tournaments', body: payload)
+    puts({
+      base_url: base_url,
+      step: label,
+      status: response[:status],
+      json: response[:json],
+      headers: response[:headers].slice('access-token', 'client', 'uid', 'expiry', 'token-type', 'authorization'),
+      authenticated: client.authenticated?
+    }.inspect)
+  end
+end
+
+inspect_seed(ENV.fetch('TURNIERE_SOURCE_E2E_BASE_URL'))
+inspect_seed(ENV.fetch('TURNIERE_FOLLOWER_E2E_BASE_URL'))
+"""
+    command = [
+        "run",
+        "--rm",
+        "e2e",
+        "ruby",
+        "-e",
+        script,
+    ]
+    print(_format_command(_docker_compose_cmd(project_name=BLACKBOX_FOLLOW_PROJECT, compose_file=BLACKBOX_FOLLOW_COMPOSE_FILE) + command))
+    result = _compose_run(
+        command,
+        env=env,
+        capture_output=True,
+        check=False,
+        project_name=BLACKBOX_FOLLOW_PROJECT,
+        compose_file=BLACKBOX_FOLLOW_COMPOSE_FILE,
+    )
+    if result.stdout:
+        print(result.stdout.rstrip())
+    if result.stderr:
+        print(result.stderr.rstrip())
+
+    if result.returncode != 0:
+        raise subprocess.CalledProcessError(
+            result.returncode,
+            result.args,
+            output=result.stdout,
+            stderr=result.stderr,
+        )
+
+
+@task(name="docker-blackbox-follow-debug-group-create")
+def docker_blackbox_follow_debug_group_create(
+    c,
+    source_host_port=BLACKBOX_SOURCE_HOST_PORT,
+    follower_host_port=BLACKBOX_FOLLOWER_HOST_PORT,
+    app_image=PRODUCTION_TAG,
+    runner_image=TEST_TAG,
+    postgres_image=BLACKBOX_POSTGRES_IMAGE,
+):
+    """Debug single fresh-login group-stage tournament creation inside local follower blackbox runner."""
+    env = _follow_compose_env(
+        source_host_port=source_host_port,
+        follower_host_port=follower_host_port,
+        app_image=app_image,
+        runner_image=runner_image,
+        postgres_image=postgres_image,
+    )
+
+    script = """
+require_relative 'e2e/lib/api_client'
+
+def create_group_payload(name)
+  {
+    name: name,
+    description: 'Debug group tournament',
+    public: true,
+    group_stage: true,
+    playoff_teams_amount: 8,
+    teams: 4.times.flat_map do |group_index|
+      4.times.map do |seed_index|
+        { name: "#{name}-G#{group_index + 1}-S#{seed_index + 1}", group: group_index }
+      end
+    end
+  }
+end
+
+def inspect_group_create(base_url)
+  client = TurniereE2E::ApiClient.new(base_url: base_url)
+  login = client.login!(email: ENV.fetch('TURNIERE_E2E_EMAIL'), password: ENV.fetch('TURNIERE_E2E_PASSWORD'))
+  puts({ base_url: base_url, login_status: login[:status], authenticated: client.authenticated? }.inspect)
+  response = client.post('/tournaments', body: create_group_payload('Fresh Debug Group'))
+  puts({ base_url: base_url, create_status: response[:status], create_json: response[:json], create_headers: response[:headers].slice('access-token', 'client', 'uid', 'expiry', 'token-type', 'authorization') }.inspect)
+end
+
+inspect_group_create(ENV.fetch('TURNIERE_SOURCE_E2E_BASE_URL'))
+inspect_group_create(ENV.fetch('TURNIERE_FOLLOWER_E2E_BASE_URL'))
+"""
+    command = [
+        "run",
+        "--rm",
+        "e2e",
+        "ruby",
+        "-e",
+        script,
+    ]
+    print(_format_command(_docker_compose_cmd(project_name=BLACKBOX_FOLLOW_PROJECT, compose_file=BLACKBOX_FOLLOW_COMPOSE_FILE) + command))
+    result = _compose_run(
+        command,
+        env=env,
+        capture_output=True,
+        check=False,
+        project_name=BLACKBOX_FOLLOW_PROJECT,
+        compose_file=BLACKBOX_FOLLOW_COMPOSE_FILE,
+    )
+    if result.stdout:
+        print(result.stdout.rstrip())
+    if result.stderr:
+        print(result.stderr.rstrip())
+
+    if result.returncode != 0:
+        raise subprocess.CalledProcessError(
+            result.returncode,
+            result.args,
+            output=result.stdout,
+            stderr=result.stderr,
+        )
+
+
 @task(name="docker-blackbox-follow-run")
 def docker_blackbox_follow_run(
     c,
