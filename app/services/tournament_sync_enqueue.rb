@@ -12,7 +12,7 @@ class TournamentSyncEnqueue
   def call
     return false unless tournament.sync_push_enabled?
 
-    payload = TournamentSnapshotBuilder.build(tournament)
+    payload = TournamentSnapshotBuilder.build(fresh_tournament)
     entry = TournamentSyncQueueEntry.find_or_initialize_by(tournament: tournament)
     entry.snapshot_json = JSON.dump(payload)
     entry.status = 'pending'
@@ -28,4 +28,8 @@ class TournamentSyncEnqueue
   private
 
   attr_reader :tournament
+
+  def fresh_tournament
+    Tournament.find(tournament.id)
+  end
 end
