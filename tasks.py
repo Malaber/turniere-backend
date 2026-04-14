@@ -1265,6 +1265,71 @@ inspect_group_create(ENV.fetch('TURNIERE_FOLLOWER_E2E_BASE_URL'))
         )
 
 
+@task(name="docker-blackbox-follow-debug-sync")
+def docker_blackbox_follow_debug_sync(
+    c,
+    source_host_port=BLACKBOX_SOURCE_HOST_PORT,
+    follower_host_port=BLACKBOX_FOLLOWER_HOST_PORT,
+    app_image=PRODUCTION_TAG,
+    runner_image=TEST_TAG,
+    postgres_image=BLACKBOX_POSTGRES_IMAGE,
+    log_tail=120,
+):
+    """Print local follower blackbox sync queue state and recent app logs."""
+    env = _follow_compose_env(
+        source_host_port=source_host_port,
+        follower_host_port=follower_host_port,
+        app_image=app_image,
+        runner_image=runner_image,
+        postgres_image=postgres_image,
+    )
+
+    script = """
+puts '== Source tournaments =='
+Tournament.order(:id).pluck(:id, :name, :read_only_mode, :sync_target_url, :sync_last_pushed_at, :sync_last_push_error).each { |row| p row }
+puts '== Source sync queue =='
+TournamentSyncQueueEntry.order(:id).pluck(:id, :tournament_id, :status, :attempts, :last_error, :next_attempt_at, :last_attempt_at).each { |row| p row }
+puts '== Follower tournaments =='
+Tournament.order(:id).pluck(:id, :name, :read_only_mode, :sync_target_url, :sync_last_pushed_at, :sync_last_push_error).each { |row| p row }
+"""
+
+    for service, db_host in (("source-app", "source-postgres"), ("follower-app", "follower-postgres")):
+        _print_header(f"Sync state from {service}")
+        db_name = BLACKBOX_SOURCE_DB_NAME if service == "source-app" else BLACKBOX_FOLLOWER_DB_NAME
+        service_env = _production_env_for(db_host, db_name)
+        runner = _compose_run(
+            ["run", "--rm", "-e", f"POSTGRES_URL={service_env['POSTGRES_URL']}", "-e", f"POSTGRES_USERNAME={service_env['POSTGRES_USERNAME']}", "-e", f"POSTGRES_PASSWORD={service_env['POSTGRES_PASSWORD']}", "-e", f"SECRET_KEY_BASE={service_env['SECRET_KEY_BASE']}", "-e", f"MAILGUN_API_KEY={service_env['MAILGUN_API_KEY']}", "-e", f"MAILGUN_DOMAIN={service_env['MAILGUN_DOMAIN']}", "-e", f"RAILS_LOG_TO_STDOUT={service_env['RAILS_LOG_TO_STDOUT']}", "-e", f"RAILS_SERVE_STATIC_FILES={service_env['RAILS_SERVE_STATIC_FILES']}", "-e", "RAILS_ENV=production", "e2e", "bundle", "exec", "rails", "runner", script],
+            env=env,
+            capture_output=True,
+            check=False,
+            project_name=BLACKBOX_FOLLOW_PROJECT,
+            compose_file=BLACKBOX_FOLLOW_COMPOSE_FILE,
+        )
+        if runner.stdout:
+            print(runner.stdout.rstrip())
+        if runner.stderr:
+            print(runner.stderr.rstrip())
+        if runner.returncode != 0:
+            raise subprocess.CalledProcessError(
+                runner.returncode,
+                runner.args,
+                output=runner.stdout,
+                stderr=runner.stderr,
+            )
+
+        _print_header(f"Recent logs from {service}")
+        logs = _compose_run(
+            ["logs", "--tail", str(log_tail), service],
+            env=env,
+            capture_output=True,
+            check=False,
+            project_name=BLACKBOX_FOLLOW_PROJECT,
+            compose_file=BLACKBOX_FOLLOW_COMPOSE_FILE,
+        )
+        output = logs.stdout or logs.stderr or "<no logs>"
+        print(output.rstrip())
+
+
 @task(name="docker-blackbox-follow-run")
 def docker_blackbox_follow_run(
     c,
