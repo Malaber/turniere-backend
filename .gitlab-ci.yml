@@ -12,6 +12,8 @@ include:
 
 rails spec:
   stage: test
+  tags:
+    - docker
   image: $CI_REGISTRY_IMAGE/test/commits:$CI_COMMIT_SHA
   rules:
     - if: $SKIP_TEST
@@ -30,6 +32,8 @@ rails spec:
 
 rails e2e spec:
   stage: test
+  tags:
+    - docker
   image: $CI_REGISTRY_IMAGE/test/commits:$CI_COMMIT_SHA
   services:
     - name: postgres:16
