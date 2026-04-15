@@ -13,10 +13,6 @@ include:
 rails spec:
   stage: test
   image: $CI_REGISTRY_IMAGE/test/commits:$CI_COMMIT_SHA
-  parallel:
-    matrix:
-      - RSPEC_NODE_INDEX: ["1", "2", "3", "4", "5", "6", "7", "8"]
-        RSPEC_NODE_TOTAL: "8"
   rules:
     - if: $SKIP_TEST
       when: never
@@ -30,11 +26,7 @@ rails spec:
   script:
     - cd /app
     - inv db-migrate
-    - inv test-shard --node-index=$RSPEC_NODE_INDEX --node-total=$RSPEC_NODE_TOTAL
-  artifacts:
-    paths:
-      - specs_with_runtime.txt
-    expire_in: 30 days
+    - inv test
 
 rails e2e spec:
   stage: test
