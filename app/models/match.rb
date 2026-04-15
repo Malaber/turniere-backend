@@ -41,6 +41,7 @@ class Match < ApplicationRecord
 
   def scored_points_of(team)
     return 0 if decider?
+    return 0 unless (finished? || in_progress?) && teams.include?(team)
 
     match_score = match_score_for(team)
     match_score ? match_score.points : 0
@@ -48,6 +49,7 @@ class Match < ApplicationRecord
 
   def received_points_of(team)
     return 0 if decider?
+    return 0 unless (finished? || in_progress?) && teams.include?(team)
 
     opponent_match_score = opponent_match_score_for(team)
     opponent_match_score ? opponent_match_score.points : 0
