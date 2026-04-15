@@ -63,6 +63,11 @@ FactoryBot.define do
 
       factory :finished_group_match do
         state { :finished }
+        after(:create) do |match|
+          match.match_scores.order(:id).each_with_index do |match_score, index|
+            match_score.update!(points: index.zero? ? 1 : 0)
+          end
+        end
       end
     end
 

@@ -131,11 +131,37 @@ def _run_subprocess(command, env=None, capture_output=False, check=True):
     return completed
 
 
+def _stream_subprocess(command, env=None, check=True):
+    process = subprocess.Popen(
+        command,
+        env=env,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        bufsize=1,
+    )
+
+    output_chunks = []
+    assert process.stdout is not None
+    for line in process.stdout:
+        print(line, end="")
+        output_chunks.append(line)
+
+    process.wait()
+    output = "".join(output_chunks)
+
+    if check and process.returncode != 0:
+        raise subprocess.CalledProcessError(process.returncode, command, output=output, stderr=None)
+
+    return subprocess.CompletedProcess(command, process.returncode, stdout=output, stderr="")
+
+
 def _compose_env(
     host_port=SERVER_PORT,
     app_image=PRODUCTION_TAG,
     runner_image=TEST_TAG,
     postgres_image=BLACKBOX_POSTGRES_IMAGE,
+    expect_profiling="true",
 ):
     return _env(
         TURNIERE_BLACKBOX_HOST_PORT=host_port,
@@ -149,6 +175,7 @@ def _compose_env(
         TURNIERE_BLACKBOX_MAILGUN_API_KEY=BLACKBOX_MAILGUN_API_KEY,
         TURNIERE_BLACKBOX_MAILGUN_DOMAIN=BLACKBOX_MAILGUN_DOMAIN,
         TURNIERE_E2E_BASE_URL=BLACKBOX_INTERNAL_BASE_URL,
+        TURNIERE_E2E_EXPECT_PROFILING=expect_profiling,
         TURNIERE_E2E_EMAIL=E2E_EMAIL,
         TURNIERE_E2E_PASSWORD=E2E_PASSWORD,
         TURNIERE_E2E_USERNAME=E2E_USERNAME,
@@ -160,6 +187,15 @@ def _compose_env(
 
 def _format_command(command):
     return " ".join(shlex.quote(part) for part in command)
+
+
+def _rspec_command(*paths):
+    command = ["bundle", "exec", "rspec", *paths]
+    if os.environ.get("CI"):
+        command.extend(["--format", "documentation", "--no-color"])
+    else:
+        command.extend(["--format", "progress", "--tty"])
+    return command
 
 
 def _compose_run(compose_args, env, capture_output=False, check=True):
@@ -273,6 +309,7 @@ def _run_blackbox_rspec(base_url, email, password, username, alt_email=E2E_ALT_E
                         alt_username=E2E_ALT_USERNAME):
     env = _env(
         TURNIERE_E2E_BASE_URL=base_url,
+        TURNIERE_E2E_EXPECT_PROFILING="false",
         TURNIERE_E2E_EMAIL=email,
         TURNIERE_E2E_PASSWORD=password,
         TURNIERE_E2E_USERNAME=username,
@@ -280,13 +317,9 @@ def _run_blackbox_rspec(base_url, email, password, username, alt_email=E2E_ALT_E
         TURNIERE_E2E_ALT_PASSWORD=alt_password,
         TURNIERE_E2E_ALT_USERNAME=alt_username,
     )
-    command = ["bundle", "exec", "rspec", "spec/e2e/http", "--format", "documentation"]
+    command = _rspec_command("spec/e2e/http")
     print(_format_command(command))
-    result = _run_subprocess(command, env=env, capture_output=True, check=False)
-    if result.stdout:
-        print(result.stdout.rstrip())
-    if result.stderr:
-        print(result.stderr.rstrip())
+    result = _stream_subprocess(command, env=env, check=False)
 
     report = _parse_rspec_report(f"{result.stdout}\n{result.stderr}")
     _print_header("Blackbox report")
@@ -416,7 +449,7 @@ def start_test_local(
 @task
 def test(c):
     """Run the normal RSpec suite."""
-    c.run(_bundle_exec("rspec"), pty=True)
+    _stream_subprocess(_rspec_command(), env=_env())
 
 
 @task(name="test-shard")
@@ -448,9 +481,9 @@ def test_shard(c, node_index=1, node_total=8, dry_run=False):
     if not files:
         return
 
-    c.run(
-        _bundle_exec("rspec") + " --require ./spec/rails_helper " + " ".join(shlex.quote(path) for path in files),
-        pty=True,
+    _stream_subprocess(
+        _rspec_command("--require", "./spec/rails_helper", *files),
+        env=_env(),
     )
 
 
@@ -635,6 +668,35 @@ def scenario_playoff(
     )
 
 
+@task(name="scenario-render-profile")
+def scenario_render_profile(
+    c,
+    group_count=8,
+    teams_per_group=4,
+    playoff_teams_amount=8,
+    base_url=TEST_BASE_URL,
+    email=E2E_EMAIL,
+    password=E2E_PASSWORD,
+    username=E2E_USERNAME,
+    stop_at="profiled_show",
+):
+    """Materialize a group-stage tournament over HTTP and print tournament show profiling."""
+    c.run(
+        "ruby script/e2e_scenarios.rb group_stage_render_profile "
+        f"--group-count {group_count} "
+        f"--teams-per-group {teams_per_group} "
+        f"--playoff-teams-amount {playoff_teams_amount} "
+        f"--stop-at {stop_at}",
+        env=_env(
+            TURNIERE_E2E_BASE_URL=base_url,
+            TURNIERE_E2E_EMAIL=email,
+            TURNIERE_E2E_PASSWORD=password,
+            TURNIERE_E2E_USERNAME=username,
+        ),
+        pty=True,
+    )
+
+
 @task(name="docker-build-production")
 def docker_build_production(c, tag=PRODUCTION_TAG):
     """Build the production Docker image."""
@@ -672,6 +734,7 @@ def docker_blackbox_up(
         app_image=app_image,
         runner_image=runner_image,
         postgres_image=postgres_image,
+        expect_profiling="false",
     )
 
     _print_header("Starting production blackbox stack")
@@ -738,6 +801,7 @@ def docker_blackbox_test(
         app_image=app_image,
         runner_image=runner_image,
         postgres_image=postgres_image,
+        expect_profiling="false",
     )
 
     _print_header("Running HTTP E2E against production image")
@@ -822,6 +886,7 @@ def blackbox_production(
         app_image=app_image,
         runner_image=runner_image,
         postgres_image=postgres_image,
+        expect_profiling="false",
     )
 
     exit_error = None

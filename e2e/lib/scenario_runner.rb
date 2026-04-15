@@ -3,6 +3,7 @@
 require_relative 'api_client'
 require 'securerandom'
 require 'time'
+require 'uri'
 
 module TurniereE2E
   class ScenarioRunner
@@ -146,6 +147,27 @@ module TurniereE2E
       result(session: session, tournament: tournament, checkpoints: checkpoints, stop_at: stop_at)
     end
 
+    def run_group_stage_render_profile(group_count:, teams_per_group:, playoff_teams_amount:, stop_at: :profiled_show)
+      session = register_session!
+      tournament = create_tournament!(
+        create_group_stage_payload(
+          group_count: group_count,
+          teams_per_group: teams_per_group,
+          playoff_teams_amount: playoff_teams_amount
+        )
+      )
+
+      checkpoints = {
+        created: summarize_tournament(tournament)
+      }
+      return result(session: session, tournament: tournament, checkpoints: checkpoints, stop_at: stop_at) if stop_at == :created
+
+      profiled_show = fetch_tournament_profile!(tournament.fetch(:id))
+      checkpoints[:profiled_show] = profiled_show
+
+      result(session: session, tournament: profiled_show.fetch(:tournament), checkpoints: checkpoints, stop_at: stop_at)
+    end
+
     def wait_for_healthcheck!(timeout_seconds: 30)
       started_at = Time.now
       loop do
@@ -190,15 +212,21 @@ module TurniereE2E
     end
 
     def fetch_tournament!(tournament_id)
-      response = client.get("/tournaments/#{tournament_id}")
+      response = get_response!("/tournaments/#{tournament_id}")
       expect_status!(response, 200, "fetch tournament #{tournament_id}")
       response.fetch(:json)
     end
 
     def get!(path, params: nil)
-      response = client.get(path, params: params)
+      response = get_response!(path, params: params)
       expect_status!(response, 200, "get #{path}")
       response.fetch(:json)
+    end
+
+    def get_response!(path, params: nil)
+      response = client.get(path, params: params)
+      expect_status!(response, 200, "get #{path}")
+      response
     end
 
     def patch!(path, body:)
@@ -469,6 +497,31 @@ module TurniereE2E
           }
         end
       }
+    end
+
+    def fetch_tournament_profile!(tournament_id)
+      started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      response = get_response!("/tournaments/#{tournament_id}", params: { profile: 'true' })
+      duration_ms = (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started_at) * 1000.0
+
+      {
+        tournament: response.fetch(:json),
+        request_duration_ms: duration_ms.round(1),
+        server_timing: response.fetch(:headers).fetch('server-timing', ''),
+        profile_summary: response.fetch(:headers).fetch('x-turniere-profile', ''),
+        sections: parse_server_timing(response.fetch(:headers).fetch('server-timing', ''))
+      }
+    end
+
+    def parse_server_timing(header)
+      return {} if header.nil? || header.empty?
+
+      header.split(',').each_with_object({}) do |entry, sections|
+        name, duration = entry.strip.match(/\A([^;]+);dur=([0-9.]+)\z/)&.captures
+        next if name.nil? || duration.nil?
+
+        sections[name] = duration.to_f
+      end
     end
 
     def result(session:, tournament:, checkpoints:, stop_at:)

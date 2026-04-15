@@ -6,6 +6,7 @@ RUN apt-get update -qq && apt-get install -y python3 python3-pip && apt-get clea
 RUN bundle config set with 'development test' && bundle install
 COPY tasks.py /app/tasks.py
 COPY e2e /app/e2e
+COPY lib /app/lib
 COPY spec /app/spec
 COPY .rspec /app/.rspec
 ENV RAILS_ENV test
