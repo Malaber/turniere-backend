@@ -110,7 +110,7 @@ RSpec.describe GroupStageService do
 
     context 'with only undecided matches' do
       before do
-        @group = create(:group, match_factory: :running_group_match)
+        @group = create(:group, match_count: 1, match_factory: :running_group_match)
         @group.matches.each do |match|
           match.match_scores.each do |ms|
             ms.points = 42
@@ -143,7 +143,7 @@ RSpec.describe GroupStageService do
 
     context 'with only decided matches' do
       before do
-        @group = create(:group, match_factory: :running_group_match)
+        @group = create(:group, match_count: 1, match_factory: :running_group_match)
         @group.matches.each_with_index do |match, i|
           match.match_scores.each_with_index do |ms, j|
             match_score_number = i + j
