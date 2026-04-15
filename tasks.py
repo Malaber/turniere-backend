@@ -136,6 +136,7 @@ def _compose_env(
     app_image=PRODUCTION_TAG,
     runner_image=TEST_TAG,
     postgres_image=BLACKBOX_POSTGRES_IMAGE,
+    expect_profiling="true",
 ):
     return _env(
         TURNIERE_BLACKBOX_HOST_PORT=host_port,
@@ -149,6 +150,7 @@ def _compose_env(
         TURNIERE_BLACKBOX_MAILGUN_API_KEY=BLACKBOX_MAILGUN_API_KEY,
         TURNIERE_BLACKBOX_MAILGUN_DOMAIN=BLACKBOX_MAILGUN_DOMAIN,
         TURNIERE_E2E_BASE_URL=BLACKBOX_INTERNAL_BASE_URL,
+        TURNIERE_E2E_EXPECT_PROFILING=expect_profiling,
         TURNIERE_E2E_EMAIL=E2E_EMAIL,
         TURNIERE_E2E_PASSWORD=E2E_PASSWORD,
         TURNIERE_E2E_USERNAME=E2E_USERNAME,
@@ -273,6 +275,7 @@ def _run_blackbox_rspec(base_url, email, password, username, alt_email=E2E_ALT_E
                         alt_username=E2E_ALT_USERNAME):
     env = _env(
         TURNIERE_E2E_BASE_URL=base_url,
+        TURNIERE_E2E_EXPECT_PROFILING="false",
         TURNIERE_E2E_EMAIL=email,
         TURNIERE_E2E_PASSWORD=password,
         TURNIERE_E2E_USERNAME=username,
@@ -701,6 +704,7 @@ def docker_blackbox_up(
         app_image=app_image,
         runner_image=runner_image,
         postgres_image=postgres_image,
+        expect_profiling="false",
     )
 
     _print_header("Starting production blackbox stack")
@@ -767,6 +771,7 @@ def docker_blackbox_test(
         app_image=app_image,
         runner_image=runner_image,
         postgres_image=postgres_image,
+        expect_profiling="false",
     )
 
     _print_header("Running HTTP E2E against production image")
@@ -851,6 +856,7 @@ def blackbox_production(
         app_image=app_image,
         runner_image=runner_image,
         postgres_image=postgres_image,
+        expect_profiling="false",
     )
 
     exit_error = None

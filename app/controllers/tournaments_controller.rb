@@ -1,6 +1,16 @@
 # frozen_string_literal: true
 
 class TournamentsController < ApplicationController
+  class NoOpRequestProfiling
+    def measure(_name)
+      yield
+    end
+
+    def apply_to(_response, label:)
+      label
+    end
+  end
+
   before_action :set_tournament_for_show, only: %i[show]
   before_action :set_tournament, only: %i[update destroy set_timer_end timer_end]
   before_action :authenticate_user!, only: %i[create update destroy set_timer_end]
@@ -143,7 +153,7 @@ class TournamentsController < ApplicationController
   end
 
   def set_tournament_for_show
-    profiling = RequestProfiling.new(enabled: profiling_requested?)
+    profiling = build_request_profiling
     @tournament = profiling.measure('load_tournament') do
       Tournament.includes(
         :user,
@@ -170,6 +180,13 @@ class TournamentsController < ApplicationController
 
   def profiling_requested?
     !Rails.env.production? && show_params.fetch(:profile, 'false') == 'true'
+  end
+
+  def build_request_profiling
+    return NoOpRequestProfiling.new unless profiling_requested?
+
+    require Rails.root.join('lib/local/request_profiling')
+    Local::RequestProfiling.new(enabled: true)
   end
 
   def tournament_params

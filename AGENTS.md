@@ -112,6 +112,30 @@ Instead, add or update an `inv` task and then have CI or docs call that task.
 If a new backend capability introduces a meaningful setup, verification, fixture,
 or scenario workflow, add or extend a task for it as part of the same change.
 
+## Local-Only Helper Code
+
+If helper code exists only for local development, local profiling, or test/E2E support,
+prefer placing it in a path that the production Docker image does not copy.
+
+Current production image copies:
+
+- `app`
+- `bin`
+- `config`
+- `db`
+- `public`
+- `script`
+- `config.ru`
+- `Rakefile`
+
+It does not copy `lib`, `spec`, `e2e`, or `tasks.py`.
+
+Practical rule:
+
+- production runtime code belongs in copied paths such as `app/`
+- local-only helpers should prefer `lib/`, `spec/`, `e2e/`, or task-layer code when feasible
+- if production must ignore a local-only feature, cover that with blackbox E2E against the production image
+
 ## HTTP E2E
 
 The backend HTTP E2E flow is intended to be reusable outside this repo, especially by frontend tests that need realistic backend state.
