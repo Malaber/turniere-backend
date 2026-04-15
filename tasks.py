@@ -419,7 +419,7 @@ def start_test_local(
 @task
 def test(c):
     """Run the normal RSpec suite."""
-    c.run(_bundle_exec("rspec"), pty=True)
+    c.run(_bundle_exec("rspec", "--format", "progress", "--tty"), pty=True)
 
 
 @task(name="test-shard")
@@ -452,7 +452,9 @@ def test_shard(c, node_index=1, node_total=8, dry_run=False):
         return
 
     c.run(
-        _bundle_exec("rspec") + " --require ./spec/rails_helper " + " ".join(shlex.quote(path) for path in files),
+        _bundle_exec("rspec", "--format", "progress", "--tty") +
+        " --require ./spec/rails_helper " +
+        " ".join(shlex.quote(path) for path in files),
         pty=True,
     )
 
