@@ -271,6 +271,7 @@ class GroupStageService
 
       sorted_group_scores = group_scores_for(group).sort
       advancing_slots = advancing_slots_for_group(group)
+      group_ready_for_decider_check = regular_group_matches_finished?(group)
 
       cache = sorted_group_scores.each_with_index.each_with_object({}) do |(group_score, index), decisions|
         next if sorted_group_scores.size <= 1
@@ -290,7 +291,8 @@ class GroupStageService
           hidden_points_result: comparison_reason[:hidden_points_result].to_s,
           decider_match_id: comparison_reason[:decider_match_id],
           tied: comparison_reason[:tied],
-          needs_decider_match: comparison_reason[:tied] &&
+          needs_decider_match: group_ready_for_decider_check &&
+            comparison_reason[:tied] &&
             unresolved_tie_crosses_advancing_cutoff?(sorted_group_scores, group_score, advancing_slots)
         }
       end
@@ -308,6 +310,17 @@ class GroupStageService
 
     def group_score_cache_key(group_score)
       group_score.id || group_score.object_id
+    end
+
+    def regular_group_matches_finished?(group)
+      matches = if group.association(:matches).loaded? && group.matches.any?
+                  group.matches
+                else
+                  group.matches.reload
+                end
+
+      regular_matches = matches.reject(&:decider?)
+      regular_matches.any? && regular_matches.all?(&:finished?)
     end
   end
 end

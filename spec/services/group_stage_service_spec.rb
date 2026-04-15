@@ -300,6 +300,37 @@ RSpec.describe GroupStageService do
       )
     end
 
+    it 'does not request a decider while regular matches in the group are still unfinished' do
+      tournament.update!(playoff_teams_amount: 1, instant_finalists_amount: 1, intermediate_round_participants_amount: 0)
+
+      create(:group_match, group: group, state: :in_progress).tap do |match|
+        create(:match_score, match: match, team: team_a, points: 2)
+        create(:match_score, match: match, team: team_b, points: 2)
+      end
+
+      score_a = create(:group_score, group: group, team: team_a, group_points: 1, scored_points: 2, received_points: 2)
+      score_b = create(:group_score, group: group, team: team_b, group_points: 1, scored_points: 2, received_points: 2)
+      score_c = create(:group_score, group: group, team: team_c, group_points: 0, scored_points: 0, received_points: 0)
+      score_d = create(:group_score, group: group, team: team_d, group_points: 0, scored_points: 0, received_points: 0)
+
+      GroupStageService.send(:recalculate_position_of_group_scores!, [score_a, score_b, score_c, score_d]).each(&:save!)
+
+      expect(GroupStageService.ranking_decision_for(score_a)).to include(
+        resolved_by: 'tie',
+        direct_comparison_result: 'draw',
+        hidden_points_result: 'not_played',
+        tied: true,
+        needs_decider_match: false
+      )
+      expect(GroupStageService.ranking_decision_for(score_b)).to include(
+        resolved_by: 'tie',
+        direct_comparison_result: 'draw',
+        hidden_points_result: 'not_played',
+        tied: true,
+        needs_decider_match: false
+      )
+    end
+
     it 'marks unresolved ties outside the advancing cutoff without requesting a decider' do
       tournament.update!(playoff_teams_amount: 2, instant_finalists_amount: 2, intermediate_round_participants_amount: 0)
 
