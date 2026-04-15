@@ -89,6 +89,14 @@ RSpec.describe GroupStageService do
         expect(match.teams.first).to_not eq(match.teams.second)
       end
     end
+
+    it 'also generates matches for group sizes other than four' do
+      teams = create_list(:team, 6)
+
+      matches = GroupStageService.generate_all_matches_between(teams)
+
+      expect(matches.size).to eq(15)
+    end
   end
 
   describe '#update_group_scores' do

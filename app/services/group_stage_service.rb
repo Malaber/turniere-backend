@@ -43,7 +43,7 @@ class GroupStageService
       #
       # This problem is only fixed for a group size of 4, because we did not come up with a generalized version of this
       # switcharoo magic and we needed it for groups of 4.
-      return unless team_size == 4
+      return matches unless team_size == 4
 
       matches[5].position, matches[1].position = matches[1].position, matches[5].position
       matches
@@ -97,37 +97,15 @@ class GroupStageService
     end
 
     def ranking_decision_for(group_score)
-      sorted_group_scores = group_score.group.group_scores.reload.sort
-      index = sorted_group_scores.index(group_score)
-      return nil if index.nil? || sorted_group_scores.size <= 1
-
-      comparison_index = comparison_partner_index(sorted_group_scores, index)
-      return nil if comparison_index.nil?
-
-      compared_group_score = sorted_group_scores[comparison_index]
-      comparison_reason = group_score.comparison_reason_against(compared_group_score)
-
-      {
-        resolved_by: comparison_reason[:resolved_by].to_s,
-        compared_with_team_id: compared_group_score.team.id,
-        compared_with_team_name: compared_group_score.team.name,
-        direct_comparison_result: comparison_reason[:direct_comparison_result].to_s,
-        direct_comparison_match_id: comparison_reason[:direct_comparison_match_id],
-        hidden_points_result: comparison_reason[:hidden_points_result].to_s,
-        decider_match_id: comparison_reason[:decider_match_id],
-        tied: comparison_reason[:tied],
-        needs_decider_match: comparison_reason[:tied] &&
-          unresolved_tie_crosses_advancing_cutoff?(sorted_group_scores, group_score, advancing_slots_for_group(group_score.group))
-      }
+      ranking_decisions_for_group(group_score.group)[group_score_cache_key(group_score)]
     end
 
     def blocking_ties_for(group_stage)
       return [] if group_stage.nil?
 
       group_stage.groups.flat_map do |group|
-        sorted_scores = group.group_scores.reload.sort
-        sorted_scores.filter_map do |group_score|
-          decision = ranking_decision_for(group_score)
+        ranking_decisions_for_group(group).filter_map do |group_score_id, decision|
+          group_score = group_scores_for(group).find { |score| group_score_cache_key(score) == group_score_id }
           next unless decision&.fetch(:needs_decider_match, false)
 
           comparison_team_id = decision[:compared_with_team_id]
@@ -285,6 +263,51 @@ class GroupStageService
         extra_slot_groups = total_advancing_teams % groups.size
         base_slots + (group_index < extra_slot_groups ? 1 : 0)
       end
+    end
+
+    def ranking_decisions_for_group(group)
+      cache = group.instance_variable_get(:@ranking_decisions_cache)
+      return cache unless cache.nil?
+
+      sorted_group_scores = group_scores_for(group).sort
+      advancing_slots = advancing_slots_for_group(group)
+
+      cache = sorted_group_scores.each_with_index.each_with_object({}) do |(group_score, index), decisions|
+        next if sorted_group_scores.size <= 1
+
+        comparison_index = comparison_partner_index(sorted_group_scores, index)
+        next if comparison_index.nil?
+
+        compared_group_score = sorted_group_scores[comparison_index]
+        comparison_reason = group_score.comparison_reason_against(compared_group_score)
+
+        decisions[group_score_cache_key(group_score)] = {
+          resolved_by: comparison_reason[:resolved_by].to_s,
+          compared_with_team_id: compared_group_score.team.id,
+          compared_with_team_name: compared_group_score.team.name,
+          direct_comparison_result: comparison_reason[:direct_comparison_result].to_s,
+          direct_comparison_match_id: comparison_reason[:direct_comparison_match_id],
+          hidden_points_result: comparison_reason[:hidden_points_result].to_s,
+          decider_match_id: comparison_reason[:decider_match_id],
+          tied: comparison_reason[:tied],
+          needs_decider_match: comparison_reason[:tied] &&
+            unresolved_tie_crosses_advancing_cutoff?(sorted_group_scores, group_score, advancing_slots)
+        }
+      end
+
+      group.instance_variable_set(:@ranking_decisions_cache, cache)
+    end
+
+    def group_scores_for(group)
+      if group.association(:group_scores).loaded? && group.group_scores.any?
+        group.group_scores
+      else
+        group.group_scores.includes(:team).reload
+      end
+    end
+
+    def group_score_cache_key(group_score)
+      group_score.id || group_score.object_id
     end
   end
 end
