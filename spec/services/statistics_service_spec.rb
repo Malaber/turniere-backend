@@ -5,6 +5,7 @@ RSpec.describe StatisticsService do
     # build tournament with predictable test data
     tournament = create(:tournament)
     group_stage = create(:group_stage)
+    @group_stage = group_stage
     group = group_stage.groups.first
     @most_dominant_score = create(:group_score,
                                   group_points: 100,
@@ -48,7 +49,7 @@ RSpec.describe StatisticsService do
 
   describe '#group_scores' do
     it 'returns an array containing all group scores' do
-      expect(@service.group_scores.length).to eq(GroupScore.count)
+      expect(@service.group_scores.length).to eq(@group_stage.groups.sum { |group| group.group_scores.size })
     end
   end
 end

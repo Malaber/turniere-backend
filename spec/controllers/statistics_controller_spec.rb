@@ -35,7 +35,8 @@ RSpec.describe StatisticsController, type: :controller do
 
       it 'returns a list containing all group scores' do
         get :index, params: { tournament_id: @tournament.to_param }
-        expect(deserialize_response(response)[:group_scores].length).to eq(GroupScore.count)
+        expected_count = @group_stage.groups.sum { |group| group.group_scores.size }
+        expect(deserialize_response(response)[:group_scores].length).to eq(expected_count)
       end
 
       it 'returns a most dominant group score' do

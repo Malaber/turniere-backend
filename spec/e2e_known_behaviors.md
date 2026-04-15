@@ -32,3 +32,13 @@ Observed and covered by `spec/e2e/http/tournament_lifecycle_spec.rb` and `script
   - `1` regular match
 
 This can look surprising if `playoff_teams_amount = 4` is read as "exactly four teams leave the group stage". The current backend instead models "four playoff slots after the intermediate round", which is the behavior the new E2E tests lock in.
+
+## Large tournament render profiling
+
+Observed and covered by `spec/e2e/http/tournament_rendering_spec.rb` and `script/e2e_scenarios.rb`:
+
+- large group-stage tournaments are created through the same authenticated HTTP `POST /tournaments` flow as normal clients
+- tournament show profiling is requested via `GET /tournaments/:id?profile=true`
+- profiling is intentionally non-production-only; local/test flows may use it, production should ignore it
+- local/test runs return `Server-Timing` and `X-Turniere-Profile` headers with `load_tournament` and `serialize_tournament`
+- current locked shapes are `8x4`, `64x6`, and `4x32`

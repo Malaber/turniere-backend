@@ -3,6 +3,35 @@
 require 'rails_helper'
 
 RSpec.describe StagesController, type: :controller do
+  def create_finished_resolved_group_stage(group_count: 4, teams_per_group: 2)
+    tournament = create(
+      :tournament,
+      teams_count: group_count * teams_per_group,
+      playoff_teams_amount: group_count,
+      instant_finalists_amount: group_count,
+      intermediate_round_participants_amount: 0
+    )
+    groups = tournament.teams.each_slice(teams_per_group).to_a
+    stage = GroupStageService.generate_group_stage(groups)
+    tournament.stages << stage
+    tournament.save!
+
+    stage.groups.each do |group|
+      group.matches.each do |match|
+        match.state = :finished
+        match.match_scores.each_with_index do |match_score, index|
+          match_score.points = index.zero? ? 1 : 0
+          match_score.save!
+        end
+        match.save!
+      end
+
+      UpdateGroupsGroupScoresAndSave.call(group: group)
+    end
+
+    stage.reload
+  end
+
   let(:stage) do
     create(:playoff_stage)
   end
@@ -29,7 +58,7 @@ RSpec.describe StagesController, type: :controller do
 
     context 'group_stage with matches that are done' do
       let(:running_group_stage) do
-        create(:group_stage, match_factory: :finished_group_match)
+        create_finished_resolved_group_stage
       end
 
       it 'doesn\'t have any other stages besides it before update' do
@@ -98,7 +127,7 @@ RSpec.describe StagesController, type: :controller do
 
     context 'already finished group stage' do
       let(:finished_group_stage) do
-        group_stage = create(:group_stage, match_factory: :finished_group_match)
+        group_stage = create_finished_resolved_group_stage
         group_stage.finished!
         group_stage.save!
         group_stage

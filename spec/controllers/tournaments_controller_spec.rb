@@ -118,6 +118,26 @@ RSpec.describe TournamentsController, type: :controller do
         expect(body[:teams]).to be_nil
       end
     end
+
+    context 'with profile=true parameter' do
+      it 'adds profiling headers outside production' do
+        get :show, params: { id: @tournament.to_param, profile: 'true' }
+
+        expect(response.headers['Server-Timing']).to include('load_tournament')
+        expect(response.headers['Server-Timing']).to include('serialize_tournament')
+        expect(response.headers['X-Turniere-Profile']).to include('tournament.show')
+      end
+
+      it 'ignores profiling in production' do
+        allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new('production'))
+
+        get :show, params: { id: @tournament.to_param, profile: 'true' }
+
+        expect(response.headers['Server-Timing']).to be_nil
+        expect(response.headers['X-Turniere-Profile']).to be_nil
+      end
+    end
+
     context 'on a group stage tournament' do
       before do
         @group_stage_tournament = create(:group_stage_tournament)

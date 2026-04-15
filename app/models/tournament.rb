@@ -32,7 +32,7 @@ class Tournament < ApplicationRecord
 
   def group_stage
     # get the stage with level -1 (group stage)
-    stages.find_by(level: -1)
+    stages.find { |stage| stage.level == -1 }
   end
 
   def sync_push_enabled?

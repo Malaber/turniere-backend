@@ -78,9 +78,9 @@ RSpec.describe GroupScore, type: :model do
 
     it 'reports the direct comparison result when head-to-head resolves the tie' do
       group_score_b.update!(group_points: 6)
-      create(:group_match, group: group, state: :finished).tap do |match|
-        create(:match_score, match: match, team: team_a, points: 3)
-        create(:match_score, match: match, team: team_b, points: 1)
+      match = create(:group_match, group: group, state: :finished).tap do |created_match|
+        create(:match_score, match: created_match, team: team_a, points: 3)
+        create(:match_score, match: created_match, team: team_b, points: 1)
       end
 
       expect(group_score_a.comparison_reason_against(group_score_b)).to eq(
@@ -88,16 +88,16 @@ RSpec.describe GroupScore, type: :model do
         tied: false,
         direct_comparison_result: :won,
         hidden_points_result: :not_played,
-        direct_comparison_match_id: group.matches.last.id,
+        direct_comparison_match_id: match.id,
         decider_match_id: nil
       )
     end
 
     it 'reports an unresolved tie when head-to-head was a draw' do
       group_score_b.update!(group_points: 6)
-      create(:group_match, group: group, state: :finished).tap do |match|
-        create(:match_score, match: match, team: team_a, points: 2)
-        create(:match_score, match: match, team: team_b, points: 2)
+      match = create(:group_match, group: group, state: :finished).tap do |created_match|
+        create(:match_score, match: created_match, team: team_a, points: 2)
+        create(:match_score, match: created_match, team: team_b, points: 2)
       end
 
       expect(group_score_a.comparison_reason_against(group_score_b)).to eq(
@@ -105,20 +105,20 @@ RSpec.describe GroupScore, type: :model do
         tied: true,
         direct_comparison_result: :draw,
         hidden_points_result: :not_played,
-        direct_comparison_match_id: group.matches.last.id,
+        direct_comparison_match_id: match.id,
         decider_match_id: nil
       )
     end
 
     it 'falls back to hidden points when direct comparison is still tied' do
       group_score_b.update!(group_points: 6)
-      create(:group_match, group: group, state: :finished).tap do |match|
-        create(:match_score, match: match, team: team_a, points: 2)
-        create(:match_score, match: match, team: team_b, points: 2)
+      direct_match = create(:group_match, group: group, state: :finished).tap do |created_match|
+        create(:match_score, match: created_match, team: team_a, points: 2)
+        create(:match_score, match: created_match, team: team_b, points: 2)
       end
-      create(:group_match, group: group, state: :finished, decider: true).tap do |match|
-        create(:match_score, match: match, team: team_a, hidden_points: 3)
-        create(:match_score, match: match, team: team_b, hidden_points: 1)
+      decider_match = create(:group_match, group: group, state: :finished, decider: true).tap do |created_match|
+        create(:match_score, match: created_match, team: team_a, hidden_points: 3)
+        create(:match_score, match: created_match, team: team_b, hidden_points: 1)
       end
 
       expect(group_score_a.comparison_reason_against(group_score_b)).to eq(
@@ -126,8 +126,8 @@ RSpec.describe GroupScore, type: :model do
         tied: false,
         direct_comparison_result: :draw,
         hidden_points_result: :won,
-        direct_comparison_match_id: group.matches.reject(&:decider?).last.id,
-        decider_match_id: group.matches.select(&:decider?).last.id
+        direct_comparison_match_id: direct_match.id,
+        decider_match_id: decider_match.id
       )
     end
   end
