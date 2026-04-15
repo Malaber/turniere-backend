@@ -143,7 +143,7 @@ class TournamentsController < ApplicationController
   end
 
   def set_tournament_for_show
-    profiling = RequestProfiling.new(enabled: show_params.fetch(:profile, 'false') == 'true')
+    profiling = RequestProfiling.new(enabled: profiling_requested?)
     @tournament = profiling.measure('load_tournament') do
       Tournament.includes(
         :user,
@@ -166,6 +166,10 @@ class TournamentsController < ApplicationController
 
   def show_params
     params.permit(:simple, :profile)
+  end
+
+  def profiling_requested?
+    !Rails.env.production? && show_params.fetch(:profile, 'false') == 'true'
   end
 
   def tournament_params

@@ -39,5 +39,6 @@ Observed and covered by `spec/e2e/http/tournament_rendering_spec.rb` and `script
 
 - large group-stage tournaments are created through the same authenticated HTTP `POST /tournaments` flow as normal clients
 - tournament show profiling is requested via `GET /tournaments/:id?profile=true`
+- profiling is intentionally non-production-only; local/test flows may use it, production should ignore it
 - the backend returns `Server-Timing` and `X-Turniere-Profile` headers with `load_tournament` and `serialize_tournament`
 - current locked shapes are `8x4`, `64x6`, and `4x32`
