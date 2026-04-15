@@ -282,6 +282,11 @@ class GroupStageService
         compared_group_score = sorted_group_scores[comparison_index]
         comparison_reason = group_score.comparison_reason_against(compared_group_score)
 
+        if comparison_reason[:tied] && !group_ready_for_decider_check
+          decisions[group_score_cache_key(group_score)] = nil
+          next
+        end
+
         decisions[group_score_cache_key(group_score)] = {
           resolved_by: comparison_reason[:resolved_by].to_s,
           compared_with_team_id: compared_group_score.team.id,

@@ -131,6 +131,31 @@ def _run_subprocess(command, env=None, capture_output=False, check=True):
     return completed
 
 
+def _stream_subprocess(command, env=None, check=True):
+    process = subprocess.Popen(
+        command,
+        env=env,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        bufsize=1,
+    )
+
+    output_chunks = []
+    assert process.stdout is not None
+    for line in process.stdout:
+        print(line, end="")
+        output_chunks.append(line)
+
+    process.wait()
+    output = "".join(output_chunks)
+
+    if check and process.returncode != 0:
+        raise subprocess.CalledProcessError(process.returncode, command, output=output, stderr=None)
+
+    return subprocess.CompletedProcess(command, process.returncode, stdout=output, stderr="")
+
+
 def _compose_env(
     host_port=SERVER_PORT,
     app_image=PRODUCTION_TAG,
@@ -162,6 +187,15 @@ def _compose_env(
 
 def _format_command(command):
     return " ".join(shlex.quote(part) for part in command)
+
+
+def _rspec_command(*paths):
+    command = ["bundle", "exec", "rspec", *paths]
+    if os.environ.get("CI"):
+        command.extend(["--format", "documentation", "--no-color"])
+    else:
+        command.extend(["--format", "progress", "--tty"])
+    return command
 
 
 def _compose_run(compose_args, env, capture_output=False, check=True):
@@ -283,13 +317,9 @@ def _run_blackbox_rspec(base_url, email, password, username, alt_email=E2E_ALT_E
         TURNIERE_E2E_ALT_PASSWORD=alt_password,
         TURNIERE_E2E_ALT_USERNAME=alt_username,
     )
-    command = ["bundle", "exec", "rspec", "spec/e2e/http", "--format", "documentation"]
+    command = _rspec_command("spec/e2e/http")
     print(_format_command(command))
-    result = _run_subprocess(command, env=env, capture_output=True, check=False)
-    if result.stdout:
-        print(result.stdout.rstrip())
-    if result.stderr:
-        print(result.stderr.rstrip())
+    result = _stream_subprocess(command, env=env, check=False)
 
     report = _parse_rspec_report(f"{result.stdout}\n{result.stderr}")
     _print_header("Blackbox report")
@@ -419,7 +449,7 @@ def start_test_local(
 @task
 def test(c):
     """Run the normal RSpec suite."""
-    c.run(_bundle_exec("rspec", "--format", "progress", "--tty"), pty=True)
+    _stream_subprocess(_rspec_command(), env=_env())
 
 
 @task(name="test-shard")
@@ -451,11 +481,9 @@ def test_shard(c, node_index=1, node_total=8, dry_run=False):
     if not files:
         return
 
-    c.run(
-        _bundle_exec("rspec", "--format", "progress", "--tty") +
-        " --require ./spec/rails_helper " +
-        " ".join(shlex.quote(path) for path in files),
-        pty=True,
+    _stream_subprocess(
+        _rspec_command("--require", "./spec/rails_helper", *files),
+        env=_env(),
     )
 
 
