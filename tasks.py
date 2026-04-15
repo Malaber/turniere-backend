@@ -635,6 +635,35 @@ def scenario_playoff(
     )
 
 
+@task(name="scenario-render-profile")
+def scenario_render_profile(
+    c,
+    group_count=8,
+    teams_per_group=4,
+    playoff_teams_amount=8,
+    base_url=TEST_BASE_URL,
+    email=E2E_EMAIL,
+    password=E2E_PASSWORD,
+    username=E2E_USERNAME,
+    stop_at="profiled_show",
+):
+    """Materialize a group-stage tournament over HTTP and print tournament show profiling."""
+    c.run(
+        "ruby script/e2e_scenarios.rb group_stage_render_profile "
+        f"--group-count {group_count} "
+        f"--teams-per-group {teams_per_group} "
+        f"--playoff-teams-amount {playoff_teams_amount} "
+        f"--stop-at {stop_at}",
+        env=_env(
+            TURNIERE_E2E_BASE_URL=base_url,
+            TURNIERE_E2E_EMAIL=email,
+            TURNIERE_E2E_PASSWORD=password,
+            TURNIERE_E2E_USERNAME=username,
+        ),
+        pty=True,
+    )
+
+
 @task(name="docker-build-production")
 def docker_build_production(c, tag=PRODUCTION_TAG):
     """Build the production Docker image."""

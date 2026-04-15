@@ -9,6 +9,9 @@ options = {
   base_url: ENV.fetch('TURNIERE_E2E_BASE_URL', 'http://127.0.0.1:3000'),
   stop_at: nil,
   team_count: 8,
+  group_count: 4,
+  teams_per_group: 4,
+  playoff_teams_amount: 8,
   email: ENV['TURNIERE_E2E_EMAIL'],
   password: ENV['TURNIERE_E2E_PASSWORD'],
   username: ENV['TURNIERE_E2E_USERNAME']
@@ -20,6 +23,11 @@ OptionParser.new do |parser|
   parser.on('--base-url URL', 'API base URL') { |value| options[:base_url] = value }
   parser.on('--stop-at CHECKPOINT', 'Stop scenario at a named checkpoint') { |value| options[:stop_at] = value.to_sym }
   parser.on('--team-count COUNT', Integer, 'Team count for playoff_only scenario') { |value| options[:team_count] = value }
+  parser.on('--group-count COUNT', Integer, 'Group count for group-stage scenarios') { |value| options[:group_count] = value }
+  parser.on('--teams-per-group COUNT', Integer, 'Teams per group for group-stage scenarios') { |value| options[:teams_per_group] = value }
+  parser.on('--playoff-teams-amount COUNT', Integer, 'Playoff teams amount for group-stage scenarios') do |value|
+    options[:playoff_teams_amount] = value
+  end
   parser.on('--email EMAIL', 'Confirmed E2E user email') { |value| options[:email] = value }
   parser.on('--password PASSWORD', 'Confirmed E2E user password') { |value| options[:password] = value }
   parser.on('--username USERNAME', 'Confirmed E2E user username') { |value| options[:username] = value }
@@ -40,6 +48,13 @@ result = case scenario
            runner.run_group_stage_intermediate_round(stop_at: options[:stop_at] || :final_finish_attempted)
          when 'playoff_only'
            runner.run_playoff_only(team_count: options[:team_count], stop_at: options[:stop_at] || :completed)
+         when 'group_stage_render_profile'
+           runner.run_group_stage_render_profile(
+             group_count: options[:group_count],
+             teams_per_group: options[:teams_per_group],
+             playoff_teams_amount: options[:playoff_teams_amount],
+             stop_at: options[:stop_at] || :profiled_show
+           )
          else
            abort("Unknown scenario #{scenario.inspect}")
          end
