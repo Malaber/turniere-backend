@@ -10,6 +10,8 @@ class Tournament < ApplicationRecord
 
   validates :name, presence: true
   validates :code, presence: true, uniqueness: true
+  validates :sync_target_url, format: URI::DEFAULT_PARSER.make_regexp(%w[http https]), allow_blank: true
+  validate :sync_configuration_is_complete
 
   validate :playoff_teams_amount_is_positive_power_of_two
 
@@ -17,6 +19,7 @@ class Tournament < ApplicationRecord
 
   after_initialize :generate_code
   after_create_commit :ensure_default_beamer!
+  before_validation :clear_follower_sync_token_when_disabling_read_only_mode
 
   def matches
     [stages.map(&:matches), stages.map { |s| s.groups.map(&:matches) }].flatten
@@ -32,6 +35,14 @@ class Tournament < ApplicationRecord
   def group_stage
     # get the stage with level -1 (group stage)
     stages.find { |stage| stage.level == -1 }
+  end
+
+  def sync_push_enabled?
+    sync_target_url.present? && sync_auth_token.present? && !read_only_mode?
+  end
+
+  def sync_accepts_push?
+    read_only_mode? && sync_auth_token.present?
   end
 
   private
@@ -52,9 +63,32 @@ class Tournament < ApplicationRecord
                'playoff_teams_amount needs to be a positive power of two')
   end
 
+  def sync_configuration_is_complete
+    return if sync_target_url.blank? && sync_auth_token.blank?
+    return if sync_target_url.present? && sync_auth_token.present?
+    return if read_only_mode? && sync_auth_token.present? && sync_target_url.blank?
+
+    errors.add(:base, 'sync_target_url and sync_auth_token must be configured together')
+  end
+
   def ensure_default_beamer!
     beamers.find_or_create_by!(name: Beamer::DEFAULT_NAME) do |beamer|
       beamer.display_state = 'matches_all'
     end
+  end
+
+  def sync_configuration_is_complete
+    return if sync_target_url.blank? && sync_auth_token.blank?
+    return if sync_target_url.present? && sync_auth_token.present?
+    return if read_only_mode? && sync_auth_token.present? && sync_target_url.blank?
+
+    errors.add(:base, 'sync_target_url and sync_auth_token must be configured together')
+  end
+
+  def clear_follower_sync_token_when_disabling_read_only_mode
+    return if read_only_mode?
+    return if sync_target_url.present?
+
+    self.sync_auth_token = nil
   end
 end

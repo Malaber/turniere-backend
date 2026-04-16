@@ -7,6 +7,8 @@ class MatchesController < ApplicationController
   before_action -> { require_owner! @match.owner }, only: %i[update]
   before_action -> { require_owner! @group.owner }, only: %i[create]
   before_action :set_tournament, only: %i[index]
+  before_action -> { require_writable_tournament!(@match.tournament) }, only: %i[update]
+  before_action -> { require_writable_tournament!(@group.tournament) }, only: %i[create]
 
   # GET/tournaments/1/matches
   def index
@@ -54,6 +56,7 @@ class MatchesController < ApplicationController
       render json: match.errors, status: :unprocessable_entity
     elsif match.save
       UpdateGroupsGroupScoresAndSave.call(group: @group)
+      push_sync_if_needed!(@group.tournament)
       render json: match, include: %w[match_scores.team group], status: :created
     else
       render json: match.errors, status: :unprocessable_entity
@@ -63,6 +66,7 @@ class MatchesController < ApplicationController
   # PATCH/PUT /matches/1
   def update
     new_state = match_params['state']
+    synced_tournament = nil
 
     Match.transaction do
       if @match.update(match_params)
@@ -75,11 +79,13 @@ class MatchesController < ApplicationController
         end
 
         render json: @match
+        synced_tournament = @match.tournament
       else
         render json: @match.errors, status: :unprocessable_entity
         raise ActiveRecord::Rollback
       end
     end
+    push_sync_if_needed!(synced_tournament) unless synced_tournament.nil?
   end
 
   private
@@ -155,5 +161,9 @@ class MatchesController < ApplicationController
         match.errors.add(:team_ids, 'must contain exactly two teams from this group')
       end
     end
+  end
+
+  def push_sync_if_needed!(tournament)
+    TournamentSyncEnqueue.call(tournament)
   end
 end

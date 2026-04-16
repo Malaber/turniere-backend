@@ -88,3 +88,90 @@ rails e2e spec:
   script:
     - cd /app
     - inv blackbox-service
+
+rails follow sync e2e spec:
+  stage: test
+  tags:
+    - docker
+  image: $CI_REGISTRY_IMAGE/test/commits:$CI_COMMIT_SHA
+  services:
+    - name: postgres:16
+      alias: source-postgres
+      variables:
+        POSTGRES_DB: turniere_source_blackbox
+        POSTGRES_USER: turniere
+        POSTGRES_PASSWORD: turniere
+    - name: postgres:16
+      alias: follower-postgres
+      variables:
+        POSTGRES_DB: turniere_follower_blackbox
+        POSTGRES_USER: turniere
+        POSTGRES_PASSWORD: turniere
+    - name: $CI_REGISTRY_IMAGE/production/commits:$CI_COMMIT_SHA
+      alias: source-app
+      variables:
+        POSTGRES_URL: postgres://turniere:turniere@source-postgres:5432/turniere_source_blackbox
+        POSTGRES_USERNAME: turniere
+        POSTGRES_PASSWORD: turniere
+        SECRET_KEY_BASE: turniere-blackbox-secret-key-base-please-change-in-real-prod
+        MAILGUN_API_KEY: blackbox-test-api-key
+        MAILGUN_DOMAIN: blackbox.example.com
+        TOURNAMENT_SYNC_HTTP_TIMEOUT_SECONDS: "3"
+        NO_PROXY: source-app,follower-app,source-postgres,follower-postgres,localhost,127.0.0.1
+        no_proxy: source-app,follower-app,source-postgres,follower-postgres,localhost,127.0.0.1
+        RAILS_LOG_TO_STDOUT: "1"
+        RAILS_SERVE_STATIC_FILES: "1"
+      command:
+        - bundle
+        - exec
+        - rails
+        - s
+        - -p
+        - "3000"
+        - -b
+        - 0.0.0.0
+    - name: $CI_REGISTRY_IMAGE/production/commits:$CI_COMMIT_SHA
+      alias: follower-app
+      variables:
+        POSTGRES_URL: postgres://turniere:turniere@follower-postgres:5432/turniere_follower_blackbox
+        POSTGRES_USERNAME: turniere
+        POSTGRES_PASSWORD: turniere
+        SECRET_KEY_BASE: turniere-blackbox-secret-key-base-please-change-in-real-prod
+        MAILGUN_API_KEY: blackbox-test-api-key
+        MAILGUN_DOMAIN: blackbox.example.com
+        TOURNAMENT_SYNC_HTTP_TIMEOUT_SECONDS: "3"
+        NO_PROXY: source-app,follower-app,source-postgres,follower-postgres,localhost,127.0.0.1
+        no_proxy: source-app,follower-app,source-postgres,follower-postgres,localhost,127.0.0.1
+        RAILS_LOG_TO_STDOUT: "1"
+        RAILS_SERVE_STATIC_FILES: "1"
+      command:
+        - bundle
+        - exec
+        - rails
+        - s
+        - -p
+        - "3000"
+        - -b
+        - 0.0.0.0
+  variables:
+    FF_NETWORK_PER_BUILD: "true"
+    NO_PROXY: source-app,follower-app,source-postgres,follower-postgres,localhost,127.0.0.1
+    no_proxy: source-app,follower-app,source-postgres,follower-postgres,localhost,127.0.0.1
+    TURNIERE_SOURCE_E2E_BASE_URL: http://source-app:3000
+    TURNIERE_FOLLOWER_E2E_BASE_URL: http://follower-app:3000
+    TURNIERE_E2E_EMAIL: e2e@example.com
+    TURNIERE_E2E_PASSWORD: password123
+    TURNIERE_E2E_USERNAME: e2e-user
+  rules:
+    - if: $SKIP_TEST
+      when: never
+    - if: $SKIP_ALL_SPECS
+      when: never
+    - if: $SKIP_FOLLOW_E2E_SPEC
+      when: never
+    - if: $CI_PIPELINE_SOURCE != "push"
+      when: never
+    - when: always
+  script:
+    - cd /app
+    - inv blackbox-follow-service

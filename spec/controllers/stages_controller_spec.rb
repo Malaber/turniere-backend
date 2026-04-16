@@ -84,11 +84,11 @@ RSpec.describe StagesController, type: :controller do
         end
 
         it 'adds new stages to the tournament' do
-          expect(running_group_stage.tournament.stages.size).to be > 1
+          expect(running_group_stage.tournament.reload.stages.size).to be > 1
         end
 
         it 'adds the right teams' do
-          expect(running_group_stage.tournament.stages.max_by(&:level).teams)
+          expect(running_group_stage.tournament.reload.stages.max_by(&:level).teams)
             .to match_array(GroupStageService.get_advancing_teams(running_group_stage))
         end
       end

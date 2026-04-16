@@ -1,0 +1,38 @@
+# frozen_string_literal: true
+
+class TournamentSyncEnqueue
+  def self.call(tournament)
+    new(tournament).call
+  end
+
+  def initialize(tournament)
+    @tournament = tournament
+  end
+
+  def call
+    return false unless tournament.sync_push_enabled?
+
+    payload = TournamentSnapshotBuilder.build(fresh_tournament)
+    entry = TournamentSyncQueueEntry.find_or_initialize_by(tournament: tournament)
+    entry.snapshot_json = JSON.dump(payload)
+    entry.status = 'pending'
+    entry.attempts = 0
+    entry.last_attempt_at = nil
+    entry.next_attempt_at = Time.current
+    entry.last_error = nil
+    entry.locked_at = nil
+    entry.lock_token = nil
+    entry.save!
+    TournamentSyncWorker.start
+    TournamentSyncWorker.wake
+    true
+  end
+
+  private
+
+  attr_reader :tournament
+
+  def fresh_tournament
+    Tournament.find(tournament.id)
+  end
+end

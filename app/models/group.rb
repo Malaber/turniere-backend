@@ -6,6 +6,7 @@ class Group < ApplicationRecord
   has_many :group_scores, dependent: :destroy
 
   delegate :owner, to: :stage
+  delegate :tournament, to: :stage
 
   def teams
     matches.map(&:teams).flatten.uniq

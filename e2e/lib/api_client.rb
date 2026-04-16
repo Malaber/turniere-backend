@@ -21,6 +21,7 @@ module TurniereE2E
     def initialize(base_url:)
       @base_url = base_url.sub(%r{/\z}, '')
       @auth_headers = {}
+      @login_credentials = nil
     end
 
     def register!(email:, password:, username:)
@@ -39,6 +40,8 @@ module TurniereE2E
     end
 
     def login!(email:, password:)
+      @login_credentials = { email: email, password: password }
+      @auth_headers = {}
       response = request(
         :post,
         '/users/sign_in',
@@ -73,7 +76,9 @@ module TurniereE2E
 
     private
 
-    def request(method, path, body: nil, params: nil, headers: {})
+    def request(method, path, body: nil, params: nil, headers: {}, retry_on_unauthorized: true, refresh_session: true)
+      login!(**@login_credentials) if refresh_session && should_refresh_session?(method, path)
+
       uri = URI.parse("#{base_url}#{path}")
       uri.query = URI.encode_www_form(params) if params && !params.empty?
 
@@ -95,11 +100,17 @@ module TurniereE2E
       end
 
       parsed_json = parse_json_body(response.body)
-      {
+      result = {
         status: response.code.to_i,
         json: parsed_json,
         headers: response.each_header.to_h
       }
+      store_auth_headers!(result)
+      if retry_on_unauthorized && result[:status] == 401 && can_reauthenticate?(path)
+        login!(**@login_credentials)
+        return request(method, path, body: body, params: params, headers: headers, retry_on_unauthorized: false, refresh_session: false)
+      end
+      result
     end
 
     def merged_headers(headers)
@@ -118,11 +129,20 @@ module TurniereE2E
     end
 
     def store_auth_headers!(response)
-      %w[access-token client uid].each_with_object({}) do |key, auth_headers|
-        auth_headers[key] = response[:headers][key] if response[:headers].key?(key)
+      %w[access-token client uid expiry token-type authorization].each_with_object({}) do |key, auth_headers|
+        value = response[:headers][key]
+        auth_headers[key] = value if response[:headers].key?(key) && !value.to_s.empty?
       end.tap do |headers|
-        @auth_headers = headers unless headers.empty?
+        @auth_headers = @auth_headers.merge(headers) unless headers.empty?
       end
+    end
+
+    def can_reauthenticate?(path)
+      !@login_credentials.nil? && path != '/users/sign_in'
+    end
+
+    def should_refresh_session?(method, path)
+      !@login_credentials.nil? && method != :get && path != '/users/sign_in'
     end
   end
 end

@@ -4,6 +4,7 @@ class StagesController < ApplicationController
   before_action :set_stage, only: %i[show update]
   before_action :authenticate_user!, only: %i[update]
   before_action -> { require_owner! @stage.owner }, only: %i[update]
+  before_action -> { require_writable_tournament!(@stage.tournament) }, only: %i[update]
 
   # GET /stages/1
   def show
@@ -18,16 +19,19 @@ class StagesController < ApplicationController
         return
       end
 
+      synced_tournament = nil
       Stage.transaction do
         if @stage.update(stage_params)
           handle_group_stage_end
 
           render json: @stage
+          synced_tournament = @stage.tournament
         else
           render json: @stage.errors, status: :unprocessable_entity
           raise ActiveRecord::Rollback
         end
       end
+      push_sync_if_needed!(synced_tournament) unless synced_tournament.nil?
     else
       render json: {
         error: 'The state attribute may only be changed to finished'
@@ -74,5 +78,9 @@ class StagesController < ApplicationController
 
   def stage_params
     params.slice(:state).permit!
+  end
+
+  def push_sync_if_needed!(tournament)
+    TournamentSyncEnqueue.call(tournament)
   end
 end

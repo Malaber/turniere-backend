@@ -5,6 +5,7 @@ class BeamersController < ApplicationController
   before_action :set_beamer, only: %i[show update destroy]
   before_action :authenticate_user!, only: %i[create update destroy]
   before_action -> { require_owner! @tournament.owner }, only: %i[create update destroy]
+  before_action -> { require_writable_tournament!(@tournament) }, only: %i[create update destroy]
   rescue_from ActiveRecord::RecordNotFound, with: :render_not_found_error
 
   # GET /tournaments/:tournament_id/beamers
@@ -32,6 +33,7 @@ class BeamersController < ApplicationController
   def create
     beamer = @tournament.beamers.new(beamer_params)
     if beamer.save
+      push_sync_if_needed!
       render json: beamer, status: :created
     else
       render json: beamer.errors, status: :unprocessable_entity
@@ -41,6 +43,7 @@ class BeamersController < ApplicationController
   # PATCH /tournaments/:tournament_id/beamers/:id
   def update
     if @beamer.update(beamer_params)
+      push_sync_if_needed!
       render json: @beamer
     else
       render json: @beamer.errors, status: :unprocessable_entity
@@ -50,6 +53,7 @@ class BeamersController < ApplicationController
   # DELETE /tournaments/:tournament_id/beamers/:id
   def destroy
     @beamer.destroy
+    push_sync_if_needed!
     head :no_content
   end
 
@@ -65,5 +69,9 @@ class BeamersController < ApplicationController
 
   def beamer_params
     params.permit(:name, :display_state, :qr_code_url, :logo_url)
+  end
+
+  def push_sync_if_needed!
+    TournamentSyncEnqueue.call(@tournament)
   end
 end
