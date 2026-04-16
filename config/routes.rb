@@ -17,6 +17,11 @@ Rails.application.routes.draw do
   resources :tournaments do
     resources :statistics, only: %i[index]
     resources :matches, only: %i[index]
+    resources :beamers, only: %i[index show create update destroy] do
+      collection do
+        get :by_name
+      end
+    end
     member do
       get :timer_end
       patch :set_timer_end
