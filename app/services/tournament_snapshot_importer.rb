@@ -26,6 +26,7 @@ class TournamentSnapshotImporter
       return tournament if stale_snapshot?
 
       existing_teams = tournament.teams.to_a
+      existing_beamers = tournament.beamers.to_a
       existing_stages = tournament.stages.to_a
       existing_groups = existing_stages.flat_map(&:groups)
       existing_matches = tournament.matches
@@ -34,12 +35,14 @@ class TournamentSnapshotImporter
 
       update_tournament!
       teams_by_source_id = sync_teams!
+      sync_beamers!
       stages_by_source_id = sync_stages!
       groups_by_source_id = sync_groups!(stages_by_source_id)
       matches_by_source_id = sync_matches!(stages_by_source_id, groups_by_source_id)
       sync_match_scores!(matches_by_source_id, teams_by_source_id)
       sync_group_scores!(groups_by_source_id, teams_by_source_id)
 
+      destroy_stale_records(existing_beamers, snapshot.fetch(:beamers, []))
       destroy_stale_records(existing_group_scores, snapshot.fetch(:group_scores, []))
       destroy_stale_records(existing_match_scores, snapshot.fetch(:match_scores, []))
       destroy_stale_records(existing_matches, snapshot.fetch(:matches, []))
@@ -84,6 +87,25 @@ class TournamentSnapshotImporter
       stage.tournament = tournament
       stage.level = attrs.fetch(:level)
       stage.state = attrs.fetch(:state)
+    end
+  end
+
+  def sync_beamers!
+    existing_by_source_id = tournament.beamers.index_by(&:sync_source_id)
+    existing_by_name = tournament.beamers.index_by(&:name)
+
+    snapshot.fetch(:beamers, []).each_with_object({}) do |attrs, beamers_by_source_id|
+      source_id = attrs.fetch(:id)
+      beamer = existing_by_source_id[source_id] || existing_by_name[attrs.fetch(:name)] || Beamer.new
+      beamer.sync_source_id = source_id
+      beamer.tournament = tournament
+      beamer.name = attrs.fetch(:name)
+      beamer.display_state = attrs.fetch(:display_state)
+      beamer.is_default = attrs.fetch(:is_default, false)
+      beamer.qr_code_url = attrs[:qr_code_url]
+      beamer.logo_url = attrs[:logo_url]
+      beamer.save!
+      beamers_by_source_id[source_id] = beamer
     end
   end
 

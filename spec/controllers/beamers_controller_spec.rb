@@ -164,6 +164,21 @@ RSpec.describe BeamersController, type: :controller do
         expect(response).to have_http_status(:forbidden)
       end
     end
+
+    context 'on read only follower tournament' do
+      before(:each) do
+        @tournament.update!(read_only_mode: true, sync_auth_token: 'shared-secret')
+        apply_authentication_headers_for @owner
+      end
+
+      it 'returns locked' do
+        patch :update, params: {
+          tournament_id: @tournament.to_param, id: @beamer.to_param,
+          display_state: 'groups'
+        }
+        expect(response).to have_http_status(:locked)
+      end
+    end
   end
 
   describe 'DELETE #destroy' do
