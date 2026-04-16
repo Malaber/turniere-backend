@@ -38,9 +38,13 @@ services:
     working_dir: /app
     environment:
       TURNIERE_E2E_BASE_URL: ${TURNIERE_E2E_BASE_URL:-http://app:3000}
+      TURNIERE_E2E_EXPECT_PROFILING: ${TURNIERE_E2E_EXPECT_PROFILING:-true}
       TURNIERE_E2E_EMAIL: ${TURNIERE_E2E_EMAIL:-e2e@example.com}
       TURNIERE_E2E_PASSWORD: ${TURNIERE_E2E_PASSWORD:-password123}
       TURNIERE_E2E_USERNAME: ${TURNIERE_E2E_USERNAME:-e2e-user}
+      TURNIERE_E2E_ALT_EMAIL: ${TURNIERE_E2E_ALT_EMAIL:-e2e-alt@example.com}
+      TURNIERE_E2E_ALT_PASSWORD: ${TURNIERE_E2E_ALT_PASSWORD:-password123}
+      TURNIERE_E2E_ALT_USERNAME: ${TURNIERE_E2E_ALT_USERNAME:-e2e-alt-user}
 
 volumes:
   turniere-blackbox-postgres:

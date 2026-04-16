@@ -31,22 +31,20 @@ bundle exec rspec
 [Registry](https://gitlab.com/turniere/turniere-backend/container_registry)
 
 You can find all our Dockerfiles in the docker directory.
-They depend on each other in the following order: `production` → `development` → `test`
-This means, to build the `development` image, you have to build the `production` image first and tag it with the corresponding tag that is mentioned in the `FROM` line in the `development` Dockerfile.
+They depend on each other in the following order: `production` → `test`
+This means, to build `test` image, you have to build `production` image first and tag it with corresponding tag that is mentioned in `FROM` line in `test` Dockerfile.
 To build all images do: 
 
 ```bash
 cd turniere-backend
 docker build -t registry.gitlab.com/turniere/turniere-backend/production -f docker/production/Dockerfile .
-docker build -t registry.gitlab.com/turniere/turniere-backend/development -f docker/development/Dockerfile .
 docker build -t registry.gitlab.com/turniere/turniere-backend/test -f docker/test/Dockerfile .
 ```
 
-This is done to leave test and development dependencies out of the production container.
-Also we have a dedicated test container which runs the tests reproducible when you start it, but can also run the normal rails server to somewhat debug problems occuring in the test suite if needed.
+This is done to leave test and development dependencies out of production container.
+Also we have dedicated test container which runs tests reproducible when you start it, but can also run normal rails server to debug problems occuring in test suite if needed.
 
-While developing, if you want to use the development docker container, it should™ be sufficient to mount the root of this repository into the /app folder within the docker container to avoid building it over and over again.
-**Only rebuilding the `development` container is not sufficient, as the `development` Dockerfile does not have a `COPY` Statement**
+While developing, use `test` image as base container and mount root of this repository into `/app` to avoid rebuilding it over and over again.
 
 
 ## Generate diagrams

@@ -114,10 +114,28 @@ class GroupScore < ApplicationRecord
   end
 
   def comparison_match_against(other, decider:)
-    group.matches.reload
-         .select do |match|
-           match.decider? == decider && match.teams.include?(team) && match.teams.include?(other.team)
-         end
-         .max_by(&:position)
+    comparison_matches_index[[decider, *[team.id, other.team.id].sort]]
+  end
+
+  def comparison_matches_index
+    cache = group.instance_variable_get(:@comparison_matches_index)
+    return cache unless cache.nil?
+
+    matches = if group.association(:matches).loaded? && group.matches.any?
+                group.matches
+              else
+                group.matches.includes(match_scores: :team).reload
+              end
+
+    cache = matches.each_with_object({}) do |match, index|
+      team_ids = match.teams.map(&:id).sort
+      next unless team_ids.size == 2
+
+      key = [match.decider?, *team_ids]
+      existing_match = index[key]
+      index[key] = match if existing_match.nil? || match.position.to_i > existing_match.position.to_i
+    end
+
+    group.instance_variable_set(:@comparison_matches_index, cache)
   end
 end

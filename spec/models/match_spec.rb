@@ -109,21 +109,21 @@ RSpec.describe Match, type: :model do
       end
 
       it 'returns correct group_points' do
-        expect(@match.group_points_of(@team1)).to be(1)
-        expect(@match.group_points_of(@team2)).to be(1)
-        expect(@match.group_points_of(@uninvolved_team)).to be(0)
+        expect(@match.group_points_of(@team1)).to eq(1)
+        expect(@match.group_points_of(@team2)).to eq(1)
+        expect(@match.group_points_of(@uninvolved_team)).to eq(0)
       end
 
       it 'returns correct scored_points' do
-        expect(@match.scored_points_of(@team1)).to be(34)
-        expect(@match.scored_points_of(@team2)).to be(34)
-        expect(@match.scored_points_of(@uninvolved_team)).to be(0)
+        expect(@match.scored_points_of(@team1)).to eq(34)
+        expect(@match.scored_points_of(@team2)).to eq(34)
+        expect(@match.scored_points_of(@uninvolved_team)).to eq(0)
       end
 
       it 'returns correct received_points' do
-        expect(@match.received_points_of(@team1)).to be(34)
-        expect(@match.received_points_of(@team2)).to be(34)
-        expect(@match.received_points_of(@uninvolved_team)).to be(0)
+        expect(@match.received_points_of(@team1)).to eq(34)
+        expect(@match.received_points_of(@team2)).to eq(34)
+        expect(@match.received_points_of(@uninvolved_team)).to eq(0)
       end
     end
 
@@ -134,15 +134,15 @@ RSpec.describe Match, type: :model do
       end
 
       it 'returns correct group_points' do
-        expect(@not_started_match.group_points_of(@team1)).to be(0)
+        expect(@not_started_match.group_points_of(@team1)).to eq(0)
       end
 
       it 'returns correct scored_points' do
-        expect(@match.scored_points_of(@team1)).to be(0)
+        expect(@not_started_match.scored_points_of(@team1)).to eq(0)
       end
 
       it 'returns correct received_points' do
-        expect(@match.received_points_of(@team1)).to be(0)
+        expect(@not_started_match.received_points_of(@team1)).to eq(0)
       end
     end
 
@@ -155,21 +155,21 @@ RSpec.describe Match, type: :model do
       end
 
       it 'returns correct group_points' do
-        expect(@match.group_points_of(@team1)).to be(3)
-        expect(@match.group_points_of(@team2)).to be(0)
-        expect(@match.group_points_of(@uninvolved_team)).to be(0)
+        expect(@match.group_points_of(@team1)).to eq(3)
+        expect(@match.group_points_of(@team2)).to eq(0)
+        expect(@match.group_points_of(@uninvolved_team)).to eq(0)
       end
 
       it 'returns correct scored_points' do
-        expect(@match.scored_points_of(@team1)).to be(42)
-        expect(@match.scored_points_of(@team2)).to be(17)
-        expect(@match.scored_points_of(@uninvolved_team)).to be(0)
+        expect(@match.scored_points_of(@team1)).to eq(42)
+        expect(@match.scored_points_of(@team2)).to eq(17)
+        expect(@match.scored_points_of(@uninvolved_team)).to eq(0)
       end
 
       it 'returns correct received_points' do
-        expect(@match.received_points_of(@team1)).to be(17)
-        expect(@match.received_points_of(@team2)).to be(42)
-        expect(@match.received_points_of(@uninvolved_team)).to be(0)
+        expect(@match.received_points_of(@team1)).to eq(17)
+        expect(@match.received_points_of(@team2)).to eq(42)
+        expect(@match.received_points_of(@uninvolved_team)).to eq(0)
       end
     end
   end

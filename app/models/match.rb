@@ -41,14 +41,18 @@ class Match < ApplicationRecord
 
   def scored_points_of(team)
     return 0 if decider?
+    return 0 unless (finished? || in_progress?) && teams.include?(team)
 
-    teams.include?(team) ? match_scores.find_by(team: team).points : 0
+    match_score = match_score_for(team)
+    match_score ? match_score.points : 0
   end
 
   def received_points_of(team)
     return 0 if decider?
+    return 0 unless (finished? || in_progress?) && teams.include?(team)
 
-    teams.include?(team) ? match_scores.find { |ms| ms.team != team }.points : 0
+    opponent_match_score = opponent_match_score_for(team)
+    opponent_match_score ? opponent_match_score.points : 0
   end
 
   def group_points_of(team)
@@ -66,10 +70,19 @@ class Match < ApplicationRecord
   end
 
   def hidden_points_of(team)
-    teams.include?(team) ? match_scores.find_by(team: team).hidden_points : 0
+    match_score = match_score_for(team)
+    match_score ? match_score.hidden_points : 0
   end
 
   private
+
+  def match_score_for(team)
+    match_scores.find { |match_score| match_score.team_id == team.id }
+  end
+
+  def opponent_match_score_for(team)
+    match_scores.find { |match_score| match_score.team_id != team.id }
+  end
 
   def stage_xor_group
     errors.add(:stage_xor_group, 'Stage and Group missing or both present') unless stage.present? ^ group.present?

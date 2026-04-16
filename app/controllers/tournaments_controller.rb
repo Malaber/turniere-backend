@@ -1,7 +1,18 @@
 # frozen_string_literal: true
 
 class TournamentsController < ApplicationController
-  before_action :set_tournament, only: %i[show update destroy set_timer_end timer_end]
+  class NoOpRequestProfiling
+    def measure(_name)
+      yield
+    end
+
+    def apply_to(_response, label:)
+      label
+    end
+  end
+
+  before_action :set_tournament_for_show, only: %i[show]
+  before_action :set_tournament, only: %i[update destroy set_timer_end timer_end]
   before_action :authenticate_user!, only: %i[create update destroy set_timer_end]
   before_action -> { require_owner! @tournament.owner }, only: %i[update destroy set_timer_end]
   before_action :validate_create_params, only: %i[create]
@@ -30,7 +41,11 @@ class TournamentsController < ApplicationController
     if show_params.fetch(:simple, 'false') == 'true'
       render json: @tournament, serializer: SimpleTournamentSerializer
     else
-      render json: @tournament, include: '**'
+      rendered_json = @request_profiling.measure('serialize_tournament') do
+        ActiveModelSerializers::SerializableResource.new(@tournament, include: '**').as_json
+      end
+      @request_profiling.apply_to(response, label: 'tournament.show')
+      render json: rendered_json
     end
   end
 
@@ -141,12 +156,41 @@ class TournamentsController < ApplicationController
     @tournament = Tournament.find(params[:id])
   end
 
+  def set_tournament_for_show
+    profiling = build_request_profiling
+    @tournament = profiling.measure('load_tournament') do
+      Tournament.includes(
+        :user,
+        :teams,
+        stages: [
+          { matches: { match_scores: :team } },
+          { groups: [
+            { matches: { match_scores: :team } },
+            { group_scores: :team }
+          ] }
+        ]
+      ).find(params[:id])
+    end
+    @request_profiling = profiling
+  end
+
   def index_params
     params.permit(:type)
   end
 
   def show_params
-    params.permit(:simple)
+    params.permit(:simple, :profile)
+  end
+
+  def profiling_requested?
+    !Rails.env.production? && show_params.fetch(:profile, 'false') == 'true'
+  end
+
+  def build_request_profiling
+    return NoOpRequestProfiling.new unless profiling_requested?
+
+    require Rails.root.join('lib/local/request_profiling')
+    Local::RequestProfiling.new(enabled: true)
   end
 
   def tournament_params

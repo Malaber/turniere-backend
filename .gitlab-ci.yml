@@ -3,12 +3,17 @@ stages:
   - test
   - deploy
 
+variables:
+  DOCKER_IMAGE_ENVS: "production test"
+
 include:
   - project: 'turniere/turniere-infra'
     file: '/ci/pipeline.yaml'
 
 rails spec:
   stage: test
+  tags:
+    - docker
   image: $CI_REGISTRY_IMAGE/test/commits:$CI_COMMIT_SHA
   parallel:
     matrix:
@@ -35,6 +40,8 @@ rails spec:
 
 rails e2e spec:
   stage: test
+  tags:
+    - docker
   image: $CI_REGISTRY_IMAGE/test/commits:$CI_COMMIT_SHA
   services:
     - name: postgres:16

@@ -89,6 +89,14 @@ RSpec.describe GroupStageService do
         expect(match.teams.first).to_not eq(match.teams.second)
       end
     end
+
+    it 'also generates matches for group sizes other than four' do
+      teams = create_list(:team, 6)
+
+      matches = GroupStageService.generate_all_matches_between(teams)
+
+      expect(matches.size).to eq(15)
+    end
   end
 
   describe '#update_group_scores' do
@@ -102,7 +110,7 @@ RSpec.describe GroupStageService do
 
     context 'with only undecided matches' do
       before do
-        @group = create(:group, match_factory: :running_group_match)
+        @group = create(:group, match_count: 1, match_factory: :running_group_match)
         @group.matches.each do |match|
           match.match_scores.each do |ms|
             ms.points = 42
@@ -135,7 +143,7 @@ RSpec.describe GroupStageService do
 
     context 'with only decided matches' do
       before do
-        @group = create(:group, match_factory: :running_group_match)
+        @group = create(:group, match_count: 1, match_factory: :running_group_match)
         @group.matches.each_with_index do |match, i|
           match.match_scores.each_with_index do |ms, j|
             match_score_number = i + j
@@ -292,7 +300,26 @@ RSpec.describe GroupStageService do
       )
     end
 
-    it 'marks unresolved ties outside the advancing cutoff without requesting a decider' do
+    it 'does not expose unresolved tie metadata while regular matches in the group are still unfinished' do
+      tournament.update!(playoff_teams_amount: 1, instant_finalists_amount: 1, intermediate_round_participants_amount: 0)
+
+      create(:group_match, group: group, state: :in_progress).tap do |match|
+        create(:match_score, match: match, team: team_a, points: 2)
+        create(:match_score, match: match, team: team_b, points: 2)
+      end
+
+      score_a = create(:group_score, group: group, team: team_a, group_points: 1, scored_points: 2, received_points: 2)
+      score_b = create(:group_score, group: group, team: team_b, group_points: 1, scored_points: 2, received_points: 2)
+      score_c = create(:group_score, group: group, team: team_c, group_points: 0, scored_points: 0, received_points: 0)
+      score_d = create(:group_score, group: group, team: team_d, group_points: 0, scored_points: 0, received_points: 0)
+
+      GroupStageService.send(:recalculate_position_of_group_scores!, [score_a, score_b, score_c, score_d]).each(&:save!)
+
+      expect(GroupStageService.ranking_decision_for(score_a)).to be_nil
+      expect(GroupStageService.ranking_decision_for(score_b)).to be_nil
+    end
+
+    it 'does not expose unresolved tie metadata outside the advancing cutoff before the group is finished' do
       tournament.update!(playoff_teams_amount: 2, instant_finalists_amount: 2, intermediate_round_participants_amount: 0)
 
       score_a = create(:group_score, group: group, team: team_a, group_points: 9, scored_points: 5, received_points: 1, position: 1)
@@ -303,18 +330,8 @@ RSpec.describe GroupStageService do
       GroupStageService.send(:recalculate_position_of_group_scores!, [score_a, score_b, score_c, score_d]).each(&:save!)
 
       expect([score_a.position, score_b.position, score_c.position, score_d.position]).to eq([1, 2, 3, 3])
-      expect(GroupStageService.ranking_decision_for(score_c)).to include(
-        resolved_by: 'tie',
-        hidden_points_result: 'not_played',
-        tied: true,
-        needs_decider_match: false
-      )
-      expect(GroupStageService.ranking_decision_for(score_d)).to include(
-        resolved_by: 'tie',
-        hidden_points_result: 'not_played',
-        tied: true,
-        needs_decider_match: false
-      )
+      expect(GroupStageService.ranking_decision_for(score_c)).to be_nil
+      expect(GroupStageService.ranking_decision_for(score_d)).to be_nil
     end
 
     it 'uses the decider hidden points to resolve a cutoff tie' do
