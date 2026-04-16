@@ -32,6 +32,14 @@ RSpec.describe Tournament, type: :model do
     it { should have_many :beamers }
   end
 
+  describe 'default beamer' do
+    it 'creates a default beamer automatically' do
+      tournament = create(:tournament)
+
+      expect(tournament.beamers.pluck(:name)).to include(Beamer::DEFAULT_NAME)
+    end
+  end
+
   describe '#matches' do
     context 'group stage tournament' do
       before do

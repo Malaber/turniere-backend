@@ -36,19 +36,6 @@ RSpec.describe Beamer, type: :model do
     it { should belong_to :tournament }
   end
 
-  describe 'scopes' do
-    describe '.default_beamer' do
-      it 'returns only default beamers' do
-        tournament = create(:tournament)
-        default = create(:default_beamer, tournament: tournament)
-        create(:beamer, tournament: tournament)
-
-        result = tournament.beamers.default_beamer
-        expect(result).to contain_exactly(default)
-      end
-    end
-  end
-
   describe '#owner' do
     it 'delegates to tournament' do
       beamer = create(:beamer)

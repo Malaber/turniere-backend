@@ -259,6 +259,14 @@ RSpec.describe TournamentsController, type: :controller do
           expect(included_teams).to match_array(@teams)
         end
 
+        it 'creates a default beamer automatically' do
+          post :create, params: create_playoff_tournament_data
+          body = deserialize_response response
+          tournament = Tournament.find(body[:id])
+
+          expect(tournament.beamers.pluck(:name)).to include(Beamer::DEFAULT_NAME)
+        end
+
         context 'with parameter group_stage=true' do
           before do
             post :create, params: create_group_tournament_data
