@@ -20,7 +20,7 @@ class BeamersController < ApplicationController
   # GET /tournaments/:tournament_id/beamers/by_name?name=beamername
   def by_name
     beamer = @tournament.beamers.find_by(name: params[:name])
-    beamer ||= @tournament.beamers.default_beamer.first
+    beamer ||= @tournament.beamers.find_by(name: Beamer::DEFAULT_NAME)
     if beamer
       render json: beamer
     else
@@ -64,6 +64,6 @@ class BeamersController < ApplicationController
   end
 
   def beamer_params
-    params.permit(:name, :display_state, :is_default, :qr_code_url, :logo_url)
+    params.permit(:name, :display_state, :qr_code_url, :logo_url)
   end
 end

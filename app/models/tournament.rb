@@ -16,6 +16,7 @@ class Tournament < ApplicationRecord
   alias_attribute :owner, :user
 
   after_initialize :generate_code
+  after_create_commit :ensure_default_beamer!
 
   def matches
     [stages.map(&:matches), stages.map { |s| s.groups.map(&:matches) }].flatten
@@ -49,5 +50,11 @@ class Tournament < ApplicationRecord
 
     errors.add(:playoff_teams_amount,
                'playoff_teams_amount needs to be a positive power of two')
+  end
+
+  def ensure_default_beamer!
+    beamers.find_or_create_by!(name: Beamer::DEFAULT_NAME) do |beamer|
+      beamer.display_state = 'matches_all'
+    end
   end
 end

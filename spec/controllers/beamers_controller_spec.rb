@@ -6,8 +6,8 @@ RSpec.describe BeamersController, type: :controller do
   before do
     @tournament = create(:tournament)
     @owner = @tournament.owner
+    @default_beamer = @tournament.beamers.find_by!(name: Beamer::DEFAULT_NAME)
     @beamer = create(:beamer, tournament: @tournament)
-    @default_beamer = create(:default_beamer, tournament: @tournament)
   end
 
   describe 'GET #index' do
@@ -47,18 +47,18 @@ RSpec.describe BeamersController, type: :controller do
       expect(response).to be_successful
       body = deserialize_response response
       expect(body[:name]).to eq(@default_beamer.name)
-      expect(body[:is_default]).to be true
     end
 
     it 'falls back to default beamer when name param is missing' do
       get :by_name, params: { tournament_id: @tournament.to_param }
       expect(response).to be_successful
       body = deserialize_response response
-      expect(body[:is_default]).to be true
+      expect(body[:name]).to eq(Beamer::DEFAULT_NAME)
     end
 
-    it 'returns 404 when no beamers exist at all' do
+    it 'returns 404 when all beamers were deleted' do
       empty_tournament = create(:tournament)
+      empty_tournament.beamers.destroy_all
       get :by_name, params: { tournament_id: empty_tournament.to_param, name: 'anything' }
       expect(response).to have_http_status(:not_found)
     end
@@ -66,7 +66,7 @@ RSpec.describe BeamersController, type: :controller do
 
   describe 'POST #create' do
     let(:valid_params) do
-      { name: 'new-beamer', display_state: 'groups', is_default: false }
+      { name: 'new-beamer', display_state: 'groups' }
     end
 
     context 'as owner' do
