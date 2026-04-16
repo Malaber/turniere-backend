@@ -6,6 +6,7 @@ class Tournament < ApplicationRecord
   belongs_to :user
   has_many :teams, dependent: :destroy
   has_many :stages, dependent: :destroy
+  has_many :beamers, dependent: :destroy
 
   validates :name, presence: true
   validates :code, presence: true, uniqueness: true
@@ -17,6 +18,7 @@ class Tournament < ApplicationRecord
   alias_attribute :owner, :user
 
   after_initialize :generate_code
+  after_create_commit :ensure_default_beamer!
   before_validation :clear_follower_sync_token_when_disabling_read_only_mode
 
   def matches
@@ -59,6 +61,20 @@ class Tournament < ApplicationRecord
 
     errors.add(:playoff_teams_amount,
                'playoff_teams_amount needs to be a positive power of two')
+  end
+
+  def sync_configuration_is_complete
+    return if sync_target_url.blank? && sync_auth_token.blank?
+    return if sync_target_url.present? && sync_auth_token.present?
+    return if read_only_mode? && sync_auth_token.present? && sync_target_url.blank?
+
+    errors.add(:base, 'sync_target_url and sync_auth_token must be configured together')
+  end
+
+  def ensure_default_beamer!
+    beamers.find_or_create_by!(name: Beamer::DEFAULT_NAME) do |beamer|
+      beamer.display_state = 'matches_all'
+    end
   end
 
   def sync_configuration_is_complete

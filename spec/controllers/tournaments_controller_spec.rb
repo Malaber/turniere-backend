@@ -162,6 +162,34 @@ RSpec.describe TournamentsController, type: :controller do
     end
   end
 
+  describe 'GET #timer_end' do
+    it 'returns timer_end in ISO 8601 format' do
+      timer_end = Time.utc(2026, 4, 13, 18, 0, 0)
+      @tournament.update!(timer_end: timer_end)
+
+      get :timer_end, params: { id: @tournament.to_param }
+
+      expect(response).to be_successful
+      expect(deserialize_response(response)[:timer_end]).to eq(timer_end.iso8601)
+    end
+  end
+
+  describe 'PATCH #set_timer_end' do
+    before(:each) do
+      apply_authentication_headers_for @user
+    end
+
+    it 'stores timezone-aware timer_end values without shifting them' do
+      timer_end = '2030-04-13T18:00:00+02:00'
+
+      patch :set_timer_end, params: { id: @tournament.to_param, timer_end: timer_end }
+
+      expect(response).to be_successful
+      expect(@tournament.reload.timer_end.iso8601).to eq(Time.iso8601(timer_end).utc.iso8601)
+      expect(deserialize_response(response)[:timer_end]).to eq(@tournament.timer_end.iso8601)
+    end
+  end
+
   describe 'POST #create' do
     let(:create_playoff_tournament_data) do
       {
@@ -248,6 +276,14 @@ RSpec.describe TournamentsController, type: :controller do
           tournament = Tournament.find(body[:id])
           included_teams = tournament.stages.first.matches.map { |m| m.match_scores.map(&:team) }.flatten.uniq
           expect(included_teams).to match_array(@teams)
+        end
+
+        it 'creates a default beamer automatically' do
+          post :create, params: create_playoff_tournament_data
+          body = deserialize_response response
+          tournament = Tournament.find(body[:id])
+
+          expect(tournament.beamers.pluck(:name)).to include(Beamer::DEFAULT_NAME)
         end
 
         context 'with parameter group_stage=true' do
