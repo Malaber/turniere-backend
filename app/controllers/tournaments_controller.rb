@@ -304,9 +304,8 @@ class TournamentsController < ApplicationController
   def push_sync_if_needed!(tournament)
     TournamentSyncEnqueue.call(tournament)
   end
-end
 
-def validate_set_timer_end_params
+  def validate_set_timer_end_params
     timer_end = params[:timer_end]
     timer_end_seconds = params[:timer_end_seconds]
 
