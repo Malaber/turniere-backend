@@ -27,6 +27,10 @@ Running tests works as follows:
 bundle exec rspec
 ```
 
+Leader/follower tournament sync docs:
+
+- [doc/leader_follower.md](doc/leader_follower.md)
+
 ## Docker
 [Registry](https://gitlab.com/turniere/turniere-backend/container_registry)
 
