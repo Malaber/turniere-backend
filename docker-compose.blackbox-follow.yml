@@ -12,6 +12,8 @@ services:
       retries: 20
     volumes:
       - turniere-blackbox-follow-source-postgres:/var/lib/postgresql/data
+    networks:
+      - source-db
 
   follower-postgres:
     image: ${TURNIERE_BLACKBOX_POSTGRES_IMAGE:-postgres:16}
@@ -26,6 +28,8 @@ services:
       retries: 20
     volumes:
       - turniere-blackbox-follow-follower-postgres:/var/lib/postgresql/data
+    networks:
+      - follower-db
 
   source-app:
     image: ${TURNIERE_BLACKBOX_APP_IMAGE:-registry.gitlab.com/turniere/turniere-backend/production/commits:local}
@@ -44,6 +48,9 @@ services:
       RAILS_SERVE_STATIC_FILES: "1"
     ports:
       - "${TURNIERE_BLACKBOX_SOURCE_HOST_PORT:-3002}:3000"
+    networks:
+      - source-db
+      - sync
 
   follower-app:
     image: ${TURNIERE_BLACKBOX_APP_IMAGE:-registry.gitlab.com/turniere/turniere-backend/production/commits:local}
@@ -62,6 +69,9 @@ services:
       RAILS_SERVE_STATIC_FILES: "1"
     ports:
       - "${TURNIERE_BLACKBOX_FOLLOWER_HOST_PORT:-3003}:3000"
+    networks:
+      - follower-db
+      - sync
 
   e2e:
     image: ${TURNIERE_BLACKBOX_RUNNER_IMAGE:-registry.gitlab.com/turniere/turniere-backend/test/commits:local}
@@ -82,7 +92,16 @@ services:
       TURNIERE_E2E_ALT_EMAIL: ${TURNIERE_E2E_ALT_EMAIL:-e2e-alt@example.com}
       TURNIERE_E2E_ALT_PASSWORD: ${TURNIERE_E2E_ALT_PASSWORD:-password123}
       TURNIERE_E2E_ALT_USERNAME: ${TURNIERE_E2E_ALT_USERNAME:-e2e-alt-user}
+    networks:
+      - sync
 
 volumes:
   turniere-blackbox-follow-source-postgres:
   turniere-blackbox-follow-follower-postgres:
+
+networks:
+  source-db:
+    internal: true
+  follower-db:
+    internal: true
+  sync:

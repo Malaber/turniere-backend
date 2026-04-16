@@ -51,6 +51,77 @@ These leader-side actions enqueue async snapshot push:
 
 Queue retries with backoff until follower accepts snapshot.
 
+## Local Manual Testing
+
+Backend now has local manual setup target:
+
+```bash
+inv docker-blackbox-follow-manual-up
+```
+
+This starts:
+
+- leader production image on `http://127.0.0.1:3002`
+- follower production image on `http://127.0.0.1:3003`
+- separate leader and follower Postgres containers
+- bootstrapped owner users on both backends
+
+Teardown:
+
+```bash
+inv docker-blackbox-follow-down
+```
+
+### Local topology
+
+Compose setup now separates DB traffic:
+
+- `source-postgres` only on `source-db` internal network
+- `follower-postgres` only on `follower-db` internal network
+- both apps share only `sync` network
+
+This gives:
+
+- separate production app containers
+- separate production DB containers
+- DB isolation between leader and follower
+
+Important limit:
+
+- Docker Compose does **not** enforce true one-way HTTP reachability here
+- local setup still allows follower container to reach leader container over shared `sync` network
+- real production trust model still comes from backend design:
+  - leader pushes
+  - follower never pulls
+  - follower has no code path that contacts leader
+
+So local setup is good for frontend/manual testing of behavior, not strict network-policy simulation.
+
+### Manual frontend testing flow
+
+1. Run `inv docker-blackbox-follow-manual-up`
+2. Open leader backend at `http://127.0.0.1:3002`
+3. Open follower backend at `http://127.0.0.1:3003`
+4. Log in with:
+   - email: `e2e@example.com`
+   - password: `password123`
+5. On follower backend, create empty read-only follower tournament
+6. On leader backend, create normal tournament
+7. On leader tournament, set:
+   - `sync_target_url` to follower `PATCH /tournaments/:id/sync_state`
+   - `sync_auth_token` to same shared token used on follower
+8. Point local frontend leader instance to `http://127.0.0.1:3002`
+9. Point local frontend follower/remote instance to `http://127.0.0.1:3003`
+10. Progress tournament on leader, verify follower mirrors state and stays read only
+
+Frontend team can use this setup to build:
+
+- owner sync configuration UI
+- follower read-only UX
+- status display for `sync_last_pushed_at`
+- status display for `sync_last_push_error`
+- takeover flow by disabling `read_only_mode`
+
 ## Takeover
 
 If remote must become writable after sync phase:

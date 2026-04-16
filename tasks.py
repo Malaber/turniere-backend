@@ -994,6 +994,55 @@ def docker_blackbox_follow_up(
     print("Follower production apps ready for blackbox E2E.")
 
 
+@task(name="docker-blackbox-follow-manual-up")
+def docker_blackbox_follow_manual_up(
+    c,
+    source_host_port=BLACKBOX_SOURCE_HOST_PORT,
+    follower_host_port=BLACKBOX_FOLLOWER_HOST_PORT,
+    app_image=PRODUCTION_TAG,
+    runner_image=TEST_TAG,
+    postgres_image=BLACKBOX_POSTGRES_IMAGE,
+    build=True,
+):
+    """Boot local leader/follower production setup for manual testing and print next steps."""
+    docker_blackbox_follow_up(
+        c,
+        source_host_port=source_host_port,
+        follower_host_port=follower_host_port,
+        app_image=app_image,
+        runner_image=runner_image,
+        postgres_image=postgres_image,
+        build=build,
+    )
+
+    source_env = _production_env_for("source-postgres", BLACKBOX_SOURCE_DB_NAME)
+    follower_env = _production_env_for("follower-postgres", BLACKBOX_FOLLOWER_DB_NAME)
+
+    _print_header("Running source production database migrations")
+    c.run("bundle exec rails db:migrate", env=source_env, pty=True)
+
+    _print_header("Running follower production database migrations")
+    c.run("bundle exec rails db:migrate", env=follower_env, pty=True)
+
+    _print_header("Bootstrapping confirmed E2E users on source and follower")
+    _bootstrap_blackbox_users(c, source_env, E2E_EMAIL, E2E_PASSWORD, E2E_USERNAME, E2E_ALT_EMAIL, E2E_ALT_PASSWORD, E2E_ALT_USERNAME)
+    _bootstrap_blackbox_users(c, follower_env, E2E_EMAIL, E2E_PASSWORD, E2E_USERNAME, E2E_ALT_EMAIL, E2E_ALT_PASSWORD, E2E_ALT_USERNAME)
+
+    source_base_url = f"http://127.0.0.1:{source_host_port}"
+    follower_base_url = f"http://127.0.0.1:{follower_host_port}"
+    _print_header("Leader/follower manual setup ready")
+    print(f"Leader URL:   {source_base_url}")
+    print(f"Follower URL: {follower_base_url}")
+    print(f"E2E owner email: {E2E_EMAIL}")
+    print(f"E2E owner password: {E2E_PASSWORD}")
+    print("Next steps:")
+    print("1. Create read-only follower tournament on follower backend.")
+    print("2. Create normal leader tournament on leader backend.")
+    print("3. Configure leader sync_target_url to follower /sync_state endpoint with shared token.")
+    print("4. Point frontend local leader view at leader URL and remote view at follower URL.")
+    print("5. Tear down with: inv docker-blackbox-follow-down")
+
+
 @task(name="docker-blackbox-follow-down")
 def docker_blackbox_follow_down(
     c,
