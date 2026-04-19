@@ -7,8 +7,6 @@ ruby '3.1.2'
 
 # Bundle edge Rails instead: gem 'rails', github: 'rails/rails'
 gem 'rails', '~> 7.0.3'
-# Use sqlite3 as the database for Active Record
-gem 'sqlite3'
 # Use Puma as the app server
 gem 'puma', '~> 5.0'
 # Build JSON APIs with ease. Read more: https://github.com/rails/jbuilder
@@ -54,6 +52,8 @@ group :development, optional: true do
   gem 'listen', '~> 3.3'
   # Spring speeds up development by keeping your application running in the background. Read more: https://github.com/rails/spring
   gem 'railroady'
+  # Use sqlite3 as the database for Active Record
+  gem 'sqlite3'
   gem 'rubocop'
   gem 'rubocop-performance'
   gem 'rubocop-rails'
