@@ -11,3 +11,4 @@ docker/**
 docker-compose.yml
 README.md
 .gitlab-ci.yml
+/log
