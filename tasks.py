@@ -1015,18 +1015,39 @@ def docker_blackbox_follow_manual_up(
         build=build,
     )
 
-    source_env = _production_env_for("source-postgres", BLACKBOX_SOURCE_DB_NAME)
-    follower_env = _production_env_for("follower-postgres", BLACKBOX_FOLLOWER_DB_NAME)
+    env = _follow_compose_env(
+        source_host_port=source_host_port,
+        follower_host_port=follower_host_port,
+        app_image=app_image,
+        runner_image=runner_image,
+        postgres_image=postgres_image,
+    )
 
     _print_header("Running source production database migrations")
-    c.run("bundle exec rails db:migrate", env=source_env, pty=True)
+    _compose_run(
+        ["exec", "-T", "source-app", "bash", "-lc", "bundle exec rails db:migrate"],
+        env=env,
+        project_name=BLACKBOX_FOLLOW_PROJECT,
+        compose_file=BLACKBOX_FOLLOW_COMPOSE_FILE,
+    )
 
     _print_header("Running follower production database migrations")
-    c.run("bundle exec rails db:migrate", env=follower_env, pty=True)
+    _compose_run(
+        ["exec", "-T", "follower-app", "bash", "-lc", "bundle exec rails db:migrate"],
+        env=env,
+        project_name=BLACKBOX_FOLLOW_PROJECT,
+        compose_file=BLACKBOX_FOLLOW_COMPOSE_FILE,
+    )
 
     _print_header("Bootstrapping confirmed E2E users on source and follower")
-    _bootstrap_blackbox_users(c, source_env, E2E_EMAIL, E2E_PASSWORD, E2E_USERNAME, E2E_ALT_EMAIL, E2E_ALT_PASSWORD, E2E_ALT_USERNAME)
-    _bootstrap_blackbox_users(c, follower_env, E2E_EMAIL, E2E_PASSWORD, E2E_USERNAME, E2E_ALT_EMAIL, E2E_ALT_PASSWORD, E2E_ALT_USERNAME)
+    docker_blackbox_follow_bootstrap_users(
+        c,
+        source_host_port=source_host_port,
+        follower_host_port=follower_host_port,
+        app_image=app_image,
+        runner_image=runner_image,
+        postgres_image=postgres_image,
+    )
 
     source_base_url = f"http://127.0.0.1:{source_host_port}"
     follower_base_url = f"http://127.0.0.1:{follower_host_port}"
