@@ -46,7 +46,11 @@ class TournamentsController < ApplicationController
       render json: @tournament, serializer: SimpleTournamentSerializer
     else
       rendered_json = @request_profiling.measure('serialize_tournament') do
-        ActiveModelSerializers::SerializableResource.new(@tournament, include: '**').as_json
+        ActiveModelSerializers::SerializableResource.new(
+          @tournament,
+          include: '**',
+          scope: current_user
+        ).as_json
       end
       @request_profiling.apply_to(response, label: 'tournament.show')
       render json: rendered_json
@@ -160,7 +164,7 @@ class TournamentsController < ApplicationController
     @tournament.reload
     render json: {
       error: e.message,
-      tournament: TournamentSerializer.new(@tournament).as_json
+      tournament: TournamentSerializer.new(@tournament, scope: current_user).as_json
     }, status: :bad_gateway
   end
 

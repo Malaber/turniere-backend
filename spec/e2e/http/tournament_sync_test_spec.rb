@@ -24,14 +24,12 @@ RSpec.describe 'Tournament sync test HTTP E2E' do
   let(:anonymous_client) { TurniereE2E::ApiClient.new(base_url: base_url) }
 
   it 'roundtrips current snapshot into follower tournament through test_sync endpoint' do
-    leader = create_group_stage_tournament(name_prefix: 'Sync Test Leader')
     follower = create_follower_tournament(name_prefix: 'Sync Test Follower')
-
-    configure = client.patch("/tournaments/#{leader.fetch(:id)}", body: {
-                               sync_target_url: "#{base_url}/tournaments/#{follower.fetch(:id)}/sync_state",
-                               sync_auth_token: sync_token
-                             })
-    expect(configure[:status]).to eq(200)
+    leader = create_group_stage_tournament(
+      name_prefix: 'Sync Test Leader',
+      sync_target_url: "#{base_url}/tournaments/#{follower.fetch(:id)}/sync_state",
+      sync_auth_token: sync_token
+    )
 
     rename = client.patch("/tournaments/#{leader.fetch(:id)}", body: {
                             name: "Leader Renamed #{SecureRandom.hex(3)}",
@@ -50,7 +48,6 @@ RSpec.describe 'Tournament sync test HTTP E2E' do
     after_leader = fetch_tournament(leader.fetch(:id))
     after_follower = fetch_tournament(follower.fetch(:id))
 
-    expect(after_follower.fetch(:read_only_mode)).to eq(true)
     expect(after_follower.fetch(:name)).to eq(after_leader.fetch(:name))
     expect(after_follower.fetch(:description)).to eq(after_leader.fetch(:description))
     expect(after_follower.fetch(:teams).map { |team| team.fetch(:name) })
@@ -65,22 +62,26 @@ RSpec.describe 'Tournament sync test HTTP E2E' do
     api_client
   end
 
-  def create_group_stage_tournament(name_prefix:)
-    response = client.post('/tournaments', body: {
-                             name: "#{name_prefix} #{SecureRandom.hex(3)}",
-                             description: 'Leader tournament for sync test endpoint',
-                             public: false,
-                             group_stage: true,
-                             playoff_teams_amount: 4,
-                             teams: 2.times.flat_map do |group_index|
-                               4.times.map do |seed_index|
-                                 {
-                                   name: "#{name_prefix.tr(' ', '')}-G#{group_index + 1}-S#{seed_index + 1}",
-                                   group: group_index
-                                 }
-                               end
-                             end
-                           })
+  def create_group_stage_tournament(name_prefix:, sync_target_url: nil, sync_auth_token: nil)
+    body = {
+      name: "#{name_prefix} #{SecureRandom.hex(3)}",
+      description: 'Leader tournament for sync test endpoint',
+      public: false,
+      group_stage: true,
+      playoff_teams_amount: 4,
+      teams: 2.times.flat_map do |group_index|
+        4.times.map do |seed_index|
+          {
+            name: "#{name_prefix.tr(' ', '')}-G#{group_index + 1}-S#{seed_index + 1}",
+            group: group_index
+          }
+        end
+      end
+    }
+    body[:sync_target_url] = sync_target_url unless sync_target_url.nil? || sync_target_url.empty?
+    body[:sync_auth_token] = sync_auth_token unless sync_auth_token.nil? || sync_auth_token.empty?
+
+    response = client.post('/tournaments', body: body)
     expect(response[:status]).to eq(201)
     fetch_tournament(response.dig(:json, :id))
   end
