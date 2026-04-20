@@ -26,6 +26,7 @@ Rails.application.routes.draw do
       get :timer_end
       patch :set_timer_end
       patch :sync_state
+      post :test_sync
     end
   end
   resources :match_scores, only: %i[show update]

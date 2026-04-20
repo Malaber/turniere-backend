@@ -647,10 +647,14 @@ def test_http_e2e(
     alt_email=E2E_ALT_EMAIL,
     alt_password=E2E_ALT_PASSWORD,
     alt_username=E2E_ALT_USERNAME,
+    spec="",
 ):
     """Run HTTP E2E specs against an already running backend."""
+    command = f"{_bundle_exec('rspec')} spec/e2e/http"
+    if spec:
+        command = f"{_bundle_exec('rspec')} {shlex.quote(spec)}"
     c.run(
-        f"{_bundle_exec('rspec')} spec/e2e/http",
+        command,
         env=_env(
             TURNIERE_E2E_BASE_URL=base_url,
             TURNIERE_E2E_EMAIL=email,
@@ -675,6 +679,7 @@ def verify_http(
     alt_password=E2E_ALT_PASSWORD,
     alt_username=E2E_ALT_USERNAME,
     reset_db=True,
+    spec="",
 ):
     """Boot a local test server, then run the HTTP E2E suite against it."""
     if reset_db:
@@ -698,6 +703,7 @@ def verify_http(
             alt_email=alt_email,
             alt_password=alt_password,
             alt_username=alt_username,
+            spec=spec,
         )
     finally:
         _stop_process(process, log_handle)
