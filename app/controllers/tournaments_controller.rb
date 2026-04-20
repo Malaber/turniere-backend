@@ -12,9 +12,9 @@ class TournamentsController < ApplicationController
   end
 
   before_action :set_tournament_for_show, only: %i[show]
-  before_action :set_tournament, only: %i[update destroy set_timer_end timer_end sync_state]
-  before_action :authenticate_user!, only: %i[create update destroy set_timer_end]
-  before_action -> { require_owner! @tournament.owner }, only: %i[update destroy set_timer_end]
+  before_action :set_tournament, only: %i[update destroy set_timer_end timer_end sync_state test_sync]
+  before_action :authenticate_user!, only: %i[create update destroy set_timer_end test_sync]
+  before_action -> { require_owner! @tournament.owner }, only: %i[update destroy set_timer_end test_sync]
   before_action :validate_create_params, only: %i[create]
   before_action :validate_update_params, only: %i[update]
   before_action :validate_set_timer_end_params, only: %i[set_timer_end]
@@ -46,7 +46,11 @@ class TournamentsController < ApplicationController
       render json: @tournament, serializer: SimpleTournamentSerializer
     else
       rendered_json = @request_profiling.measure('serialize_tournament') do
-        ActiveModelSerializers::SerializableResource.new(@tournament, include: '**').as_json
+        ActiveModelSerializers::SerializableResource.new(
+          @tournament,
+          include: '**',
+          scope: current_user
+        ).as_json
       end
       @request_profiling.apply_to(response, label: 'tournament.show')
       render json: rendered_json
@@ -145,6 +149,23 @@ class TournamentsController < ApplicationController
     render json: @tournament, include: '**'
   rescue KeyError, ArgumentError => e
     render json: { error: e.message }, status: :unprocessable_entity
+  end
+
+  def test_sync
+    unless @tournament.sync_push_enabled?
+      return render json: {
+        error: 'Tournament sync test requires writable tournament with sync_target_url and sync_auth_token'
+      }, status: :unprocessable_entity
+    end
+
+    TournamentSyncPusher.push!(@tournament)
+    render json: @tournament.reload, include: '**'
+  rescue TournamentSyncPusher::SyncFailed => e
+    @tournament.reload
+    render json: {
+      error: e.message,
+      tournament: TournamentSerializer.new(@tournament, scope: current_user).as_json
+    }, status: :bad_gateway
   end
 
 

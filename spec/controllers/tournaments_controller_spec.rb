@@ -102,12 +102,57 @@ RSpec.describe TournamentsController, type: :controller do
       get :show, params: { id: @tournament.to_param }
       json = deserialize_response(response)
       expect(json[:id].to_i).to eq(@tournament.id)
-      expected_keys = %i[id name code public description playoff_teams_amount instant_finalists_amount intermediate_round_participants_amount timer_end owner_username stages teams]
+      expected_keys = %i[
+        id name code public description playoff_teams_amount
+        instant_finalists_amount intermediate_round_participants_amount
+        timer_end owner_username stages teams
+      ]
       expect(json.keys).to match_array(expected_keys)
-      expect(json).to eq(TournamentSerializer.new(@tournament).as_json)
       expect(json[:name]).to eq(@tournament.name)
       expect(json[:description]).to eq(@tournament.description)
       expect(json[:public]).to eq(@tournament.public)
+    end
+
+    it 'does not return sync metadata on unauthenticated requests' do
+      pushed_at = Time.utc(2026, 4, 20, 12, 0, 0)
+      @tournament.update!(
+        read_only_mode: true,
+        sync_target_url: 'https://remote.example.com/tournaments/1/sync_state',
+        sync_auth_token: 'shared-secret',
+        sync_last_pushed_at: pushed_at,
+        sync_last_push_error: 'push failed'
+      )
+
+      get :show, params: { id: @tournament.to_param }
+
+      json = deserialize_response(response)
+      expect(json).not_to have_key(:read_only_mode)
+      expect(json).not_to have_key(:sync_target_url)
+      expect(json).not_to have_key(:sync_last_pushed_at)
+      expect(json).not_to have_key(:sync_last_push_error)
+      expect(json).not_to have_key(:sync_auth_token)
+    end
+
+    it 'returns sync metadata to owner requests' do
+      pushed_at = Time.utc(2026, 4, 20, 12, 0, 0)
+      @tournament.update!(
+        read_only_mode: true,
+        sync_target_url: 'https://remote.example.com/tournaments/1/sync_state',
+        sync_auth_token: 'shared-secret',
+        sync_last_pushed_at: pushed_at,
+        sync_last_push_error: 'push failed'
+      )
+      apply_authentication_headers_for @tournament.owner
+
+      get :show, params: { id: @tournament.to_param }
+
+      json = deserialize_response(response)
+      expect(json[:read_only_mode]).to eq(true)
+      expect(json[:sync_target_url]).to eq('https://remote.example.com/tournaments/1/sync_state')
+      expect(json[:sync_last_pushed_at]).to eq(pushed_at.iso8601)
+      expect(json[:sync_last_push_error]).to eq('push failed')
+      expect(json).not_to have_key(:sync_auth_token)
+      expect(json).to eq(TournamentSerializer.new(@tournament, scope: @tournament.owner).as_json)
     end
 
     context 'with simple=true parameter' do
@@ -679,6 +724,62 @@ RSpec.describe TournamentsController, type: :controller do
 
       expect(response).to have_http_status(:unauthorized)
       expect(deserialize_response(response)[:error]).to eq('Invalid sync token')
+    end
+  end
+
+  describe 'POST #test_sync' do
+    before do
+      apply_authentication_headers_for @tournament.owner
+    end
+
+    it 'pushes snapshot immediately and returns updated tournament' do
+      @tournament.update!(
+        sync_target_url: 'https://remote.example.com/tournaments/1/sync_state',
+        sync_auth_token: 'shared-secret'
+      )
+      pushed_at = Time.zone.parse('2026-04-20T14:00:00Z')
+
+      allow(TournamentSyncPusher).to receive(:push!) do |tournament|
+        tournament.update_columns(sync_last_pushed_at: pushed_at, sync_last_push_error: nil)
+        true
+      end
+
+      post :test_sync, params: { id: @tournament.to_param }
+
+      expect(response).to have_http_status(:ok)
+      json = deserialize_response(response)
+      expect(json[:id]).to eq(@tournament.id)
+      expect(json[:sync_last_pushed_at]).to eq(pushed_at.iso8601)
+      expect(json[:sync_last_push_error]).to be_nil
+      expect(TournamentSyncPusher).to have_received(:push!).with(@tournament)
+    end
+
+    it 'rejects sync test without complete leader configuration' do
+      post :test_sync, params: { id: @tournament.to_param }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(deserialize_response(response)[:error])
+        .to eq('Tournament sync test requires writable tournament with sync_target_url and sync_auth_token')
+    end
+
+    it 'returns sync failure details when push fails' do
+      @tournament.update!(
+        sync_target_url: 'https://remote.example.com/tournaments/1/sync_state',
+        sync_auth_token: 'shared-secret'
+      )
+      @tournament.update_columns(sync_last_push_error: 'old error')
+
+      allow(TournamentSyncPusher).to receive(:push!) do |tournament|
+        tournament.update_columns(sync_last_push_error: 'connection refused')
+        raise TournamentSyncPusher::SyncFailed, 'connection refused'
+      end
+
+      post :test_sync, params: { id: @tournament.to_param }
+
+      expect(response).to have_http_status(:bad_gateway)
+      json = deserialize_response(response)
+      expect(json[:error]).to eq('connection refused')
+      expect(json.dig(:tournament, :sync_last_push_error)).to eq('connection refused')
     end
   end
 end

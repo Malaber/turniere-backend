@@ -3,10 +3,19 @@
 class TournamentSerializer < SimpleTournamentSerializer
   attributes :description, :playoff_teams_amount,
              :instant_finalists_amount, :intermediate_round_participants_amount
+  attribute :read_only_mode, if: :sync_metadata_visible?
+  attribute :sync_target_url, if: :sync_metadata_visible?
+  attribute :sync_last_push_error, if: :sync_metadata_visible?
+             # NEVER expose sync_auth_token anywhere - it should only ever be written to or checked against
+
   has_many :stages
 
   attribute :timer_end do
     object.timer_end&.iso8601
+  end
+
+  attribute :sync_last_pushed_at, if: :sync_metadata_visible? do
+    object.sync_last_pushed_at&.iso8601
   end
 
   attribute :owner_username do
@@ -22,5 +31,9 @@ class TournamentSerializer < SimpleTournamentSerializer
         advancing_from_group_stage: adv_teams.include?(team)
       }
     end
+  end
+
+  def sync_metadata_visible?
+    scope.present? && scope == object.owner
   end
 end
