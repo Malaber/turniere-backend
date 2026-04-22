@@ -56,7 +56,7 @@ RSpec.describe TournamentSnapshotImporter do
       expect(sync_signature(follower)).to eq(sync_signature(source))
       expect(follower.teams.count).to eq(128)
       expect(follower.stages.where(level: -1).first.groups.count).to eq(32)
-      expect(follower.stages.where('level >= 0').sum { |stage| stage.matches.count }).to eq(63)
+      expect(follower.stages.where('level >= 0').sum { |stage| stage.matches.count }).to eq(64)
       expect(follower.matches.select(&:decider?).count).to eq(source.matches.select(&:decider?).count)
       expect(follower.teams.pluck(:sync_source_id)).to match_array(source.teams.pluck(:id))
       expect(source.teams.pluck(:id) & follower.teams.pluck(:id)).not_to match_array(source.teams.pluck(:id))

@@ -39,6 +39,13 @@ class Match < ApplicationRecord
     finished? ? current_leading_team : nil
   end
 
+  def loser
+    winning_team = winner
+    return nil if winning_team.nil?
+
+    teams.find { |team| team != winning_team }
+  end
+
   def group_match?
     group.present?
   end

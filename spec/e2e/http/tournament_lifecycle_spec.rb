@@ -37,7 +37,7 @@ RSpec.describe 'Tournament lifecycle HTTP E2E' do
     final_attempt = result.dig(:checkpoints, :final_finish_attempted, :finish_attempt)
     expect(final_attempt[:status]).to eq(200)
     expect(result.dig(:checkpoints, :final_finish_attempted, :tournament, :stage_summaries)
-      .find { |stage| stage[:level] == 0 }[:match_states]).to eq(['finished'])
+      .find { |stage| stage[:level] == 0 }[:match_states]).to eq(%w[finished finished])
   end
 
   it 'drives the 3-group intermediate-round path over HTTP through a finished final' do
@@ -58,7 +58,7 @@ RSpec.describe 'Tournament lifecycle HTTP E2E' do
     final_attempt = result.dig(:checkpoints, :final_finish_attempted, :finish_attempt)
     expect(final_attempt[:status]).to eq(200)
     expect(result.dig(:checkpoints, :final_finish_attempted, :tournament, :stage_summaries)
-      .find { |stage| stage[:level] == 0 }[:match_states]).to eq(['finished'])
+      .find { |stage| stage[:level] == 0 }[:match_states]).to eq(%w[finished finished])
   end
 
   {
@@ -126,7 +126,7 @@ RSpec.describe 'Tournament lifecycle HTTP E2E' do
 
       completed_stages = result.dig(:checkpoints, :completed, :stage_summaries)
       final_stage = completed_stages.find { |stage| stage[:level] == 0 }
-      expect(final_stage[:match_states]).to eq(['finished'])
+      expect(final_stage[:match_states]).to eq(team_count > 3 ? %w[finished finished] : ['finished'])
     end
   end
 end
