@@ -82,12 +82,31 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
     expect(tournament_signature(follower)).to eq(tournament_signature(source))
     expect(follower.fetch(:stages).map { |stage| stage.fetch(:level) }).to include(-1, 0, 1)
     expect(synced_team_id_pairs(source: source, follower: follower)).not_to be_empty
+    expect(playoff_token_list(source)).not_to be_nil
+    expect(playoff_token_list(follower)).not_to be_nil
+    expect(playoff_token_list(follower).fetch(:team_action_items).map { |item| item.dig(:team, :name) })
+      .to match_array(playoff_token_list(source).fetch(:team_action_items).map { |item| item.dig(:team, :name) })
 
     follower_group = follower.fetch(:stages).find { |stage| stage.fetch(:level) == -1 }.fetch(:groups).first
     follower_team = follower_group.fetch(:matches).first.fetch(:match_scores).first.fetch(:team)
     locked_team_update = follower_owner_client.patch("/teams/#{follower_team.fetch(:id)}", body: { name: 'Nope' })
     expect(locked_team_update[:status]).to eq(423)
     expect(locked_team_update.dig(:json, :error)).to eq('Tournament is in read only follower mode')
+
+    log_phase!('mark playoff token collected on source and verify follower mirrors it')
+    source_token_item = playoff_token_list(source).fetch(:team_action_items).first
+    source_token_update = source_owner_client.patch("/team_action_items/#{source_token_item.fetch(:id)}", body: { completed: true })
+    expect(source_token_update[:status]).to eq(200)
+
+    source = fetch_tournament(client: source_anonymous_client, tournament_id: source.fetch(:id))
+    follower = wait_for_tournament_sync!(source_tournament_id: source.fetch(:id), follower_tournament_id: follower.fetch(:id))
+    expect(playoff_token_item_completed?(source, team_name: source_token_item.dig(:team, :name))).to eq(true)
+    expect(playoff_token_item_completed?(follower, team_name: source_token_item.dig(:team, :name))).to eq(true)
+
+    follower_token_item = find_team_action_item(follower, team_name: source_token_item.dig(:team, :name))
+    locked_token_update = follower_owner_client.patch("/team_action_items/#{follower_token_item.fetch(:id)}", body: { completed: false })
+    expect(locked_token_update[:status]).to eq(423)
+    expect(locked_token_update.dig(:json, :error)).to eq('Tournament is in read only follower mode')
 
     source_noise.concat(seed_unrelated_tournaments!(client: source_owner_client, prefix: 'Source Playoff Noise', range: 2..4))
     follower_noise.concat(seed_unrelated_tournaments!(client: follower_owner_client, prefix: 'Follower Playoff Noise', range: 2..5))
@@ -392,6 +411,21 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
       intermediate_round_participants_amount: tournament.fetch(:intermediate_round_participants_amount),
       timer_end: tournament[:timer_end],
       teams: tournament.fetch(:teams).map { |team| team.slice(:name, :advancing_from_group_stage) }.sort_by { |team| team.fetch(:name) },
+      team_action_lists: tournament.fetch(:team_action_lists, []).sort_by { |list| list.fetch(:key) }.map do |list|
+        {
+          key: list.fetch(:key),
+          name: list.fetch(:name),
+          action_name: list.fetch(:action_name),
+          source: list.fetch(:source),
+          team_action_items: list.fetch(:team_action_items).map do |item|
+            {
+              team_name: item.dig(:team, :name),
+              completed: item.fetch(:completed),
+              completed_at: item[:completed_at]
+            }
+          end.sort_by { |item| item.fetch(:team_name) }
+        }
+      end,
       stages: tournament.fetch(:stages).sort_by { |stage| stage.fetch(:level) }.map do |stage|
         {
           level: stage.fetch(:level),
@@ -431,5 +465,21 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
     @unique_suffix_counter ||= 0
     @unique_suffix_counter += 1
     "#{SecureRandom.hex(3)}-#{@unique_suffix_counter}"
+  end
+
+  def playoff_token_list(tournament)
+    tournament.fetch(:team_action_lists, []).find do |list|
+      list.fetch(:key) == 'group_stage_survivor_playoff_tokens'
+    end
+  end
+
+  def find_team_action_item(tournament, team_name:)
+    playoff_token_list(tournament).fetch(:team_action_items).find do |item|
+      item.dig(:team, :name) == team_name
+    end
+  end
+
+  def playoff_token_item_completed?(tournament, team_name:)
+    find_team_action_item(tournament, team_name: team_name).fetch(:completed)
   end
 end
