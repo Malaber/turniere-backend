@@ -52,6 +52,22 @@ Examples:
 - `inv docker-test-shard --node-index=3 --node-total=8`
 - `inv docker-test-http-e2e`
 
+## Concurrent Local Testing
+
+If other agents or local runs may already be using shared test resources, do not
+reuse `db/test.sqlite3` or fixed ports for ad-hoc verification.
+
+Prefer isolated per-run resources instead:
+
+- use a unique temporary sqlite database via `DATABASE_URL=sqlite3:/tmp/...`
+- choose open ports automatically or derive unique ports per run
+- keep normal repo tasks as default, but use isolated overrides when avoiding collisions is important
+
+Practical expectation:
+
+- for targeted/spec-specific verification where `inv` does not provide isolation knobs, it is acceptable to run the underlying command with isolated env vars
+- if isolated local verification becomes recurring, add or extend an `inv` task for it
+
 For local E2E-style startup with a usable login, prefer:
 
 - `inv start-local --bootstrap-user`
