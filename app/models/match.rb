@@ -40,9 +40,6 @@ class Match < ApplicationRecord
   end
 
   def loser
-    return nil unless finished?
-    return nil if single_team?
-
     winning_team = winner
     return nil if winning_team.nil?
 
