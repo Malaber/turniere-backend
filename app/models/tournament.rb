@@ -7,6 +7,7 @@ class Tournament < ApplicationRecord
   has_many :teams, dependent: :destroy
   has_many :stages, dependent: :destroy
   has_many :beamers, dependent: :destroy
+  has_many :team_action_lists, dependent: :destroy
 
   validates :name, presence: true
   validates :code, presence: true, uniqueness: true

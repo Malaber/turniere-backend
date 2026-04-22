@@ -17,6 +17,7 @@ Rails.application.routes.draw do
   end
   resources :stages, only: %i[show update]
   resources :teams, only: %i[show update]
+  resources :team_action_items, only: %i[update]
   resources :tournaments do
     resources :statistics, only: %i[index]
     resources :matches, only: %i[index]
