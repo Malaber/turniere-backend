@@ -268,8 +268,40 @@ RSpec.describe GroupStageService do
       )
     end
 
-    it 'keeps shared positions and requests a decider only when an unresolved tie crosses the cutoff' do
+    it 'keeps shared positions and requests a decider when an unresolved tie affects advancing placements' do
       tournament.update!(playoff_teams_amount: 1, instant_finalists_amount: 1, intermediate_round_participants_amount: 0)
+
+      create(:group_match, group: group, state: :finished).tap do |match|
+        create(:match_score, match: match, team: team_a, points: 2)
+        create(:match_score, match: match, team: team_b, points: 2)
+      end
+
+      score_a = create(:group_score, group: group, team: team_a, group_points: 7, scored_points: 4, received_points: 1)
+      score_b = create(:group_score, group: group, team: team_b, group_points: 7, scored_points: 4, received_points: 1)
+      score_c = create(:group_score, group: group, team: team_c, group_points: 3, scored_points: 2, received_points: 3)
+      score_d = create(:group_score, group: group, team: team_d, group_points: 0, scored_points: 1, received_points: 7)
+
+      GroupStageService.send(:recalculate_position_of_group_scores!, [score_a, score_b, score_c, score_d]).each(&:save!)
+
+      expect([score_a.position, score_b.position, score_c.position, score_d.position]).to eq([1, 1, 3, 4])
+      expect(GroupStageService.ranking_decision_for(score_a)).to include(
+        resolved_by: 'tie',
+        direct_comparison_result: 'draw',
+        hidden_points_result: 'not_played',
+        tied: true,
+        needs_decider_match: true
+      )
+      expect(GroupStageService.ranking_decision_for(score_b)).to include(
+        resolved_by: 'tie',
+        direct_comparison_result: 'draw',
+        hidden_points_result: 'not_played',
+        tied: true,
+        needs_decider_match: true
+      )
+    end
+
+    it 'requests a decider when tied teams both advance but their seeding stays unresolved' do
+      tournament.update!(playoff_teams_amount: 2, instant_finalists_amount: 2, intermediate_round_participants_amount: 0)
 
       create(:group_match, group: group, state: :finished).tap do |match|
         create(:match_score, match: match, team: team_a, points: 2)
