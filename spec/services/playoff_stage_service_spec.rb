@@ -75,6 +75,13 @@ RSpec.describe PlayoffStageService do
           expect(stage.level).to eq stage_level
         end
       end
+
+      it "generates correct amount of final-stage matches for #{parameters[:team_size]} teams" do
+        teams = build_list(:team, parameters[:team_size])
+        stages = PlayoffStageService.generate_playoff_stages(teams, false)
+
+        expect(stages.find { |stage| stage.level.zero? }.matches.size).to eq(parameters[:team_size] > 3 ? 2 : 1)
+      end
     end
 
     describe 'number of teams isn\'t a power of two' do
@@ -227,6 +234,43 @@ RSpec.describe PlayoffStageService do
 
       it 'does not treat the group stage as a lower playoff stage' do
         expect(PlayoffStageService.populate_match_below(@final_match)).to eq([])
+      end
+    end
+
+    context 'when semifinal finishes in tournament with third-place match' do
+      before do
+        @tournament = create(:stageless_tournament, teams_count: 4)
+        @tournament.stages = PlayoffStageService.generate_playoff_stages(@tournament.teams, false)
+        @tournament.save!
+        semifinal_stage = @tournament.stages.find { |stage| stage.level == 1 }
+        @semifinal_match = semifinal_stage.matches.find { |match| match.position.zero? }
+        @companion_match = semifinal_stage.matches.find { |match| match.position == 1 }
+
+        [@semifinal_match, @companion_match].each do |match|
+          match.update!(state: :finished)
+          match.match_scores.sort_by(&:id).each_with_index do |match_score, index|
+            match_score.update!(points: index.zero? ? 2 : 1)
+          end
+        end
+
+        @result = PlayoffStageService.populate_match_below(@semifinal_match)
+        @final_stage = @tournament.stages.find { |stage| stage.level.zero? }
+        @final_match = @final_stage.matches.find { |match| match.position.zero? }
+        @third_place_match = @final_stage.matches.find { |match| match.position == 1 }
+      end
+
+      it 'fills final with winners' do
+        expect(@final_match.teams).to match_array([@semifinal_match.winner, @companion_match.winner])
+        expect(@final_match.state).to eq('not_started')
+      end
+
+      it 'fills third-place match with losers' do
+        expect(@third_place_match.teams).to match_array([@semifinal_match.loser, @companion_match.loser])
+        expect(@third_place_match.state).to eq('not_started')
+      end
+
+      it 'returns both changed matches' do
+        expect(@result).to include(@final_match, @third_place_match)
       end
     end
   end

@@ -64,8 +64,7 @@ module TurniereE2E
       checkpoints[:before_final_finish_attempt] = summarize_tournament(tournament)
       return result(session: session, tournament: tournament, checkpoints: checkpoints, stop_at: stop_at) if stop_at == :before_final_finish_attempt
 
-      final_match = final_match_of!(tournament)
-      finish_attempt = play_match!(final_match, winner_name: preferred_playoff_winner_name(final_match))
+      finish_attempt = finish_final_stage_matches!(tournament)
       tournament = fetch_tournament!(tournament.fetch(:id))
       checkpoints[:final_finish_attempted] = {
         finish_attempt: finish_attempt,
@@ -97,8 +96,7 @@ module TurniereE2E
       checkpoints[:before_final_finish_attempt] = summarize_tournament(tournament)
       return result(session: session, tournament: tournament, checkpoints: checkpoints, stop_at: stop_at) if stop_at == :before_final_finish_attempt
 
-      final_match = final_match_of!(tournament)
-      finish_attempt = play_match!(final_match, winner_name: preferred_playoff_winner_name(final_match))
+      finish_attempt = finish_final_stage_matches!(tournament)
       tournament = fetch_tournament!(tournament.fetch(:id))
       checkpoints[:final_finish_attempted] = {
         finish_attempt: finish_attempt,
@@ -340,9 +338,24 @@ module TurniereE2E
       tournament.fetch(:stages).find { |stage| stage.fetch(:level) == -1 } || raise('group stage not found')
     end
 
-    def final_match_of!(tournament)
+    def final_stage_matches_of!(tournament)
       final_stage = tournament.fetch(:stages).find { |stage| stage.fetch(:level) == 0 } || raise('final stage not found')
-      attach_stage_level(final_stage).fetch(:matches).first
+      attach_stage_level(final_stage).fetch(:matches).sort_by { |match| match.fetch(:position) }
+    end
+
+    def final_match_of!(tournament)
+      final_stage_matches_of!(tournament).first
+    end
+
+    def finish_final_stage_matches!(tournament)
+      final_stage_matches_of!(tournament).each do |match|
+        play_match!(match, winner_name: preferred_playoff_winner_name(match))
+      end
+
+      {
+        status: 200,
+        finished_match_ids: final_stage_matches_of!(fetch_tournament!(tournament.fetch(:id))).map { |match| match.fetch(:id) }
+      }
     end
 
     def playoff_matches(tournament)

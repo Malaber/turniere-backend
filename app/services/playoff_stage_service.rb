@@ -16,7 +16,7 @@ class PlayoffStageService
       initial_stage.state = :intermediate_stage unless initial_stage.matches.find(&:single_team?).nil?
       playoffs << initial_stage
       # empty stages are the stages, the tournament is filled with to have the matches ready for later
-      empty_stages = generate_stages_with_empty_matches(stage_count - 1)
+      empty_stages = generate_stages_with_empty_matches(stage_count - 1, teams.size > 3)
       playoffs.concat empty_stages
       playoffs
     end
@@ -25,10 +25,12 @@ class PlayoffStageService
     #
     # @param stage_count [Integer] number of stages to generate
     # @return [Array] the generated stages
-    def generate_stages_with_empty_matches(stage_count)
+    def generate_stages_with_empty_matches(stage_count, include_third_place_match = false)
       empty_stages = []
       stage_count.times do |i|
-        stage = Stage.new level: i, matches: generate_empty_matches(2**i)
+        match_count = 2**i
+        match_count += 1 if include_third_place_match && i.zero?
+        stage = Stage.new level: i, matches: generate_empty_matches(match_count)
         empty_stages << stage
       end
       # as we are generating the stages in the wrong order (starting with the lowest number of matches (which is
@@ -76,33 +78,14 @@ class PlayoffStageService
       # return if next stage does not exist (there are no matches after the finale)
       return [] if next_stage.nil?
 
-      current_position = current_match.position
-
       # a "companion" match is the one that with the selected match makes up the two matches
       # of which the winners advance into the match below
       # depending on the position of the match, the companion match is either on the left or right of it
-      companion_match = find_companion_match(current_position, current_stage)
-
-      match_below = next_stage.matches.find { |m| m.position == current_position / 2 }
-      match_scores = match_below.match_scores.sort_by(&:id)
+      companion_match = find_companion_match(current_match.position, current_stage)
+      return populate_final_stage_matches(current_match, companion_match, next_stage) if semifinal_match?(current_stage, next_stage)
 
       winners = get_winners_of(companion_match, current_match)
-
-      # depending on the amount of match_scores already present we need to do different things
-      match_scores = assign_correct_match_scores!(match_scores, winners)
-
-      # If a match is not decided yet, it will return nil as winner.
-      # This is not allowed in Database. The following code filters out MatchScores that contain nil as team.
-      match_scores = match_scores.select { |ms| ms.team.present? }
-      match_below.match_scores = match_scores
-      match_below.state = if match_below.match_scores.empty? || match_below.match_scores.size == 1
-                            :not_ready
-                          elsif match_below.match_scores.size == 2
-                            :not_started
-                          else
-                            raise 'Unprocessable amount of match_scores found'
-                          end
-      [match_below, match_scores].flatten
+      populate_match!(match: next_stage.matches.find { |m| m.position == current_match.position / 2 }, teams: winners)
     end
 
     private
@@ -135,9 +118,43 @@ class PlayoffStageService
       match_scores
     end
 
+    def populate_match!(match:, teams:)
+      match_scores = match.match_scores.sort_by(&:id)
+      match_scores = assign_correct_match_scores!(match_scores, teams)
+      match_scores = match_scores.select { |ms| ms.team.present? }
+      match.match_scores = match_scores
+      match.state = if match.match_scores.empty? || match.match_scores.size == 1
+                      :not_ready
+                    elsif match.match_scores.size == 2
+                      :not_started
+                    else
+                      raise 'Unprocessable amount of match_scores found'
+                    end
+      [match, match_scores].flatten
+    end
+
     def get_winners_of(companion_match, current_match)
       matches = [current_match, companion_match].sort_by(&:position)
       matches.map(&:winner)
+    end
+
+    def get_losers_of(companion_match, current_match)
+      matches = [current_match, companion_match].sort_by(&:position)
+      matches.map(&:loser)
+    end
+
+    def semifinal_match?(current_stage, next_stage)
+      current_stage.level == 1 && next_stage.level.zero? && next_stage.matches.size > 1
+    end
+
+    def populate_final_stage_matches(current_match, companion_match, next_stage)
+      final_match = next_stage.matches.find { |match| match.position.zero? }
+      third_place_match = next_stage.matches.find { |match| match.position == 1 }
+
+      [
+        populate_match!(match: final_match, teams: get_winners_of(companion_match, current_match)),
+        populate_match!(match: third_place_match, teams: get_losers_of(companion_match, current_match))
+      ].flatten
     end
   end
 end
