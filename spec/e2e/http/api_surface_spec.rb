@@ -2,6 +2,7 @@
 
 require 'spec_helper'
 require 'securerandom'
+require 'time'
 require_relative '../../../e2e/lib/api_client'
 
 RSpec.describe 'Backend API surface HTTP E2E' do
@@ -300,6 +301,47 @@ RSpec.describe 'Backend API surface HTTP E2E' do
     expect(statistics_after.dig(:json, :least_dominant_score, :id)).to be_a(Integer)
   end
 
+  it 'swaps group match positions and keeps upcoming order consistent afterwards' do
+    tournament = create_group_stage_tournament(client: owner_client, public: false, name_prefix: 'Swap Matches')
+    group_stage = tournament.fetch(:stages).find { |stage| stage.fetch(:level) == -1 }
+    group = group_stage.fetch(:groups).min_by { |item| item.fetch(:number) }
+    ordered_matches = group.fetch(:matches).sort_by { |item| item.fetch(:position) }
+    first_match = ordered_matches.fetch(0)
+    second_match = ordered_matches.fetch(1)
+    fourth_match = ordered_matches.fetch(3)
+
+    upcoming_before = owner_client.get("/tournaments/#{tournament.fetch(:id)}/matches", params: { state: 'upcoming' })
+    swap_response = owner_client.patch("/matches/#{first_match.fetch(:id)}/swap", body: {
+                                         other_match_id: fourth_match.fetch(:id)
+                                       })
+    swapped_tournament = fetch_tournament(client: owner_client, tournament_id: tournament.fetch(:id))
+    swapped_group = swapped_tournament.fetch(:stages)
+                                    .find { |stage| stage.fetch(:level) == -1 }
+                                    .fetch(:groups)
+                                    .find { |item| item.fetch(:id) == group.fetch(:id) }
+    swapped_matches = swapped_group.fetch(:matches).sort_by { |item| item.fetch(:position) }
+    upcoming_after_swap = owner_client.get("/tournaments/#{tournament.fetch(:id)}/matches", params: { state: 'upcoming' })
+
+    finish_group_match_with_winner!(match_id: fourth_match.fetch(:id))
+
+    upcoming_after_finish = owner_client.get("/tournaments/#{tournament.fetch(:id)}/matches", params: { state: 'upcoming' })
+
+    expect(upcoming_before[:status]).to eq(200)
+    expect(upcoming_match_for_group(upcoming_before, group_id: group.fetch(:id)).fetch(:id)).to eq(first_match.fetch(:id))
+
+    expect(swap_response[:status]).to eq(200)
+    expect(swap_response[:json].map { |match| match[:id] }).to match_array([first_match.fetch(:id), fourth_match.fetch(:id)])
+
+    expect(swapped_matches.first.fetch(:id)).to eq(fourth_match.fetch(:id))
+    expect(swapped_matches.first.fetch(:position)).to eq(first_match.fetch(:position))
+    expect(swapped_matches.find { |match| match.fetch(:id) == first_match.fetch(:id) }.fetch(:position)).to eq(fourth_match.fetch(:position))
+    expect(upcoming_after_swap[:status]).to eq(200)
+    expect(upcoming_match_for_group(upcoming_after_swap, group_id: group.fetch(:id)).fetch(:id)).to eq(fourth_match.fetch(:id))
+
+    expect(upcoming_after_finish[:status]).to eq(200)
+    expect(upcoming_match_for_group(upcoming_after_finish, group_id: group.fetch(:id)).fetch(:id)).to eq(second_match.fetch(:id))
+  end
+
   def login_client(email:, password:)
     client = TurniereE2E::ApiClient.new(base_url: base_url)
     response = client.login!(email: email, password: password)
@@ -399,6 +441,10 @@ RSpec.describe 'Backend API surface HTTP E2E' do
     tournament.fetch(:stages).sum do |stage|
       stage.fetch(:matches, []).count + stage.fetch(:groups, []).sum { |group| group.fetch(:matches).count }
     end
+  end
+
+  def upcoming_match_for_group(response, group_id:)
+    response.fetch(:json).find { |match| match.dig(:group, :id) == group_id }
   end
 
   def unique_suffix

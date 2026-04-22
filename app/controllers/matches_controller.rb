@@ -1,13 +1,14 @@
 # frozen_string_literal: true
 
 class MatchesController < ApplicationController
-  before_action :set_match, only: %i[show update]
+  before_action :set_match, only: %i[show update swap]
   before_action :set_group, only: %i[create]
   before_action :validate_params, only: %i[update]
-  before_action -> { require_owner! @match.owner }, only: %i[update]
+  before_action :set_swap_target, only: %i[swap]
+  before_action -> { require_owner! @match.owner }, only: %i[update swap]
   before_action -> { require_owner! @group.owner }, only: %i[create]
   before_action :set_tournament, only: %i[index]
-  before_action -> { require_writable_tournament!(@match.tournament) }, only: %i[update]
+  before_action -> { require_writable_tournament!(@match.tournament) }, only: %i[update swap]
   before_action -> { require_writable_tournament!(@group.tournament) }, only: %i[create]
 
   # GET/tournaments/1/matches
@@ -88,6 +89,30 @@ class MatchesController < ApplicationController
     push_sync_if_needed!(synced_tournament) unless synced_tournament.nil?
   end
 
+  # PATCH /matches/1/swap
+  def swap
+    unless @match.swappable_with?(@swap_target)
+      render json: { error: 'Matches must be different group matches from the same group' }, status: :unprocessable_entity
+      return
+    end
+
+    synced_tournament = nil
+
+    Match.transaction do
+      source_position = @match.position
+      target_position = @swap_target.position
+
+      @match.update!(position: target_position)
+      @swap_target.update!(position: source_position)
+
+      synced_tournament = @match.tournament
+    end
+
+    swapped_matches = Match.where(id: [@match.id, @swap_target.id]).order(:position)
+    render json: swapped_matches, each_serializer: ExtendedMatchSerializer, include: %w[match_scores.team bets stage group]
+    push_sync_if_needed!(synced_tournament)
+  end
+
   private
 
   def handle_match_end
@@ -132,6 +157,13 @@ class MatchesController < ApplicationController
 
   def set_tournament
     @tournament = Tournament.find(params[:tournament_id])
+  end
+
+  def set_swap_target
+    @swap_target = Match.find_by(id: params[:other_match_id])
+    return unless @swap_target.nil?
+
+    render json: { error: 'Match not found' }, status: :not_found
   end
 
   def set_group
