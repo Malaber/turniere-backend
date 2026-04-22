@@ -7,6 +7,9 @@ Rails.application.routes.draw do
   }
 
   resources :matches, only: %i[show update] do
+    member do
+      patch :swap
+    end
     resources :bets, only: %i[index create]
   end
   resources :groups, only: %i[show] do

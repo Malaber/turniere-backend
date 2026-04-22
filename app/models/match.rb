@@ -50,6 +50,12 @@ class Match < ApplicationRecord
     group.present?
   end
 
+  def swappable_with?(other_match)
+    return false if other_match.nil?
+
+    group_match? && other_match.group_match? && group_id == other_match.group_id && id != other_match.id
+  end
+
   def scored_points_of(team)
     return 0 if decider?
     return 0 unless (finished? || in_progress?) && teams.include?(team)

@@ -50,6 +50,65 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
     expect(tournament_signature(follower)).to eq(tournament_signature(source))
     expect(synced_team_id_pairs(source: source, follower: follower)).not_to be_empty
 
+    log_phase!('swap matches on leader and verify follower behavior')
+    source_group_stage = source.fetch(:stages).find { |stage| stage.fetch(:level) == -1 }
+    first_source_group = source_group_stage.fetch(:groups).sort_by { |group| group.fetch(:number) }.first
+    second_source_group = source_group_stage.fetch(:groups).sort_by { |group| group.fetch(:number) }[1]
+    first_group_matches = first_source_group.fetch(:matches).sort_by { |match| match.fetch(:position) }
+    first_position_match = first_group_matches.fetch(0)
+    fourth_position_match = first_group_matches.fetch(3)
+    wrong_group_match = second_source_group.fetch(:matches).sort_by { |match| match.fetch(:position) }.first
+    follower_group_stage = follower.fetch(:stages).find { |stage| stage.fetch(:level) == -1 }
+    first_follower_group = follower_group_stage.fetch(:groups).sort_by { |group| group.fetch(:number) }.first
+    follower_first_position_match = first_follower_group.fetch(:matches).find do |match|
+      match_team_names(match) == match_team_names(first_position_match)
+    end
+    follower_fourth_position_match = first_follower_group.fetch(:matches).find do |match|
+      match_team_names(match) == match_team_names(fourth_position_match)
+    end
+
+    leader_swap = source_owner_client.patch("/matches/#{first_position_match.fetch(:id)}/swap", body: {
+                                              other_match_id: fourth_position_match.fetch(:id)
+                                            })
+    expect(leader_swap[:status]).to eq(200)
+    expect(leader_swap[:json].map { |match| match.fetch(:position) }).to match_array([
+      first_position_match.fetch(:position),
+      fourth_position_match.fetch(:position)
+    ])
+    source = fetch_tournament(client: source_anonymous_client, tournament_id: source.fetch(:id))
+    follower = wait_for_tournament_sync!(source_tournament_id: source.fetch(:id), follower_tournament_id: follower.fetch(:id))
+    expect(tournament_signature(follower)).to eq(tournament_signature(source))
+    expect(group_match_positions(source, group_number: first_source_group.fetch(:number))).to eq(
+      group_match_positions(follower, group_number: first_follower_group.fetch(:number))
+    )
+    expect(group_match_positions(source, group_number: first_source_group.fetch(:number)).fetch(match_team_names(first_position_match))).to eq(
+      fourth_position_match.fetch(:position)
+    )
+    expect(group_match_positions(source, group_number: first_source_group.fetch(:number)).fetch(match_team_names(fourth_position_match))).to eq(
+      first_position_match.fetch(:position)
+    )
+
+    follower_before_invalid_swap = tournament_signature(follower)
+    source_before_invalid_swap = tournament_signature(source)
+
+    wrong_group_swap = source_owner_client.patch("/matches/#{first_position_match.fetch(:id)}/swap", body: {
+                                                   other_match_id: wrong_group_match.fetch(:id)
+                                                 })
+    expect(wrong_group_swap[:status]).to eq(422)
+    expect(wrong_group_swap.dig(:json, :error)).to eq('Matches must be different group matches from the same group')
+    source_after_invalid_swap = fetch_tournament(client: source_anonymous_client, tournament_id: source.fetch(:id))
+    follower_after_invalid_swap = fetch_tournament(client: follower_anonymous_client, tournament_id: follower.fetch(:id))
+    expect(tournament_signature(source_after_invalid_swap)).to eq(source_before_invalid_swap)
+    expect(tournament_signature(follower_after_invalid_swap)).to eq(follower_before_invalid_swap)
+
+    follower_swap = follower_owner_client.patch("/matches/#{follower_first_position_match.fetch(:id)}/swap", body: {
+                                                  other_match_id: follower_fourth_position_match.fetch(:id)
+                                                })
+    expect(follower_swap[:status]).to eq(423)
+    expect(follower_swap.dig(:json, :error)).to eq('Tournament is in read only follower mode')
+    follower_after_locked_swap = fetch_tournament(client: follower_anonymous_client, tournament_id: follower.fetch(:id))
+    expect(tournament_signature(follower_after_locked_swap)).to eq(follower_before_invalid_swap)
+
     log_phase!('tighten playoff cutoff and rename teams')
     update_cutoff = source_owner_client.patch("/tournaments/#{source.fetch(:id)}", body: {
                                          playoff_teams_amount: 4,
@@ -425,6 +484,24 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
         }
       end.sort_by { |score| score.fetch(:team_name).to_s }
     }
+  end
+
+  def match_team_names(match)
+    match.fetch(:match_scores)
+         .map { |score| score.dig(:team, :name) }
+         .sort
+         .join(' vs ')
+  end
+
+  def group_match_positions(tournament, group_number:)
+    group = tournament.fetch(:stages)
+                      .find { |stage| stage.fetch(:level) == -1 }
+                      .fetch(:groups)
+                      .find { |candidate| candidate.fetch(:number) == group_number }
+
+    group.fetch(:matches).each_with_object({}) do |match, positions|
+      positions[match_team_names(match)] = match.fetch(:position)
+    end
   end
 
   def unique_suffix

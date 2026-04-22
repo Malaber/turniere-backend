@@ -11,5 +11,9 @@ RSpec.describe MatchesController, type: :routing do
     it 'routes nested group matches to #create' do
       expect(post: '/groups/1/matches').to route_to('matches#create', group_id: '1')
     end
+
+    it 'routes to #swap' do
+      expect(patch: '/matches/1/swap').to route_to('matches#swap', id: '1')
+    end
   end
 end

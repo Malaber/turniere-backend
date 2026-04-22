@@ -96,6 +96,72 @@ RSpec.describe MatchesController, type: :controller do
     end
   end
 
+  describe 'PATCH #swap' do
+    let(:group_stage_tournament) { create(:group_stage_tournament, group_count: 2, match_factory: :filled_group_match) }
+    let(:group_stage) { group_stage_tournament.stages.find_by(level: -1) }
+    let(:first_group) { group_stage.groups.order(:id).first }
+    let(:second_group) { group_stage.groups.order(:id).second }
+    let(:first_match) do
+      first_group.matches.order(:id).first.tap do |match|
+        match.update!(position: 0)
+      end
+    end
+    let(:last_match) do
+      first_group.matches.order(:id).last.tap do |match|
+        match.update!(position: 3)
+      end
+    end
+
+    context 'as owner' do
+      before do
+        apply_authentication_headers_for group_stage_tournament.owner
+      end
+
+      it 'swaps positions of two matches from same group' do
+        original_first_position = first_match.position
+        original_last_position = last_match.position
+
+        patch :swap, params: { id: first_match.to_param, other_match_id: last_match.to_param }
+
+        expect(response).to be_successful
+        expect(first_match.reload.position).to eq(original_last_position)
+        expect(last_match.reload.position).to eq(original_first_position)
+
+        body = deserialize_response(response)
+        expect(body.map { |match| match[:id] }).to match_array([first_match.id, last_match.id])
+        expect(body.map { |match| match[:position] }).to match_array([original_first_position, original_last_position])
+      end
+
+      it 'rejects matches from different groups' do
+        foreign_match = second_group.matches.order(:id).first
+
+        patch :swap, params: { id: first_match.to_param, other_match_id: foreign_match.to_param }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(deserialize_response(response)[:error]).to eq('Matches must be different group matches from the same group')
+      end
+
+      it 'rejects missing swap target' do
+        patch :swap, params: { id: first_match.to_param, other_match_id: Match.maximum(:id).to_i + 1 }
+
+        expect(response).to have_http_status(:not_found)
+        expect(deserialize_response(response)[:error]).to eq('Match not found')
+      end
+    end
+
+    context 'as another user' do
+      before do
+        apply_authentication_headers_for create(:user)
+      end
+
+      it 'renders a forbidden error response' do
+        patch :swap, params: { id: first_match.to_param, other_match_id: last_match.to_param }
+
+        expect(response).to have_http_status(:forbidden)
+      end
+    end
+  end
+
   describe 'POST #update' do
     context 'on a running playoff match' do
       let(:valid_update) do
