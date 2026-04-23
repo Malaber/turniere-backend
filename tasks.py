@@ -49,9 +49,10 @@ BLACKBOX_MAILGUN_API_KEY = "blackbox-test-api-key"
 BLACKBOX_MAILGUN_DOMAIN = "blackbox.example.com"
 SPEC_ROOT = Path("spec")
 E2E_SPEC_ROOT = SPEC_ROOT / "e2e" / "http"
-BUNDLER_VERSION = Path("Gemfile.lock").read_text(encoding="utf-8").split("BUNDLED WITH", 1)[1].strip().splitlines()[-1].strip()
 ROOT = Path(__file__).resolve().parent
 DB_DIR = ROOT / "db"
+GEMFILE_LOCK_PATH = ROOT / "Gemfile.lock"
+BUNDLER_VERSION = GEMFILE_LOCK_PATH.read_text(encoding="utf-8").split("BUNDLED WITH", 1)[1].strip().splitlines()[-1].strip()
 
 
 def _env(**overrides):

@@ -56,6 +56,7 @@ FROM runtime-base AS production
 ENV RAILS_ENV=production
 
 COPY --from=bundle-production /usr/local/bundle /usr/local/bundle
+COPY Gemfile Gemfile.lock /app/
 COPY app /app/app
 COPY bin /app/bin
 COPY config /app/config
@@ -83,6 +84,7 @@ RUN apt-get update -qq \
     && python3 -m pip install --no-cache-dir invoke
 
 COPY --from=bundle-test /usr/local/bundle /usr/local/bundle
+COPY Gemfile Gemfile.lock /app/
 COPY app /app/app
 COPY bin /app/bin
 COPY config /app/config
