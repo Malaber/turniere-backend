@@ -19,6 +19,14 @@ RSpec.describe TeamActionItemsController, type: :controller do
         expect(team_action_item.completed_at).not_to be_nil
       end
 
+      it 'enqueues tournament sync' do
+        allow(TournamentSyncEnqueue).to receive(:call)
+
+        patch :update, params: { id: team_action_item.to_param, completed: true }
+
+        expect(TournamentSyncEnqueue).to have_received(:call).with(team_action_item.tournament)
+      end
+
       it 'can untick item' do
         team_action_item.update!(completed: true, completed_at: Time.zone.parse('2026-04-22T09:00:00Z'))
 

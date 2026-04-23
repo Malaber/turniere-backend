@@ -9,6 +9,7 @@ class TeamActionItemsController < ApplicationController
   # PATCH /team_action_items/1
   def update
     if @team_action_item.update(team_action_item_params)
+      push_sync_if_needed!(@team_action_item.tournament)
       render json: @team_action_item
     else
       render json: @team_action_item.errors, status: :unprocessable_entity
@@ -23,5 +24,9 @@ class TeamActionItemsController < ApplicationController
 
   def team_action_item_params
     params.slice(:completed).permit(:completed)
+  end
+
+  def push_sync_if_needed!(tournament)
+    TournamentSyncEnqueue.call(tournament)
   end
 end
