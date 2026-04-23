@@ -26,6 +26,7 @@ RSpec.describe 'Tournament team action lists websocket HTTP E2E' do
   it 'broadcasts initial and updated team action list state over websocket' do
     tournament = create_group_stage_tournament(name_prefix: 'Ws Leader')
     finish_group_stage_and_create_playoffs!(tournament.fetch(:id))
+    create_team_action_list!(tournament.fetch(:id))
     tournament = fetch_tournament(tournament.fetch(:id))
     token_list = find_playoff_token_list!(tournament)
 
@@ -33,7 +34,7 @@ RSpec.describe 'Tournament team action lists websocket HTTP E2E' do
     cable_client.subscribe_team_action_lists!(tournament_id: tournament.fetch(:id))
 
     initial_payload = cable_client.wait_for_payload!
-    expect(initial_payload.fetch('team_action_lists').first.fetch('key')).to eq('group_stage_survivor_playoff_tokens')
+    expect(initial_payload.fetch('team_action_lists').first.fetch('key')).to eq(playoff_token_list_key)
 
     first_item = token_list.fetch(:team_action_items).first
     second_item = token_list.fetch(:team_action_items)[1]
@@ -49,7 +50,7 @@ RSpec.describe 'Tournament team action lists websocket HTTP E2E' do
     expect(team_action_item_completed?(first_update, team_name: first_item.dig(:team, :name))).to eq(true)
 
     update_by_business_key = client.patch(
-      "/tournaments/#{tournament.fetch(:id)}/team_action_lists/group_stage_survivor_playoff_tokens/teams/#{second_item.dig(:team, :id)}",
+      "/tournaments/#{tournament.fetch(:id)}/team_action_lists/#{playoff_token_list_key}/teams/#{second_item.dig(:team, :id)}",
       body: { completed: true }
     )
     expect(update_by_business_key[:status]).to eq(200)
@@ -113,6 +114,17 @@ RSpec.describe 'Tournament team action lists websocket HTTP E2E' do
     expect(finish_stage[:status]).to eq(200)
   end
 
+  def create_team_action_list!(tournament_id)
+    response = client.post("/tournaments/#{tournament_id}/team_action_lists", body: {
+                             name: 'Playoff token collection',
+                             key: playoff_token_list_key,
+                             action_name: 'Collect playoff token',
+                             source: 'group_stage_survivors'
+                           })
+    expect(response[:status]).to eq(201)
+    response.fetch(:json)
+  end
+
   def play_match!(match_id, first_score:, second_score:)
     match_response = anonymous_client.get("/matches/#{match_id}")
     expect(match_response[:status]).to eq(200)
@@ -142,13 +154,17 @@ RSpec.describe 'Tournament team action lists websocket HTTP E2E' do
 
   def find_playoff_token_list!(tournament)
     tournament.fetch(:team_action_lists).find do |list|
-      list.fetch(:key) == 'group_stage_survivor_playoff_tokens'
+      list.fetch(:key) == playoff_token_list_key
     end || raise('playoff token list missing')
   end
 
   def team_action_item_completed?(payload, team_name:)
-    list = payload.fetch('team_action_lists').find { |candidate| candidate.fetch('key') == 'group_stage_survivor_playoff_tokens' }
+    list = payload.fetch('team_action_lists').find { |candidate| candidate.fetch('key') == playoff_token_list_key }
     item = list.fetch('team_action_items').find { |candidate| candidate.dig('team', 'name') == team_name }
     item.fetch('completed')
+  end
+
+  def playoff_token_list_key
+    'playoff_token_collection'
   end
 end

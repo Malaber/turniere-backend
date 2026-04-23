@@ -63,6 +63,7 @@ RSpec.describe 'Tournament sync test HTTP E2E' do
     )
 
     finish_group_stage_and_create_playoffs!(leader.fetch(:id))
+    create_team_action_list!(leader.fetch(:id))
 
     leader_after_playoffs = fetch_tournament(leader.fetch(:id))
     token_list = find_playoff_token_list!(leader_after_playoffs)
@@ -73,7 +74,7 @@ RSpec.describe 'Tournament sync test HTTP E2E' do
     expect(update_by_item_id[:status]).to eq(200)
 
     update_by_business_key = client.patch(
-      "/tournaments/#{leader.fetch(:id)}/team_action_lists/group_stage_survivor_playoff_tokens/teams/#{second_item.dig(:team, :id)}",
+      "/tournaments/#{leader.fetch(:id)}/team_action_lists/#{playoff_token_list_key}/teams/#{second_item.dig(:team, :id)}",
       body: { completed: true }
     )
     expect(update_by_business_key[:status]).to eq(200)
@@ -94,6 +95,7 @@ RSpec.describe 'Tournament sync test HTTP E2E' do
     leader = create_group_stage_tournament(name_prefix: 'Missing Action Resource Leader')
 
     finish_group_stage_and_create_playoffs!(leader.fetch(:id))
+    create_team_action_list!(leader.fetch(:id))
 
     leader_after_playoffs = fetch_tournament(leader.fetch(:id))
     token_list = find_playoff_token_list!(leader_after_playoffs)
@@ -109,7 +111,7 @@ RSpec.describe 'Tournament sync test HTTP E2E' do
     expect(missing_list_update[:status]).to eq(404)
 
     missing_team_update = client.patch(
-      "/tournaments/#{leader.fetch(:id)}/team_action_lists/group_stage_survivor_playoff_tokens/teams/999999999",
+      "/tournaments/#{leader.fetch(:id)}/team_action_lists/#{playoff_token_list_key}/teams/999999999",
       body: { completed: true }
     )
     expect(missing_team_update[:status]).to eq(404)
@@ -179,6 +181,17 @@ RSpec.describe 'Tournament sync test HTTP E2E' do
     expect(finish_stage[:status]).to eq(200)
   end
 
+  def create_team_action_list!(tournament_id)
+    response = client.post("/tournaments/#{tournament_id}/team_action_lists", body: {
+                             name: 'Playoff token collection',
+                             key: playoff_token_list_key,
+                             action_name: 'Collect playoff token',
+                             source: 'group_stage_survivors'
+                           })
+    expect(response[:status]).to eq(201)
+    response.fetch(:json)
+  end
+
   def play_match!(match_id, first_score:, second_score:)
     match_response = anonymous_client.get("/matches/#{match_id}")
     expect(match_response[:status]).to eq(200)
@@ -198,8 +211,12 @@ RSpec.describe 'Tournament sync test HTTP E2E' do
 
   def find_playoff_token_list!(tournament)
     tournament.fetch(:team_action_lists).find do |list|
-      list.fetch(:key) == 'group_stage_survivor_playoff_tokens'
+      list.fetch(:key) == playoff_token_list_key
     end || raise('playoff token list missing')
+  end
+
+  def playoff_token_list_key
+    'playoff_token_collection'
   end
 
   def playoff_token_item_completed?(tournament, team_name:)
