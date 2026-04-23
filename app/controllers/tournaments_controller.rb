@@ -131,7 +131,7 @@ class TournamentsController < ApplicationController
 
   # GET /tournaments/:id/timer_end
   def timer_end
-    render json: { timer_end: serialize_timer_end(@tournament.timer_end) }
+    render json: serialize_timer_state(@tournament)
   end
 
   # PATCH /tournaments/:id/set_timer_end
@@ -172,11 +172,17 @@ class TournamentsController < ApplicationController
   private
 
   def timer_end_params
-    { timer_end: params[:timer_end] }
+    {
+      timer_end: params[:timer_end],
+      timer_mode: params[:timer_mode]
+    }
   end
 
-  def serialize_timer_end(timer_end)
-    timer_end&.iso8601
+  def serialize_timer_state(tournament)
+    {
+      timer_end: tournament.timer_end&.iso8601,
+      timer_mode: tournament.timer_mode
+    }
   end
 
   def organize_teams_in_groups(teams)
@@ -329,10 +335,31 @@ class TournamentsController < ApplicationController
   def validate_set_timer_end_params
     timer_end = params[:timer_end]
     timer_end_seconds = params[:timer_end_seconds]
+    timer_mode = params[:timer_mode]
+    clear_timer = ActiveModel::Type::Boolean.new.cast(params[:clear_timer])
+
+    if clear_timer
+      if timer_end.present? || timer_end_seconds.present? || timer_mode.present?
+        return render json: { error: 'clear_timer cannot be combined with timer values or timer_mode' },
+                      status: :unprocessable_entity
+      end
+
+      params[:timer_end] = nil
+      params[:timer_mode] = nil
+      return
+    end
+
+    if timer_mode.present? && !%w[countdown countup].include?(timer_mode)
+      return render json: { error: 'Invalid timer_mode' }, status: :unprocessable_entity
+    end
 
     # throw error if both timer_end and timer_end_seconds are present
     if timer_end.present? && timer_end_seconds.present?
       return render json: { error: 'Only one of timer_end or timer_end_seconds is allowed' }, status: :unprocessable_entity
+    end
+
+    if timer_mode == 'countup' && timer_end_seconds.present?
+      return render json: { error: 'timer_end_seconds is only allowed for countdown mode' }, status: :unprocessable_entity
     end
 
     if timer_end_seconds.present?
@@ -346,21 +373,29 @@ class TournamentsController < ApplicationController
 
       parsed_time = Time.zone.now + timer_end_seconds
       params[:timer_end] = parsed_time
+      params[:timer_mode] = 'countdown'
     elsif timer_end.present?
       begin
         parsed_time = Time.zone.parse(timer_end)
         if parsed_time.nil?
-          return render json: { error: 'Invalid datetime format' }, status: :unprocessable_entity
-        elsif !parsed_time.future?
+          return render json: { error: 'Invalid timer_end format' }, status: :unprocessable_entity
+        elsif timer_mode != 'countup' && !parsed_time.future?
           return render json: { error: 'Timer end must be in the future' }, status: :unprocessable_entity
         end
 
         params[:timer_end] = parsed_time
+        params[:timer_mode] = timer_mode.presence || 'countdown'
       rescue ArgumentError
-        return render json: { error: 'Invalid datetime format' }, status: :unprocessable_entity
+        return render json: { error: 'Invalid timer_end format' }, status: :unprocessable_entity
       end
+    elsif timer_mode == 'countup'
+      params[:timer_end] = Time.zone.now
+    elsif timer_mode.present?
+      return render json: { error: 'timer_mode requires timer_end, timer_end_seconds, or clear_timer' },
+                    status: :unprocessable_entity
     else
-      return render json: { error: 'Timer end is required' }, status: :unprocessable_entity
+      return render json: { error: 'timer_end, timer_end_seconds, or clear_timer is required' },
+                    status: :unprocessable_entity
     end
   end
 end

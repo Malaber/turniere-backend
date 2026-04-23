@@ -1125,7 +1125,7 @@ def docker_blackbox_follow_test(
     ]
     full_command = _docker_compose_cmd(project_name=BLACKBOX_FOLLOW_PROJECT, compose_file=BLACKBOX_FOLLOW_COMPOSE_FILE) + command
     print(_format_command(full_command), flush=True)
-    result = _run_subprocess_live(full_command, env=env, check=False)
+    result = _stream_subprocess(full_command, env=env, check=False)
 
     if result.returncode != 0:
         raise subprocess.CalledProcessError(
@@ -1696,6 +1696,7 @@ def blackbox_follow_service(
         spec_path=[
             "spec/e2e/http/tournament_follow_sync_spec.rb",
             "spec/e2e/http/tournament_follow_sync_websocket_spec.rb",
+            "spec/e2e/http/tournament_timer_follow_sync_websocket_spec.rb",
         ],
         extra_env={
             "TURNIERE_SOURCE_E2E_BASE_URL": source_base_url,

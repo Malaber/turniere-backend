@@ -13,6 +13,7 @@ class TournamentSyncSchema
         instant_finalists_amount
         intermediate_round_participants_amount
         timer_end
+        timer_mode
       ].freeze,
       ignored: %w[
         user_id

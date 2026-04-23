@@ -17,31 +17,24 @@ module TurniereE2E
     end
 
     def subscribe_team_action_lists!(tournament_id:)
-      connect!
-      identifier = {
-        channel: 'TournamentTeamActionListsChannel',
-        tournament_id: tournament_id
-      }.to_json
+      subscribe!(channel: 'TournamentTeamActionListsChannel', tournament_id: tournament_id)
+    end
 
-      driver.text(
-        JSON.dump(
-          command: 'subscribe',
-          identifier: identifier
-        )
-      )
-
-      handshake_message = wait_for! do |message|
-        message['type'] == 'confirm_subscription' ||
-          (message['identifier'] == identifier && message['message'].is_a?(Hash))
-      end
-
-      @messages << handshake_message if team_action_lists_payload_message?(handshake_message)
+    def subscribe_timer!(tournament_id:)
+      subscribe!(channel: 'TournamentTimersChannel', tournament_id: tournament_id)
     end
 
     def wait_for_payload!(timeout: 20)
       wait_for!(timeout: timeout) do |message|
         payload = message['message']
         payload.is_a?(Hash) && payload['type'] == 'team_action_lists.updated'
+      end.fetch('message')
+    end
+
+    def wait_for_timer_payload!(timeout: 20)
+      wait_for!(timeout: timeout) do |message|
+        payload = message['message']
+        payload.is_a?(Hash) && payload['type'] == 'timer.updated'
       end.fetch('message')
     end
 
@@ -76,6 +69,28 @@ module TurniereE2E
       @driver.on(:message) { |event| @messages << JSON.parse(event.data) }
       @driver.start
       pump_until_open!
+    end
+
+    def subscribe!(channel:, tournament_id:)
+      connect!
+      identifier = {
+        channel: channel,
+        tournament_id: tournament_id
+      }.to_json
+
+      driver.text(
+        JSON.dump(
+          command: 'subscribe',
+          identifier: identifier
+        )
+      )
+
+      handshake_message = wait_for! do |message|
+        message['type'] == 'confirm_subscription' ||
+          (message['identifier'] == identifier && message['message'].is_a?(Hash))
+      end
+
+      @messages << handshake_message if payload_message?(handshake_message)
     end
 
     def build_socket
@@ -139,9 +154,9 @@ module TurniereE2E
       nil
     end
 
-    def team_action_lists_payload_message?(message)
+    def payload_message?(message)
       payload = message['message']
-      payload.is_a?(Hash) && payload['type'] == 'team_action_lists.updated'
+      payload.is_a?(Hash) && %w[team_action_lists.updated timer.updated].include?(payload['type'])
     end
   end
 end

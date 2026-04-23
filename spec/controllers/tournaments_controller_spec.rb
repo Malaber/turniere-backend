@@ -105,7 +105,7 @@ RSpec.describe TournamentsController, type: :controller do
       expected_keys = %i[
         id name code public description playoff_teams_amount
         instant_finalists_amount intermediate_round_participants_amount
-        timer_end owner_username stages teams team_action_lists
+        timer_end timer_mode owner_username stages teams team_action_lists
       ]
       expect(json.keys).to match_array(expected_keys)
       expect(json[:name]).to eq(@tournament.name)
@@ -221,14 +221,15 @@ RSpec.describe TournamentsController, type: :controller do
   end
 
   describe 'GET #timer_end' do
-    it 'returns timer_end in ISO 8601 format' do
+    it 'returns timer state in ISO 8601 format' do
       timer_end = Time.utc(2026, 4, 13, 18, 0, 0)
-      @tournament.update!(timer_end: timer_end)
+      @tournament.update!(timer_end: timer_end, timer_mode: 'countdown')
 
       get :timer_end, params: { id: @tournament.to_param }
 
       expect(response).to be_successful
       expect(deserialize_response(response)[:timer_end]).to eq(timer_end.iso8601)
+      expect(deserialize_response(response)[:timer_mode]).to eq('countdown')
     end
   end
 
@@ -245,6 +246,37 @@ RSpec.describe TournamentsController, type: :controller do
       expect(response).to be_successful
       expect(@tournament.reload.timer_end.iso8601).to eq(Time.iso8601(timer_end).utc.iso8601)
       expect(deserialize_response(response)[:timer_end]).to eq(@tournament.timer_end.iso8601)
+      expect(deserialize_response(response)[:timer_mode]).to eq('countdown')
+    end
+
+    it 'starts countup timer at current time when timer_mode=countup' do
+      before_request = Time.zone.now
+
+      patch :set_timer_end, params: { id: @tournament.to_param, timer_mode: 'countup' }
+
+      expect(response).to be_successful
+      expect(@tournament.reload.timer_mode).to eq('countup')
+      expect(@tournament.timer_end).to be_between(before_request - 1.second, Time.zone.now + 1.second)
+      expect(deserialize_response(response)[:timer_mode]).to eq('countup')
+    end
+
+    it 'clears timer state when clear_timer=true' do
+      @tournament.update!(timer_end: Time.utc(2030, 4, 13, 18, 0, 0), timer_mode: 'countdown')
+
+      patch :set_timer_end, params: { id: @tournament.to_param, clear_timer: true }
+
+      expect(response).to be_successful
+      expect(@tournament.reload.timer_end).to be_nil
+      expect(@tournament.timer_mode).to be_nil
+      expect(deserialize_response(response)[:timer_end]).to be_nil
+      expect(deserialize_response(response)[:timer_mode]).to be_nil
+    end
+
+    it 'rejects timer_end_seconds for countup mode' do
+      patch :set_timer_end, params: { id: @tournament.to_param, timer_mode: 'countup', timer_end_seconds: 120 }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(deserialize_response(response)[:error]).to eq('timer_end_seconds is only allowed for countdown mode')
     end
   end
 

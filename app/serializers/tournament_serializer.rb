@@ -15,6 +15,8 @@ class TournamentSerializer < SimpleTournamentSerializer
     object.timer_end&.iso8601
   end
 
+  attribute :timer_mode
+
   attribute :sync_last_pushed_at, if: :sync_metadata_visible? do
     object.sync_last_pushed_at&.iso8601
   end
