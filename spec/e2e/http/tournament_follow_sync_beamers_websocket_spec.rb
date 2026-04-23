@@ -6,6 +6,7 @@ require_relative '../../../e2e/lib/api_client'
 require_relative '../../../e2e/lib/action_cable_client'
 
 RSpec.describe 'Tournament follower sync beamer websocket HTTP E2E' do
+  default_beamer_name = 'default'
   required_env_vars = %w[
     TURNIERE_E2E_EMAIL
     TURNIERE_E2E_PASSWORD
@@ -41,7 +42,7 @@ RSpec.describe 'Tournament follower sync beamer websocket HTTP E2E' do
     cable_client.subscribe_beamer!(tournament_id: follower.fetch(:id), beamer_name: follower_default_beamer.fetch(:name))
     cable_client.wait_for_beamer_payload!
 
-    source_default_beamer = fetch_beamer(base_url: source_base_url, tournament_id: source.fetch(:id), beamer_name: Beamer::DEFAULT_NAME)
+    source_default_beamer = fetch_beamer(base_url: source_base_url, tournament_id: source.fetch(:id), beamer_name: default_beamer_name)
     update = source_client.patch("/tournaments/#{source.fetch(:id)}/beamers/#{source_default_beamer.fetch(:id)}", body: {
                                    display_state: 'groups'
                                  })
@@ -52,7 +53,7 @@ RSpec.describe 'Tournament follower sync beamer websocket HTTP E2E' do
       event_type: 'beamer.updated',
       display_state: 'groups'
     )
-    expect(follower_payload.dig('beamer', 'name')).to eq(Beamer::DEFAULT_NAME)
+    expect(follower_payload.dig('beamer', 'name')).to eq(default_beamer_name)
   ensure
     cable_client&.close
   end
@@ -107,8 +108,8 @@ RSpec.describe 'Tournament follower sync beamer websocket HTTP E2E' do
   def wait_for_default_beamer!(tournament_id:, timeout: 20)
     deadline = Time.now + timeout
     loop do
-      beamer = fetch_beamer(base_url: follower_base_url, tournament_id:, beamer_name: Beamer::DEFAULT_NAME)
-      return beamer if beamer.fetch(:name) == Beamer::DEFAULT_NAME
+      beamer = fetch_beamer(base_url: follower_base_url, tournament_id:, beamer_name: default_beamer_name)
+      return beamer if beamer.fetch(:name) == default_beamer_name
 
       raise "follower default beamer not present within #{timeout}s" if Time.now >= deadline
 
