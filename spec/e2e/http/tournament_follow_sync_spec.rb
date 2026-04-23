@@ -93,9 +93,12 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
     expect(locked_team_update[:status]).to eq(423)
     expect(locked_team_update.dig(:json, :error)).to eq('Tournament is in read only follower mode')
 
-    log_phase!('mark playoff token collected on source and verify follower mirrors it')
+    log_phase!('mark playoff token collected on source through business key route and verify follower mirrors it')
     source_token_item = playoff_token_list(source).fetch(:team_action_items).first
-    source_token_update = source_owner_client.patch("/team_action_items/#{source_token_item.fetch(:id)}", body: { completed: true })
+    source_token_update = source_owner_client.patch(
+      "/tournaments/#{source.fetch(:id)}/team_action_lists/group_stage_survivor_playoff_tokens/teams/#{source_token_item.dig(:team, :id)}",
+      body: { completed: true }
+    )
     expect(source_token_update[:status]).to eq(200)
 
     source = fetch_tournament(client: source_anonymous_client, tournament_id: source.fetch(:id))
@@ -104,7 +107,10 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
     expect(playoff_token_item_completed?(follower, team_name: source_token_item.dig(:team, :name))).to eq(true)
 
     follower_token_item = find_team_action_item(follower, team_name: source_token_item.dig(:team, :name))
-    locked_token_update = follower_owner_client.patch("/team_action_items/#{follower_token_item.fetch(:id)}", body: { completed: false })
+    locked_token_update = follower_owner_client.patch(
+      "/tournaments/#{follower.fetch(:id)}/team_action_lists/group_stage_survivor_playoff_tokens/teams/#{follower_token_item.dig(:team, :id)}",
+      body: { completed: false }
+    )
     expect(locked_token_update[:status]).to eq(423)
     expect(locked_token_update.dig(:json, :error)).to eq('Tournament is in read only follower mode')
 

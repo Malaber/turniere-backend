@@ -9,8 +9,10 @@ class TeamActionListsController < ApplicationController
 
   # PATCH /tournaments/:tournament_id/team_action_lists/:key/teams/:team_id
   def update_item
-    if @team_action_item.update(team_action_item_params)
-      push_sync_if_needed!(@tournament)
+    if TeamActionItemUpdate.call(
+      team_action_item: @team_action_item,
+      completed: team_action_item_params.fetch(:completed)
+    )
       render json: @team_action_item
     else
       render json: @team_action_item.errors, status: :unprocessable_entity
@@ -30,9 +32,5 @@ class TeamActionListsController < ApplicationController
 
   def team_action_item_params
     params.slice(:completed).permit(:completed)
-  end
-
-  def push_sync_if_needed!(tournament)
-    TournamentSyncEnqueue.call(tournament)
   end
 end
