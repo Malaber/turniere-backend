@@ -57,6 +57,10 @@ module TurniereE2E
       websocket_url
     end
 
+    def write(data)
+      socket.write(data)
+    end
+
     private
 
     attr_reader :base_url, :socket, :driver
@@ -95,10 +99,6 @@ module TurniereE2E
     def http_origin
       uri = URI.parse(base_url)
       "#{uri.scheme}://#{uri.host}:#{uri.port}"
-    end
-
-    def write(data)
-      socket.write(data)
     end
 
     def pump_until_open!(timeout: 10)
