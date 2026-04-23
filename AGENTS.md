@@ -176,6 +176,7 @@ Practical rule:
 
 For team action lists specifically:
 
+- create lists explicitly through owner-facing HTTP API; do not auto-generate them from stage transitions unless product requirements say so
 - subscribe by tournament id
 - channel name is `TournamentTeamActionListsChannel`
 - broadcast full current list snapshot for that tournament

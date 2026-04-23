@@ -214,7 +214,7 @@ RSpec.describe TournamentsController, type: :controller do
         body = deserialize_response response
 
         expect(body[:team_action_lists].size).to eq(1)
-        expect(body[:team_action_lists].first[:key]).to eq('group_stage_survivor_playoff_tokens')
+        expect(body[:team_action_lists].first[:key]).to eq('playoff_token_collection')
         expect(body[:team_action_lists].first[:team_action_items].first[:completed]).to eq(true)
       end
     end

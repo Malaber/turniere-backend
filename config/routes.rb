@@ -21,6 +21,7 @@ Rails.application.routes.draw do
   resources :teams, only: %i[show update]
   resources :team_action_items, only: %i[update]
   resources :tournaments do
+    resources :team_action_lists, only: %i[create]
     patch 'team_action_lists/:key/teams/:team_id', to: 'team_action_lists#update_item'
     resources :statistics, only: %i[index]
     resources :matches, only: %i[index]
