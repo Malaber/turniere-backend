@@ -49,5 +49,19 @@ RSpec.describe TeamActionItemsController, type: :controller do
         expect(response).to have_http_status(:forbidden)
       end
     end
+
+    context 'when item is missing' do
+      let(:owner) { create(:user) }
+
+      before do
+        apply_authentication_headers_for owner
+      end
+
+      it 'returns not found' do
+        patch :update, params: { id: 999_999_999, completed: true }
+
+        expect(response).to have_http_status(:not_found)
+      end
+    end
   end
 end

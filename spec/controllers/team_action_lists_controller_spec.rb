@@ -70,5 +70,39 @@ RSpec.describe TeamActionListsController, type: :controller do
         expect(response).to have_http_status(:forbidden)
       end
     end
+
+    context 'when list key is missing' do
+      before do
+        apply_authentication_headers_for tournament.owner
+      end
+
+      it 'returns not found' do
+        patch :update_item, params: {
+          tournament_id: tournament.to_param,
+          key: 'unknown_key',
+          team_id: team.to_param,
+          completed: true
+        }
+
+        expect(response).to have_http_status(:not_found)
+      end
+    end
+
+    context 'when team is missing from list context' do
+      before do
+        apply_authentication_headers_for tournament.owner
+      end
+
+      it 'returns not found' do
+        patch :update_item, params: {
+          tournament_id: tournament.to_param,
+          key: list.key,
+          team_id: 999_999_999,
+          completed: true
+        }
+
+        expect(response).to have_http_status(:not_found)
+      end
+    end
   end
 end

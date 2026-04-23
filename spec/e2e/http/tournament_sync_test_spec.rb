@@ -90,6 +90,31 @@ RSpec.describe 'Tournament sync test HTTP E2E' do
     expect(playoff_token_item_completed?(follower_after_update, team_name: second_item.dig(:team, :name))).to eq(true)
   end
 
+  it 'returns 404 for missing team action resources on both update routes' do
+    leader = create_group_stage_tournament(name_prefix: 'Missing Action Resource Leader')
+
+    finish_group_stage_and_create_playoffs!(leader.fetch(:id))
+
+    leader_after_playoffs = fetch_tournament(leader.fetch(:id))
+    token_list = find_playoff_token_list!(leader_after_playoffs)
+    first_item = token_list.fetch(:team_action_items).first
+
+    missing_item_update = client.patch('/team_action_items/999999999', body: { completed: true })
+    expect(missing_item_update[:status]).to eq(404)
+
+    missing_list_update = client.patch(
+      "/tournaments/#{leader.fetch(:id)}/team_action_lists/unknown_key/teams/#{first_item.dig(:team, :id)}",
+      body: { completed: true }
+    )
+    expect(missing_list_update[:status]).to eq(404)
+
+    missing_team_update = client.patch(
+      "/tournaments/#{leader.fetch(:id)}/team_action_lists/group_stage_survivor_playoff_tokens/teams/999999999",
+      body: { completed: true }
+    )
+    expect(missing_team_update[:status]).to eq(404)
+  end
+
   def login_client
     api_client = TurniereE2E::ApiClient.new(base_url: base_url)
     response = api_client.login!(email: owner_email, password: owner_password)
