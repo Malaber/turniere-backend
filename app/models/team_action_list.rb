@@ -9,6 +9,9 @@ class TeamActionList < ApplicationRecord
 
   delegate :owner, to: :tournament
 
+  before_destroy :store_tournament_id_for_broadcast
+  after_commit :broadcast_state_change, on: %i[create update destroy]
+
   def sync_teams!(teams)
     desired_team_ids = teams.map(&:id).uniq
 
@@ -19,5 +22,15 @@ class TeamActionList < ApplicationRecord
         team_action_items.find_or_create_by!(team_id: team_id)
       end
     end
+  end
+
+  private
+
+  def store_tournament_id_for_broadcast
+    @broadcast_tournament_id = tournament_id
+  end
+
+  def broadcast_state_change
+    TeamActionListBroadcast.call(@broadcast_tournament_id || tournament_id)
   end
 end

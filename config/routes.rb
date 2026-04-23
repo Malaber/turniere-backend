@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 Rails.application.routes.draw do
+  mount ActionCable.server => '/cable'
+
   mount_devise_token_auth_for 'User', at: 'users', controllers: {
     registrations: 'overrides/registrations',
     sessions: 'overrides/sessions'

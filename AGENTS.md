@@ -163,6 +163,23 @@ That means:
 - new commonly needed backend states should be added to the scenario/task layer, not recreated ad hoc in each consuming test suite
 - the released production image should be exercised through the blackbox task layer, not only Rails-internal test entrypoints
 
+## Websocket Live Updates
+
+Team-action-list live updates use Rails ActionCable at `/cable`.
+
+Practical rule:
+
+- if a backend feature needs live frontend updates, prefer one shared broadcast path for all mutation sources
+- do not duplicate separate "HTTP update logic" and "websocket update logic"
+- model/service callbacks should fan out websocket broadcasts so normal writes and follower-sync imports both trigger same live update behavior
+
+For team action lists specifically:
+
+- subscribe by tournament id
+- broadcast full current list snapshot for that tournament
+- keep write APIs idempotent and item-scoped
+- cover both direct-app websocket updates and follower-sync websocket propagation in E2E
+
 ## Practical Expectation
 
 If you touch test, verification, boot, Docker, or scenario setup workflows,

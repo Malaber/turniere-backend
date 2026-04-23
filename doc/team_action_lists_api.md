@@ -160,6 +160,71 @@ That means:
 - follower tournament receives updated list state
 - follower users can view but not mutate item state while read-only
 
+## Websocket / Live Update Behavior
+
+Team action lists also support live updates over ActionCable.
+
+Endpoint:
+
+- `GET /cable` for websocket upgrade
+
+Channel:
+
+- `TournamentTeamActionListsChannel`
+
+Subscription identifier example:
+
+```json
+{
+  "channel": "TournamentTeamActionListsChannel",
+  "tournament_id": 123
+}
+```
+
+Behavior:
+
+- subscription immediately receives current full team-action-list snapshot for that tournament
+- later list/item changes broadcast updated full snapshot again
+- same broadcast path is used for:
+  - direct source updates
+  - follower sync imports
+
+Payload shape:
+
+```json
+{
+  "type": "team_action_lists.updated",
+  "tournament_id": 123,
+  "team_action_lists": [
+    {
+      "id": 9,
+      "name": "Playoff token collection",
+      "key": "group_stage_survivor_playoff_tokens",
+      "action_name": "Collect playoff token",
+      "source": "group_stage_survivors",
+      "team_action_items": [
+        {
+          "id": 41,
+          "completed": true,
+          "completed_at": "2026-04-23T09:15:00Z",
+          "team": {
+            "id": 55,
+            "name": "Team A"
+          }
+        }
+      ]
+    }
+  ]
+}
+```
+
+Frontend guidance:
+
+- use websocket payload as replacement snapshot for team-action-list state in that tournament
+- do not merge by toggling local state blindly
+- keep writes item-scoped through HTTP
+- use websocket only for read/live propagation
+
 ## Future Extension Guidance
 
 When new lists are added, frontend should not hardcode backend internals beyond:

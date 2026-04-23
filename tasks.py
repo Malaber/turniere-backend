@@ -414,7 +414,8 @@ def _run_blackbox_rspec(base_url, email, password, username, alt_email=E2E_ALT_E
     )
     if extra_env:
         env.update(extra_env)
-    command = _rspec_command(spec_path)
+    spec_paths = spec_path if isinstance(spec_path, (list, tuple)) else [spec_path]
+    command = _rspec_command(*spec_paths)
     print(_format_command(command), flush=True)
     result = _stream_subprocess(command, env=env, check=False)
 
@@ -1692,7 +1693,10 @@ def blackbox_follow_service(
         alt_email,
         alt_password,
         alt_username,
-        spec_path="spec/e2e/http/tournament_follow_sync_spec.rb",
+        spec_path=[
+            "spec/e2e/http/tournament_follow_sync_spec.rb",
+            "spec/e2e/http/tournament_follow_sync_websocket_spec.rb",
+        ],
         extra_env={
             "TURNIERE_SOURCE_E2E_BASE_URL": source_base_url,
             "TURNIERE_FOLLOWER_E2E_BASE_URL": follower_base_url,
