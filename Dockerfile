@@ -10,7 +10,8 @@ ARG BUNDLER_VERSION
 ENV LANG=C.UTF-8 \
     BUNDLE_JOBS=4 \
     BUNDLE_RETRY=3 \
-    BUNDLE_PATH=/usr/local/bundle
+    BUNDLE_PATH=/app/vendor/bundle \
+    BUNDLE_APP_CONFIG=/app/vendor/bundle
 
 WORKDIR /app
 
@@ -56,6 +57,7 @@ FROM runtime-base AS production
 ENV RAILS_ENV=production
 
 COPY --from=bundle-production /usr/local/bundle /usr/local/bundle
+COPY --from=bundle-production /app/vendor/bundle /app/vendor/bundle
 COPY Gemfile Gemfile.lock /app/
 COPY app /app/app
 COPY bin /app/bin
@@ -84,6 +86,7 @@ RUN apt-get update -qq \
     && python3 -m pip install --no-cache-dir invoke
 
 COPY --from=bundle-test /usr/local/bundle /usr/local/bundle
+COPY --from=bundle-test /app/vendor/bundle /app/vendor/bundle
 COPY Gemfile Gemfile.lock /app/
 COPY app /app/app
 COPY bin /app/bin
