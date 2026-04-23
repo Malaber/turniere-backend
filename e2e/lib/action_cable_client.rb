@@ -30,10 +30,12 @@ module TurniereE2E
         )
       )
 
-      wait_for! do |message|
+      handshake_message = wait_for! do |message|
         message['type'] == 'confirm_subscription' ||
           (message['identifier'] == identifier && message['message'].is_a?(Hash))
       end
+
+      @messages << handshake_message if team_action_lists_payload_message?(handshake_message)
     end
 
     def wait_for_payload!(timeout: 20)
@@ -135,6 +137,11 @@ module TurniereE2E
       driver.parse(chunk)
     rescue EOFError
       nil
+    end
+
+    def team_action_lists_payload_message?(message)
+      payload = message['message']
+      payload.is_a?(Hash) && payload['type'] == 'team_action_lists.updated'
     end
   end
 end
