@@ -17,24 +17,54 @@ module TurniereE2E
     end
 
     def subscribe_team_action_lists!(tournament_id:)
-      subscribe!(channel: 'TournamentTeamActionListsChannel', tournament_id: tournament_id)
+      identifier = {
+        channel: 'TournamentTeamActionListsChannel',
+        tournament_id: tournament_id
+      }.to_json
+
+      subscribe!(identifier:) do |message|
+        team_action_lists_payload_message?(message)
+      end
     end
 
     def subscribe_timer!(tournament_id:)
-      subscribe!(channel: 'TournamentTimersChannel', tournament_id: tournament_id)
+      identifier = {
+        channel: 'TournamentTimersChannel',
+        tournament_id: tournament_id
+      }.to_json
+
+      subscribe!(identifier:) do |message|
+        timer_payload_message?(message)
+      end
+    end
+
+    def subscribe_beamer!(tournament_id:, beamer_name:)
+      identifier = {
+        channel: 'TournamentBeamersChannel',
+        tournament_id: tournament_id,
+        beamer_name: beamer_name
+      }.to_json
+
+      subscribe!(identifier:) do |message|
+        beamer_payload_message?(message)
+      end
     end
 
     def wait_for_payload!(timeout: 20)
       wait_for!(timeout: timeout) do |message|
-        payload = message['message']
-        payload.is_a?(Hash) && payload['type'] == 'team_action_lists.updated'
+        team_action_lists_payload_message?(message)
       end.fetch('message')
     end
 
     def wait_for_timer_payload!(timeout: 20)
       wait_for!(timeout: timeout) do |message|
-        payload = message['message']
-        payload.is_a?(Hash) && payload['type'] == 'timer.updated'
+        timer_payload_message?(message)
+      end.fetch('message')
+    end
+
+    def wait_for_beamer_payload!(timeout: 20)
+      wait_for!(timeout: timeout) do |message|
+        beamer_payload_message?(message)
       end.fetch('message')
     end
 
@@ -60,23 +90,8 @@ module TurniereE2E
 
     attr_reader :base_url, :socket, :driver
 
-    def connect!
-      return unless @driver.nil?
-
-      @socket = build_socket
-      @driver = WebSocket::Driver.client(self, protocols: ACTION_CABLE_PROTOCOLS)
-      @driver.set_header('Origin', http_origin)
-      @driver.on(:message) { |event| @messages << JSON.parse(event.data) }
-      @driver.start
-      pump_until_open!
-    end
-
-    def subscribe!(channel:, tournament_id:)
+    def subscribe!(identifier:)
       connect!
-      identifier = {
-        channel: channel,
-        tournament_id: tournament_id
-      }.to_json
 
       driver.text(
         JSON.dump(
@@ -87,10 +102,21 @@ module TurniereE2E
 
       handshake_message = wait_for! do |message|
         message['type'] == 'confirm_subscription' ||
-          (message['identifier'] == identifier && message['message'].is_a?(Hash))
+          (message['identifier'] == identifier && yield(message))
       end
 
-      @messages << handshake_message if payload_message?(handshake_message)
+      @messages << handshake_message if yield(handshake_message)
+    end
+
+    def connect!
+      return unless @driver.nil?
+
+      @socket = build_socket
+      @driver = WebSocket::Driver.client(self, protocols: ACTION_CABLE_PROTOCOLS)
+      @driver.set_header('Origin', http_origin)
+      @driver.on(:message) { |event| @messages << JSON.parse(event.data) }
+      @driver.start
+      pump_until_open!
     end
 
     def build_socket
@@ -154,9 +180,19 @@ module TurniereE2E
       nil
     end
 
-    def payload_message?(message)
+    def team_action_lists_payload_message?(message)
       payload = message['message']
-      payload.is_a?(Hash) && %w[team_action_lists.updated timer.updated].include?(payload['type'])
+      payload.is_a?(Hash) && payload['type'] == 'team_action_lists.updated'
+    end
+
+    def timer_payload_message?(message)
+      payload = message['message']
+      payload.is_a?(Hash) && payload['type'] == 'timer.updated'
+    end
+
+    def beamer_payload_message?(message)
+      payload = message['message']
+      payload.is_a?(Hash) && payload['type'].to_s.start_with?('beamer.')
     end
   end
 end

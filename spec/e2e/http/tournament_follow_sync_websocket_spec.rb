@@ -37,6 +37,7 @@ RSpec.describe 'Tournament follower sync websocket HTTP E2E' do
     expect(configure_sync[:status]).to eq(200)
 
     finish_group_stage_and_create_playoffs!(source_id: source.fetch(:id))
+    create_team_action_list!(source.fetch(:id))
     follower = wait_for_list_presence!(follower.fetch(:id))
 
     cable_client = TurniereE2E::ActionCableClient.new(base_url: follower_base_url)
@@ -106,6 +107,17 @@ RSpec.describe 'Tournament follower sync websocket HTTP E2E' do
     response.fetch(:json)
   end
 
+  def create_team_action_list!(tournament_id)
+    response = source_client.post("/tournaments/#{tournament_id}/team_action_lists", body: {
+                                    name: 'Playoff token collection',
+                                    key: playoff_token_list_key,
+                                    action_name: 'Collect playoff token',
+                                    source: 'group_stage_survivors'
+                                  })
+    expect(response[:status]).to eq(201)
+    response.fetch(:json)
+  end
+
   def finish_group_stage_and_create_playoffs!(source_id:)
     tournament = fetch_tournament(base_url: source_base_url, tournament_id: source_id)
     group_stage = tournament.fetch(:stages).find { |stage| stage.fetch(:level) == -1 }
@@ -161,13 +173,17 @@ RSpec.describe 'Tournament follower sync websocket HTTP E2E' do
 
   def find_playoff_token_list!(tournament)
     tournament.fetch(:team_action_lists).find do |list|
-      list.fetch(:key) == 'group_stage_survivor_playoff_tokens'
+      list.fetch(:key) == playoff_token_list_key
     end || raise('playoff token list missing')
   end
 
   def team_action_item_completed?(payload, team_name:)
-    list = payload.fetch('team_action_lists').find { |candidate| candidate.fetch('key') == 'group_stage_survivor_playoff_tokens' }
+    list = payload.fetch('team_action_lists').find { |candidate| candidate.fetch('key') == playoff_token_list_key }
     item = list.fetch('team_action_items').find { |candidate| candidate.dig('team', 'name') == team_name }
     item.fetch('completed')
+  end
+
+  def playoff_token_list_key
+    'playoff_token_collection'
   end
 end

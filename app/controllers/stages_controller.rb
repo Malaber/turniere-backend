@@ -65,11 +65,8 @@ class StagesController < ApplicationController
       raise ActiveRecord::Rollback
     end
 
-    return unless AddPlayoffsToTournamentAndSave.call(tournament: @stage.tournament,
-                                                      teams: GroupStageService.get_advancing_teams(@stage)).success?
-
-    TeamActionListService.ensure_group_stage_survivor_playoff_token_list!(@stage.tournament)
-    return
+    return if AddPlayoffsToTournamentAndSave.call(tournament: @stage.tournament,
+                                                  teams: GroupStageService.get_advancing_teams(@stage)).success?
 
     render json: { error: 'Generating group stage failed' }, status: :unprocessable_entity
     raise ActiveRecord::Rollback

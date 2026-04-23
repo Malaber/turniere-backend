@@ -6,6 +6,7 @@ class TeamActionList < ApplicationRecord
 
   validates :name, :key, :action_name, :source, presence: true
   validates :key, uniqueness: { scope: :tournament_id }
+  validates :key, format: { with: /\A[a-z0-9_]+\z/, message: 'may only contain lowercase letters, numbers, and underscores' }
 
   delegate :owner, to: :tournament
 
