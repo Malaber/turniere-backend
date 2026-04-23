@@ -68,7 +68,10 @@ RSpec.describe 'Tournament follower sync beamer websocket HTTP E2E' do
     response = client.post('/tournaments', body: {
                              name: "#{name_prefix} #{SecureRandom.hex(3)}",
                              description: 'Follower beamer websocket source tournament',
-                             public: true
+                             public: true,
+                             teams: 4.times.map do |index|
+                               { name: "#{name_prefix.tr(' ', '')}-S#{index + 1}" }
+                             end
                            })
     expect(response[:status]).to eq(201)
     fetch_tournament(base_url:, tournament_id: response.dig(:json, :id))

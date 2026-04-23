@@ -79,7 +79,10 @@ RSpec.describe 'Tournament beamer websocket HTTP E2E' do
     response = client.post('/tournaments', body: {
                              name: "#{name_prefix} #{SecureRandom.hex(3)}",
                              description: 'Websocket beamer tournament',
-                             public: true
+                             public: true,
+                             teams: 4.times.map do |index|
+                               { name: "#{name_prefix.tr(' ', '')}-S#{index + 1}" }
+                             end
                            })
     expect(response[:status]).to eq(201)
     response.fetch(:json)
