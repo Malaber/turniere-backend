@@ -18,7 +18,8 @@ Backend now uses:
 - `DOCKER_IMAGE_ENVS: "production test"`
 - `DOCKERFILE_PATH: "Dockerfile"`
 - `DOCKER_BUILD_TARGETS: "production=production test=test"`
-- `DOCKER_IMAGE_PLATFORMS: "linux/amd64,linux/arm64"`
+- shared infra template builds amd64 automatically on push pipelines
+- shared infra template builds arm64 manually on branch pipelines and automatically on default-branch pushes
 
 ## turniere-frontend
 
@@ -33,7 +34,7 @@ Frontend can move in two steps.
 Recommended frontend CI change after infra is merged:
 
 - keep `DOCKER_IMAGE_ENVS: "production"`
-- add `DOCKER_IMAGE_PLATFORMS: "linux/amd64,linux/arm64"`
+- no extra platform variable needed if default shared behavior is acceptable
 
 Optional frontend follow-up:
 
@@ -51,7 +52,7 @@ template contract.
 Recommended match CI change after infra is merged:
 
 - keep `DOCKER_IMAGE_ENVS: "production"`
-- add `DOCKER_IMAGE_PLATFORMS: "linux/amd64,linux/arm64"`
+- no extra platform variable needed if default shared behavior is acceptable
 
 Suggested follow-up:
 

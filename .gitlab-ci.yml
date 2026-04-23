@@ -6,7 +6,6 @@ stages:
 
 variables:
   DOCKER_IMAGE_ENVS: "production test"
-  DOCKER_IMAGE_PLATFORMS: "linux/amd64,linux/arm64"
   DOCKERFILE_PATH: "Dockerfile"
   DOCKER_BUILD_TARGETS: "production=production test=test"
 
