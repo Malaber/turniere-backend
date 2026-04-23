@@ -166,6 +166,7 @@ That means:
 ## Websocket Live Updates
 
 Team-action-list live updates use Rails ActionCable at `/cable`.
+This is websocket push from backend to clients, not a webhook callback model.
 
 Practical rule:
 
@@ -176,8 +177,11 @@ Practical rule:
 For team action lists specifically:
 
 - subscribe by tournament id
+- channel name is `TournamentTeamActionListsChannel`
 - broadcast full current list snapshot for that tournament
+- event payload type is `team_action_lists.updated`
 - keep write APIs idempotent and item-scoped
+- keep websocket read-only; item state changes still go through HTTP `PATCH`
 - cover both direct-app websocket updates and follower-sync websocket propagation in E2E
 
 ## Practical Expectation

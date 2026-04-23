@@ -164,6 +164,12 @@ That means:
 
 Team action lists also support live updates over ActionCable.
 
+This is a websocket flow, not a webhook flow.
+
+- backend pushes updates to subscribed clients over websocket
+- frontend does not register callback URLs
+- writes still happen over normal HTTP `PATCH` requests
+
 Endpoint:
 
 - `GET /cable` for websocket upgrade
@@ -188,6 +194,9 @@ Behavior:
 - same broadcast path is used for:
   - direct source updates
   - follower sync imports
+- both write endpoints trigger the same backend update path before broadcast:
+  - `PATCH /team_action_items/:id`
+  - `PATCH /tournaments/:tournament_id/team_action_lists/:key/teams/:team_id`
 
 Payload shape:
 
@@ -224,6 +233,16 @@ Frontend guidance:
 - do not merge by toggling local state blindly
 - keep writes item-scoped through HTTP
 - use websocket only for read/live propagation
+
+Practical frontend pattern:
+
+1. load initial tournament state over HTTP
+2. open websocket subscription for same tournament id
+3. render incoming websocket payload as latest live snapshot
+4. when user checks or unchecks one team, send one idempotent HTTP `PATCH` for that item only
+5. let websocket keep other viewers in sync
+
+This avoids whole-list writebacks and reduces race-condition risk between multiple clients.
 
 ## Future Extension Guidance
 
