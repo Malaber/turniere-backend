@@ -1696,6 +1696,7 @@ def blackbox_follow_service(
         spec_path=[
             "spec/e2e/http/tournament_follow_sync_spec.rb",
             "spec/e2e/http/tournament_follow_sync_websocket_spec.rb",
+            "spec/e2e/http/tournament_follow_sync_beamers_websocket_spec.rb",
         ],
         extra_env={
             "TURNIERE_SOURCE_E2E_BASE_URL": source_base_url,
