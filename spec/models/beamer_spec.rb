@@ -42,4 +42,54 @@ RSpec.describe Beamer, type: :model do
       expect(beamer.owner).to eq(beamer.tournament.owner)
     end
   end
+
+  describe 'live broadcasts' do
+    it 'broadcasts create payload to current beamer stream' do
+      tournament = create(:tournament)
+      payload = nil
+
+      expect(BeamerBroadcast).to receive(:call) do |args|
+        payload = args.fetch(:payload)
+        expect(args.fetch(:tournament_id)).to eq(tournament.id)
+        expect(args.fetch(:beamer_names)).to eq(['projector'])
+      end
+
+      tournament.beamers.create!(name: 'projector', display_state: 'groups')
+
+      expect(payload[:type]).to eq('beamer.created')
+      expect(payload.dig(:beamer, :display_state)).to eq('groups')
+    end
+
+    it 'broadcasts update payload to previous and current beamer names when renamed' do
+      beamer = create(:beamer, name: 'old-name')
+      payload = nil
+
+      expect(BeamerBroadcast).to receive(:call) do |args|
+        payload = args.fetch(:payload)
+        expect(args.fetch(:beamer_names)).to contain_exactly('old-name', 'new-name')
+      end
+
+      beamer.update!(name: 'new-name', display_state: 'during_game')
+
+      expect(payload[:type]).to eq('beamer.updated')
+      expect(payload.dig(:beamer, :name)).to eq('new-name')
+      expect(payload.dig(:beamer, :display_state)).to eq('during_game')
+    end
+
+    it 'broadcasts delete payload with last persisted snapshot' do
+      beamer = create(:beamer, name: 'projector', display_state: 'between_games')
+      payload = nil
+
+      expect(BeamerBroadcast).to receive(:call) do |args|
+        payload = args.fetch(:payload)
+        expect(args.fetch(:beamer_names)).to eq(['projector'])
+      end
+
+      beamer.destroy!
+
+      expect(payload[:type]).to eq('beamer.deleted')
+      expect(payload.dig(:beamer, :name)).to eq('projector')
+      expect(payload.dig(:beamer, :display_state)).to eq('between_games')
+    end
+  end
 end
