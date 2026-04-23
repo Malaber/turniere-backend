@@ -5,76 +5,22 @@ stages:
   - deploy
 
 variables:
-  # Disable the shared image build jobs from turniere-infra; this repo owns buildx builds below.
-  DOCKER_IMAGE_ENVS: ""
-  DOCKER_BUILDKIT: "1"
-  BUILDX_PLATFORMS: "linux/amd64,linux/arm64"
+  DOCKER_IMAGE_ENVS: "production test"
+  DOCKER_IMAGE_PLATFORMS: "linux/amd64,linux/arm64"
+  DOCKERFILE_PATH: "Dockerfile"
+  DOCKER_BUILD_TARGETS: "production=production test=test"
 
 include:
   - project: 'turniere/turniere-infra'
+    ref: 'codex/buildx-multiarch-template'
     file: '/ci/pipeline.yaml'
-
-.buildx-image:
-  stage: build
-  tags:
-    - shell
-  before_script:
-    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
-    - export BUILDX_BUILDER_NAME="turniere-buildx-$CI_PIPELINE_ID-$CI_JOB_ID"
-    - docker buildx create --name "$BUILDX_BUILDER_NAME" --driver docker-container --use
-    - docker buildx inspect --builder "$BUILDX_BUILDER_NAME" --bootstrap
-  after_script:
-    - export BUILDX_BUILDER_NAME="turniere-buildx-$CI_PIPELINE_ID-$CI_JOB_ID"
-    - docker buildx rm "$BUILDX_BUILDER_NAME" || true
-    - docker logout "$CI_REGISTRY" || true
-
-build production image:
-  extends: .buildx-image
-  script:
-    - >-
-      docker buildx build
-      --builder "$BUILDX_BUILDER_NAME"
-      --file Dockerfile
-      --target production
-      --platform "$BUILDX_PLATFORMS"
-      --cache-from "type=registry,ref=$CI_REGISTRY_IMAGE/buildcache:production"
-      --cache-to "type=registry,ref=$CI_REGISTRY_IMAGE/buildcache:production,mode=max"
-      --tag "$CI_REGISTRY_IMAGE/production/commits:$CI_COMMIT_SHA"
-      --push
-      .
-  rules:
-    - if: $CI_PIPELINE_SOURCE != "push"
-      when: never
-    - when: always
-
-build test image:
-  extends: .buildx-image
-  script:
-    - >-
-      docker buildx build
-      --builder "$BUILDX_BUILDER_NAME"
-      --file Dockerfile
-      --target test
-      --platform "$BUILDX_PLATFORMS"
-      --cache-from "type=registry,ref=$CI_REGISTRY_IMAGE/buildcache:production"
-      --cache-from "type=registry,ref=$CI_REGISTRY_IMAGE/buildcache:test"
-      --cache-to "type=registry,ref=$CI_REGISTRY_IMAGE/buildcache:test,mode=max"
-      --tag "$CI_REGISTRY_IMAGE/test/commits:$CI_COMMIT_SHA"
-      --push
-      .
-  rules:
-    - if: $CI_PIPELINE_SOURCE != "push"
-      when: never
-    - when: always
 
 rails spec:
   stage: test
-  needs:
-    - job: build_image
   tags:
     - docker
   needs:
-    - build test image
+    - job: build_image
   image: $CI_REGISTRY_IMAGE/test/commits:$CI_COMMIT_SHA
   parallel:
     matrix:
@@ -101,13 +47,10 @@ rails spec:
 
 rails e2e spec:
   stage: e2e
-  needs:
-    - job: build_image
   tags:
     - docker
   needs:
-    - build production image
-    - build test image
+    - job: build_image
   image: $CI_REGISTRY_IMAGE/test/commits:$CI_COMMIT_SHA
   services:
     - name: postgres:16
@@ -157,13 +100,10 @@ rails e2e spec:
 
 rails follow sync e2e spec:
   stage: e2e
-  needs:
-    - job: build_image
   tags:
     - docker
   needs:
-    - build production image
-    - build test image
+    - job: build_image
   image: $CI_REGISTRY_IMAGE/test/commits:$CI_COMMIT_SHA
   services:
     - name: postgres:16
