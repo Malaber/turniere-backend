@@ -36,7 +36,7 @@ RSpec.describe 'Tournament team action lists websocket HTTP E2E' do
     expect(initial_payload.fetch('team_action_lists').first.fetch('key')).to eq('group_stage_survivor_playoff_tokens')
 
     first_item = token_list.fetch(:team_action_items).first
-    second_item = token_list.fetch(:team_action_items).second
+    second_item = token_list.fetch(:team_action_items)[1]
 
     update_by_item_id = client.patch("/team_action_items/#{first_item.fetch(:id)}", body: { completed: true })
     expect(update_by_item_id[:status]).to eq(200)
