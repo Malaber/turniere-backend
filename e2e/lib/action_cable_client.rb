@@ -17,31 +17,38 @@ module TurniereE2E
     end
 
     def subscribe_team_action_lists!(tournament_id:)
-      connect!
       identifier = {
         channel: 'TournamentTeamActionListsChannel',
         tournament_id: tournament_id
       }.to_json
 
-      driver.text(
-        JSON.dump(
-          command: 'subscribe',
-          identifier: identifier
-        )
-      )
-
-      handshake_message = wait_for! do |message|
-        message['type'] == 'confirm_subscription' ||
-          (message['identifier'] == identifier && message['message'].is_a?(Hash))
+      subscribe!(identifier:) do |message|
+        team_action_lists_payload_message?(message)
       end
+    end
 
-      @messages << handshake_message if team_action_lists_payload_message?(handshake_message)
+    def subscribe_beamer!(tournament_id:, beamer_name:)
+      identifier = {
+        channel: 'TournamentBeamersChannel',
+        tournament_id: tournament_id,
+        beamer_name: beamer_name
+      }.to_json
+
+      subscribe!(identifier:) do |message|
+        beamer_payload_message?(message)
+      end
     end
 
     def wait_for_payload!(timeout: 20)
       wait_for!(timeout: timeout) do |message|
         payload = message['message']
         payload.is_a?(Hash) && payload['type'] == 'team_action_lists.updated'
+      end.fetch('message')
+    end
+
+    def wait_for_beamer_payload!(timeout: 20)
+      wait_for!(timeout: timeout) do |message|
+        beamer_payload_message?(message)
       end.fetch('message')
     end
 
@@ -66,6 +73,24 @@ module TurniereE2E
     private
 
     attr_reader :base_url, :socket, :driver
+
+    def subscribe!(identifier:)
+      connect!
+
+      driver.text(
+        JSON.dump(
+          command: 'subscribe',
+          identifier: identifier
+        )
+      )
+
+      handshake_message = wait_for! do |message|
+        message['type'] == 'confirm_subscription' ||
+          (message['identifier'] == identifier && yield(message))
+      end
+
+      @messages << handshake_message if yield(handshake_message)
+    end
 
     def connect!
       return unless @driver.nil?
@@ -142,6 +167,11 @@ module TurniereE2E
     def team_action_lists_payload_message?(message)
       payload = message['message']
       payload.is_a?(Hash) && payload['type'] == 'team_action_lists.updated'
+    end
+
+    def beamer_payload_message?(message)
+      payload = message['message']
+      payload.is_a?(Hash) && payload['type'].to_s.start_with?('beamer.')
     end
   end
 end
