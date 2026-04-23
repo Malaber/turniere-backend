@@ -6,6 +6,7 @@ class TeamActionListsController < ApplicationController
   before_action -> { require_owner! @tournament.owner }, only: %i[update_item]
   before_action -> { require_writable_tournament!(@tournament) }, only: %i[update_item]
   before_action :set_team_action_item, only: %i[update_item]
+  rescue_from ActiveRecord::RecordNotFound, with: :render_not_found_error
 
   # PATCH /tournaments/:tournament_id/team_action_lists/:key/teams/:team_id
   def update_item

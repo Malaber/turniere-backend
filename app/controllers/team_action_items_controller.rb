@@ -5,6 +5,7 @@ class TeamActionItemsController < ApplicationController
   before_action :authenticate_user!, only: %i[update]
   before_action -> { require_owner! @team_action_item.owner }, only: %i[update]
   before_action -> { require_writable_tournament!(@team_action_item.tournament) }, only: %i[update]
+  rescue_from ActiveRecord::RecordNotFound, with: :render_not_found_error
 
   # PATCH /team_action_items/1
   def update
