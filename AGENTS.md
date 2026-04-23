@@ -52,6 +52,22 @@ Examples:
 - `inv docker-test-shard --node-index=3 --node-total=8`
 - `inv docker-test-http-e2e`
 
+## Concurrent Local Testing
+
+If other agents or local runs may already be using shared test resources, do not
+reuse `db/test.sqlite3` or fixed ports for ad-hoc verification.
+
+Prefer isolated per-run resources instead:
+
+- use a unique temporary sqlite database via `DATABASE_URL=sqlite3:/tmp/...`
+- choose open ports automatically or derive unique ports per run
+- keep normal repo tasks as default, but use isolated overrides when avoiding collisions is important
+
+Practical expectation:
+
+- for targeted/spec-specific verification where `inv` does not provide isolation knobs, it is acceptable to run the underlying command with isolated env vars
+- if isolated local verification becomes recurring, add or extend an `inv` task for it
+
 For local E2E-style startup with a usable login, prefer:
 
 - `inv start-local --bootstrap-user`
@@ -146,6 +162,27 @@ That means:
 - reusable scenario setup should be exposed through `inv` tasks and `script/e2e_scenarios.rb`
 - new commonly needed backend states should be added to the scenario/task layer, not recreated ad hoc in each consuming test suite
 - the released production image should be exercised through the blackbox task layer, not only Rails-internal test entrypoints
+
+## Websocket Live Updates
+
+Team-action-list live updates use Rails ActionCable at `/cable`.
+This is websocket push from backend to clients, not a webhook callback model.
+
+Practical rule:
+
+- if a backend feature needs live frontend updates, prefer one shared broadcast path for all mutation sources
+- do not duplicate separate "HTTP update logic" and "websocket update logic"
+- model/service callbacks should fan out websocket broadcasts so normal writes and follower-sync imports both trigger same live update behavior
+
+For team action lists specifically:
+
+- subscribe by tournament id
+- channel name is `TournamentTeamActionListsChannel`
+- broadcast full current list snapshot for that tournament
+- event payload type is `team_action_lists.updated`
+- keep write APIs idempotent and item-scoped
+- keep websocket read-only; item state changes still go through HTTP `PATCH`
+- cover both direct-app websocket updates and follower-sync websocket propagation in E2E
 
 ## Practical Expectation
 

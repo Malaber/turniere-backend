@@ -105,7 +105,7 @@ RSpec.describe TournamentsController, type: :controller do
       expected_keys = %i[
         id name code public description playoff_teams_amount
         instant_finalists_amount intermediate_round_participants_amount
-        timer_end owner_username stages teams
+        timer_end owner_username stages teams team_action_lists
       ]
       expect(json.keys).to match_array(expected_keys)
       expect(json[:name]).to eq(@tournament.name)
@@ -203,6 +203,19 @@ RSpec.describe TournamentsController, type: :controller do
         # cast json to teams and compare
         advancing_teams = advancing_teams.map { |team| Team.find(team[:id]) }
         expect(advancing_teams).to match_array(expected_advancing_teams)
+      end
+
+      it 'includes team action lists and item status for all viewers' do
+        list = create(:team_action_list, tournament: @group_stage_tournament)
+        create(:team_action_item, team_action_list: list, team: @group_stage_tournament.teams.first, completed: true)
+        allow(GroupStageService).to receive(:get_advancing_teams).and_return([])
+
+        get :show, params: { id: @group_stage_tournament.to_param }
+        body = deserialize_response response
+
+        expect(body[:team_action_lists].size).to eq(1)
+        expect(body[:team_action_lists].first[:key]).to eq('group_stage_survivor_playoff_tokens')
+        expect(body[:team_action_lists].first[:team_action_items].first[:completed]).to eq(true)
       end
     end
   end

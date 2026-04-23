@@ -32,6 +32,8 @@ class TournamentSnapshotImporter
       existing_matches = tournament.matches
       existing_match_scores = existing_matches.flat_map(&:match_scores)
       existing_group_scores = existing_groups.flat_map(&:group_scores)
+      existing_team_action_lists = tournament.team_action_lists.to_a
+      existing_team_action_items = existing_team_action_lists.flat_map(&:team_action_items)
 
       update_tournament!
       teams_by_source_id = sync_teams!
@@ -41,7 +43,11 @@ class TournamentSnapshotImporter
       matches_by_source_id = sync_matches!(stages_by_source_id, groups_by_source_id)
       sync_match_scores!(matches_by_source_id, teams_by_source_id)
       sync_group_scores!(groups_by_source_id, teams_by_source_id)
+      team_action_lists_by_source_id = sync_team_action_lists!
+      sync_team_action_items!(team_action_lists_by_source_id, teams_by_source_id)
 
+      destroy_stale_records(existing_team_action_items, snapshot.fetch(:team_action_items, []))
+      destroy_stale_records(existing_team_action_lists, snapshot.fetch(:team_action_lists, []))
       destroy_stale_records(existing_beamers, snapshot.fetch(:beamers, []))
       destroy_stale_records(existing_group_scores, snapshot.fetch(:group_scores, []))
       destroy_stale_records(existing_match_scores, snapshot.fetch(:match_scores, []))
@@ -159,6 +165,33 @@ class TournamentSnapshotImporter
       group_score.scored_points = attrs.fetch(:scored_points)
       group_score.received_points = attrs.fetch(:received_points)
       group_score.position = attrs.fetch(:position, 0)
+    end
+  end
+
+  def sync_team_action_lists!
+    sync_records(
+      model_class: TeamActionList,
+      existing_records: tournament.team_action_lists.to_a,
+      payload: snapshot.fetch(:team_action_lists, [])
+    ) do |team_action_list, attrs|
+      team_action_list.tournament = tournament
+      team_action_list.name = attrs.fetch(:name)
+      team_action_list.key = attrs.fetch(:key)
+      team_action_list.action_name = attrs.fetch(:action_name)
+      team_action_list.source = attrs.fetch(:source)
+    end
+  end
+
+  def sync_team_action_items!(team_action_lists_by_source_id, teams_by_source_id)
+    sync_records(
+      model_class: TeamActionItem,
+      existing_records: tournament.team_action_lists.flat_map(&:team_action_items),
+      payload: snapshot.fetch(:team_action_items, [])
+    ) do |team_action_item, attrs|
+      team_action_item.team_action_list = team_action_lists_by_source_id.fetch(attrs.fetch(:team_action_list_id))
+      team_action_item.team = teams_by_source_id.fetch(attrs.fetch(:team_id))
+      team_action_item.completed = attrs.fetch(:completed)
+      team_action_item.completed_at = parse_time(attrs[:completed_at])
     end
   end
 

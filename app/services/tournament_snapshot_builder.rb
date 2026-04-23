@@ -9,6 +9,8 @@ class TournamentSnapshotBuilder
   MATCH_ATTRIBUTES = TournamentSyncSchema.synced_columns_for(Match).map(&:to_sym).freeze
   MATCH_SCORE_ATTRIBUTES = TournamentSyncSchema.synced_columns_for(MatchScore).map(&:to_sym).freeze
   GROUP_SCORE_ATTRIBUTES = TournamentSyncSchema.synced_columns_for(GroupScore).map(&:to_sym).freeze
+  TEAM_ACTION_LIST_ATTRIBUTES = TournamentSyncSchema.synced_columns_for(TeamActionList).map(&:to_sym).freeze
+  TEAM_ACTION_ITEM_ATTRIBUTES = TournamentSyncSchema.synced_columns_for(TeamActionItem).map(&:to_sym).freeze
 
   def self.build(tournament)
     new(tournament).build
@@ -29,6 +31,8 @@ class TournamentSnapshotBuilder
     payload[:matches] = matches_payload
     payload[:match_scores] = match_scores_payload
     payload[:group_scores] = group_scores_payload
+    payload[:team_action_lists] = team_action_lists_payload
+    payload[:team_action_items] = team_action_items_payload
     payload
   end
 
@@ -75,6 +79,20 @@ class TournamentSnapshotBuilder
   def group_scores_payload
     tournament.stages.flat_map(&:groups).flat_map(&:group_scores).sort_by(&:id).map do |group_score|
       group_score.attributes.symbolize_keys.slice(*GROUP_SCORE_ATTRIBUTES)
+    end
+  end
+
+  def team_action_lists_payload
+    tournament.team_action_lists.order(:id).map do |team_action_list|
+      team_action_list.attributes.symbolize_keys.slice(*TEAM_ACTION_LIST_ATTRIBUTES)
+    end
+  end
+
+  def team_action_items_payload
+    tournament.team_action_lists.flat_map(&:team_action_items).sort_by(&:id).map do |team_action_item|
+      attrs = team_action_item.attributes.symbolize_keys.slice(*TEAM_ACTION_ITEM_ATTRIBUTES)
+      attrs[:completed_at] = team_action_item.completed_at&.iso8601
+      attrs
     end
   end
 

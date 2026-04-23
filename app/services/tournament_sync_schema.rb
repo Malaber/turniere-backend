@@ -54,6 +54,14 @@ class TournamentSyncSchema
     GroupScore => {
       synced: %w[id group_points scored_points received_points team_id group_id position].freeze,
       ignored: %w[created_at updated_at sync_source_id].freeze
+    }.freeze,
+    TeamActionList => {
+      synced: %w[id name key action_name source].freeze,
+      ignored: %w[tournament_id created_at updated_at sync_source_id].freeze
+    }.freeze,
+    TeamActionItem => {
+      synced: %w[id team_action_list_id team_id completed completed_at].freeze,
+      ignored: %w[created_at updated_at sync_source_id].freeze
     }.freeze
   }.freeze
 

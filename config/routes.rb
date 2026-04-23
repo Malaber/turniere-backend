@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 Rails.application.routes.draw do
+  mount ActionCable.server => '/cable'
+
   mount_devise_token_auth_for 'User', at: 'users', controllers: {
     registrations: 'overrides/registrations',
     sessions: 'overrides/sessions'
@@ -17,7 +19,9 @@ Rails.application.routes.draw do
   end
   resources :stages, only: %i[show update]
   resources :teams, only: %i[show update]
+  resources :team_action_items, only: %i[update]
   resources :tournaments do
+    patch 'team_action_lists/:key/teams/:team_id', to: 'team_action_lists#update_item'
     resources :statistics, only: %i[index]
     resources :matches, only: %i[index]
     resources :beamers, only: %i[index show create update destroy] do

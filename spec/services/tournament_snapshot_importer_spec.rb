@@ -7,6 +7,8 @@ RSpec.describe TournamentSnapshotImporter do
     it 'replaces follower tournament graph using source ids as stable mapping keys' do
       source = create(:group_stage_tournament, group_count: 2, match_factory: :filled_group_match)
       source.beamers.create!(name: 'stream-a', display_state: 'during_game', qr_code_url: 'https://example.com/qr')
+      list = create(:team_action_list, tournament: source)
+      create(:team_action_item, team_action_list: list, team: source.teams.first, completed: true)
       follower = create(:tournament, read_only_mode: true, sync_auth_token: 'shared-secret')
 
       snapshot = TournamentSnapshotBuilder.build(source)
@@ -18,6 +20,8 @@ RSpec.describe TournamentSnapshotImporter do
       expect(follower.name).to eq(source.name)
       expect(follower.teams.count).to eq(snapshot.fetch(:teams).count)
       expect(follower.beamers.count).to eq(snapshot.fetch(:beamers).count)
+      expect(follower.team_action_lists.count).to eq(snapshot.fetch(:team_action_lists).count)
+      expect(follower.team_action_lists.first.team_action_items.count).to eq(snapshot.fetch(:team_action_items).count)
       expect(follower.stages.count).to eq(source.stages.count)
       expect(follower.matches.count).to eq(source.matches.count)
       expect(follower.teams.pluck(:sync_source_id)).to match_array(snapshot.fetch(:teams).map { |team| team.fetch(:id) })
@@ -180,6 +184,21 @@ RSpec.describe TournamentSnapshotImporter do
       intermediate_round_participants_amount: tournament.intermediate_round_participants_amount,
       timer_end: tournament.timer_end&.iso8601,
       teams: tournament.teams.order(:name).map { |team| team.name },
+      team_action_lists: tournament.team_action_lists.order(:key).map do |list|
+        {
+          key: list.key,
+          name: list.name,
+          action_name: list.action_name,
+          source: list.source,
+          items: list.team_action_items.includes(:team).sort_by { |item| item.team.name }.map do |item|
+            {
+              team_name: item.team.name,
+              completed: item.completed,
+              completed_at: item.completed_at&.iso8601
+            }
+          end
+        }
+      end,
       beamers: tournament.beamers.order(:name).map do |beamer|
         beamer.slice(:name, :display_state, :is_default, :qr_code_url, :logo_url).symbolize_keys
       end,

@@ -54,6 +54,42 @@ RSpec.describe 'Tournament sync test HTTP E2E' do
       .to match_array(after_leader.fetch(:teams).map { |team| team.fetch(:name) })
   end
 
+  it 'syncs team action list changes made through item id route and business key route' do
+    follower = create_follower_tournament(name_prefix: 'Sync Action Follower')
+    leader = create_group_stage_tournament(
+      name_prefix: 'Sync Action Leader',
+      sync_target_url: "#{base_url}/tournaments/#{follower.fetch(:id)}/sync_state",
+      sync_auth_token: sync_token
+    )
+
+    finish_group_stage_and_create_playoffs!(leader.fetch(:id))
+
+    leader_after_playoffs = fetch_tournament(leader.fetch(:id))
+    token_list = find_playoff_token_list!(leader_after_playoffs)
+    first_item = token_list.fetch(:team_action_items).first
+    second_item = token_list.fetch(:team_action_items)[1]
+
+    update_by_item_id = client.patch("/team_action_items/#{first_item.fetch(:id)}", body: { completed: true })
+    expect(update_by_item_id[:status]).to eq(200)
+
+    update_by_business_key = client.patch(
+      "/tournaments/#{leader.fetch(:id)}/team_action_lists/group_stage_survivor_playoff_tokens/teams/#{second_item.dig(:team, :id)}",
+      body: { completed: true }
+    )
+    expect(update_by_business_key[:status]).to eq(200)
+
+    test_sync = client.post("/tournaments/#{leader.fetch(:id)}/test_sync")
+    expect(test_sync[:status]).to eq(200)
+
+    leader_after_update = fetch_tournament(leader.fetch(:id))
+    follower_after_update = fetch_tournament(follower.fetch(:id))
+
+    expect(playoff_token_item_completed?(leader_after_update, team_name: first_item.dig(:team, :name))).to eq(true)
+    expect(playoff_token_item_completed?(leader_after_update, team_name: second_item.dig(:team, :name))).to eq(true)
+    expect(playoff_token_item_completed?(follower_after_update, team_name: first_item.dig(:team, :name))).to eq(true)
+    expect(playoff_token_item_completed?(follower_after_update, team_name: second_item.dig(:team, :name))).to eq(true)
+  end
+
   def login_client
     api_client = TurniereE2E::ApiClient.new(base_url: base_url)
     response = api_client.login!(email: owner_email, password: owner_password)
@@ -102,5 +138,48 @@ RSpec.describe 'Tournament sync test HTTP E2E' do
     response = anonymous_client.get("/tournaments/#{tournament_id}")
     expect(response[:status]).to eq(200)
     response.fetch(:json)
+  end
+
+  def finish_group_stage_and_create_playoffs!(tournament_id)
+    tournament = fetch_tournament(tournament_id)
+    group_stage = tournament.fetch(:stages).find { |stage| stage.fetch(:level) == -1 }
+
+    group_stage.fetch(:groups).each do |group|
+      group.fetch(:matches).each_with_index do |match, index|
+        play_match!(match.fetch(:id), first_score: 10 + index, second_score: index)
+      end
+    end
+
+    finish_stage = client.patch("/stages/#{group_stage.fetch(:id)}", body: { state: 'finished' })
+    expect(finish_stage[:status]).to eq(200)
+  end
+
+  def play_match!(match_id, first_score:, second_score:)
+    match_response = anonymous_client.get("/matches/#{match_id}")
+    expect(match_response[:status]).to eq(200)
+
+    start_response = client.patch("/matches/#{match_id}", body: { state: 'in_progress' })
+    expect(start_response[:status]).to eq(200)
+
+    ordered_scores = match_response.fetch(:json).fetch(:match_scores).sort_by { |score| score.fetch(:id) }
+    [first_score, second_score].each_with_index do |points, index|
+      score_update = client.patch("/match_scores/#{ordered_scores[index].fetch(:id)}", body: { points: points })
+      expect(score_update[:status]).to eq(200)
+    end
+
+    finish_response = client.patch("/matches/#{match_id}", body: { state: 'finished' })
+    expect(finish_response[:status]).to eq(200)
+  end
+
+  def find_playoff_token_list!(tournament)
+    tournament.fetch(:team_action_lists).find do |list|
+      list.fetch(:key) == 'group_stage_survivor_playoff_tokens'
+    end || raise('playoff token list missing')
+  end
+
+  def playoff_token_item_completed?(tournament, team_name:)
+    list = find_playoff_token_list!(tournament)
+    item = list.fetch(:team_action_items).find { |candidate| candidate.dig(:team, :name) == team_name }
+    item.fetch(:completed)
   end
 end

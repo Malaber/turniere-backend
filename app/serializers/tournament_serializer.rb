@@ -9,6 +9,7 @@ class TournamentSerializer < SimpleTournamentSerializer
              # NEVER expose sync_auth_token anywhere - it should only ever be written to or checked against
 
   has_many :stages
+  has_many :team_action_lists
 
   attribute :timer_end do
     object.timer_end&.iso8601
