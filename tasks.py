@@ -31,6 +31,9 @@ E2E_ALT_USERNAME = "e2e-alt-user"
 
 PRODUCTION_TAG = "registry.gitlab.com/turniere/turniere-backend/production/commits:local"
 TEST_TAG = "registry.gitlab.com/turniere/turniere-backend/test/commits:local"
+DOCKERFILE_PATH = "Dockerfile"
+PRODUCTION_DOCKER_TARGET = "production"
+TEST_DOCKER_TARGET = "test"
 BLACKBOX_COMPOSE_FILE = "docker-compose.blackbox.yml"
 BLACKBOX_PROJECT = "turniere-blackbox"
 BLACKBOX_FOLLOW_COMPOSE_FILE = "docker-compose.blackbox-follow.yml"
@@ -226,6 +229,31 @@ def _follow_compose_env(
 
 def _format_command(command):
     return " ".join(shlex.quote(part) for part in command)
+
+
+def _docker_build_command(tag, target, platforms=None, push=False):
+    if platforms and "," in str(platforms) and not push:
+        raise ValueError("multi-platform buildx builds require push=True")
+
+    if platforms or push:
+        command = [
+            "docker",
+            "buildx",
+            "build",
+            "--target",
+            target,
+            "-t",
+            tag,
+            "-f",
+            DOCKERFILE_PATH,
+        ]
+        if platforms:
+            command.extend(["--platform", platforms])
+        command.append("--push" if push else "--load")
+        command.append(".")
+        return _format_command(command)
+
+    return f"docker build --target {target} -t {tag} -f {DOCKERFILE_PATH} ."
 
 
 def _rspec_command(*paths):
@@ -814,15 +842,15 @@ def scenario_render_profile(
 
 
 @task(name="docker-build-production")
-def docker_build_production(c, tag=PRODUCTION_TAG):
+def docker_build_production(c, tag=PRODUCTION_TAG, platforms=None, push=False):
     """Build the production Docker image."""
-    c.run(f"docker build -t {tag} -f docker/production/Dockerfile .", pty=True)
+    c.run(_docker_build_command(tag, PRODUCTION_DOCKER_TARGET, platforms=platforms, push=push), pty=True)
 
 
 @task(name="docker-build-test")
-def docker_build_test(c, tag=TEST_TAG):
+def docker_build_test(c, tag=TEST_TAG, platforms=None, push=False):
     """Build the test Docker image."""
-    c.run(f"docker build --build-arg base_commit=local -t {tag} -f docker/test/Dockerfile .", pty=True)
+    c.run(_docker_build_command(tag, TEST_DOCKER_TARGET, platforms=platforms, push=push), pty=True)
 
 
 @task(name="docker-build-all")
