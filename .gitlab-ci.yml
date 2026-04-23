@@ -1,5 +1,6 @@
 stages:
   - build
+  - e2e
   - test
   - deploy
 
@@ -12,6 +13,8 @@ include:
 
 rails spec:
   stage: test
+  needs:
+    - job: build_image
   tags:
     - docker
   image: $CI_REGISTRY_IMAGE/test/commits:$CI_COMMIT_SHA
@@ -39,7 +42,9 @@ rails spec:
     expire_in: 30 days
 
 rails e2e spec:
-  stage: test
+  stage: e2e
+  needs:
+    - job: build_image
   tags:
     - docker
   image: $CI_REGISTRY_IMAGE/test/commits:$CI_COMMIT_SHA
@@ -90,7 +95,9 @@ rails e2e spec:
     - inv blackbox-service
 
 rails follow sync e2e spec:
-  stage: test
+  stage: e2e
+  needs:
+    - job: build_image
   tags:
     - docker
   image: $CI_REGISTRY_IMAGE/test/commits:$CI_COMMIT_SHA
