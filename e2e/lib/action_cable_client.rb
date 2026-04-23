@@ -47,10 +47,14 @@ module TurniereE2E
       return if @closed
 
       @closed = true
-      driver.close
-      socket.close
+      @driver&.close
+      @socket&.close
     rescue IOError, SystemCallError
       nil
+    end
+
+    def url
+      websocket_url
     end
 
     private
@@ -91,10 +95,6 @@ module TurniereE2E
     def http_origin
       uri = URI.parse(base_url)
       "#{uri.scheme}://#{uri.host}:#{uri.port}"
-    end
-
-    def url
-      websocket_url
     end
 
     def write(data)

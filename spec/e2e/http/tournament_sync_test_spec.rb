@@ -67,7 +67,7 @@ RSpec.describe 'Tournament sync test HTTP E2E' do
     leader_after_playoffs = fetch_tournament(leader.fetch(:id))
     token_list = find_playoff_token_list!(leader_after_playoffs)
     first_item = token_list.fetch(:team_action_items).first
-    second_item = token_list.fetch(:team_action_items).second
+    second_item = token_list.fetch(:team_action_items)[1]
 
     update_by_item_id = client.patch("/team_action_items/#{first_item.fetch(:id)}", body: { completed: true })
     expect(update_by_item_id[:status]).to eq(200)
