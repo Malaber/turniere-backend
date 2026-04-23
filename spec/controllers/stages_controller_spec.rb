@@ -201,5 +201,41 @@ RSpec.describe StagesController, type: :controller do
         expect(body[:blocking_ties].first[:team_names]).to eq(%w[A B])
       end
     end
+
+    context 'when tied advancing teams still need a decider to fix playoff seeding' do
+      let(:group_stage) do
+        create(:group_stage, tournament: create(:tournament, teams_count: 0), group_count: 0)
+      end
+
+      before do
+        tournament = group_stage.tournament
+        tournament.update!(playoff_teams_amount: 2, instant_finalists_amount: 2, intermediate_round_participants_amount: 0)
+        group = create(:group, stage: group_stage, match_count: 0, number: 1)
+        group_stage.groups = [group]
+        team_a = create(:team, tournament: tournament, name: 'A')
+        team_b = create(:team, tournament: tournament, name: 'B')
+        create(:group_match, group: group, state: :finished).tap do |match|
+          create(:match_score, match: match, team: team_a, points: 2)
+          create(:match_score, match: match, team: team_b, points: 2)
+        end
+        score_a = create(:group_score, group: group, team: team_a, group_points: 7, scored_points: 4, received_points: 1)
+        score_b = create(:group_score, group: group, team: team_b, group_points: 7, scored_points: 4, received_points: 1)
+        GroupStageService.send(:recalculate_position_of_group_scores!, [score_a, score_b]).each(&:save!)
+
+        apply_authentication_headers_for group_stage.owner
+        put :update, params: { id: group_stage.to_param }.merge(finished)
+      end
+
+      it 'returns unprocessable entity' do
+        expect(response).to have_http_status(:unprocessable_entity)
+      end
+
+      it 'returns a helpful decider error' do
+        body = deserialize_response(response)
+        expect(body[:error]).to eq('Playoffs cannot be generated yet because a decider match is required for an advancing place')
+        expect(body[:blocking_ties].size).to eq(1)
+        expect(body[:blocking_ties].first[:team_names]).to eq(%w[A B])
+      end
+    end
   end
 end

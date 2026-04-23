@@ -1,5 +1,6 @@
 stages:
   - build
+  - e2e
   - test
   - deploy
 
@@ -68,6 +69,8 @@ build test image:
 
 rails spec:
   stage: test
+  needs:
+    - job: build_image
   tags:
     - docker
   needs:
@@ -97,7 +100,9 @@ rails spec:
     expire_in: 30 days
 
 rails e2e spec:
-  stage: test
+  stage: e2e
+  needs:
+    - job: build_image
   tags:
     - docker
   needs:
@@ -151,7 +156,9 @@ rails e2e spec:
     - inv blackbox-service
 
 rails follow sync e2e spec:
-  stage: test
+  stage: e2e
+  needs:
+    - job: build_image
   tags:
     - docker
   needs:

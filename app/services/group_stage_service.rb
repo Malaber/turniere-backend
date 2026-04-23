@@ -224,12 +224,11 @@ class GroupStageService
       nil
     end
 
-    def unresolved_tie_crosses_advancing_cutoff?(sorted_group_scores, group_score, advancing_slots)
+    def unresolved_tie_affects_advancing_placements?(sorted_group_scores, group_score, advancing_slots)
       return false if advancing_slots.zero?
 
       cluster = tie_cluster_for(sorted_group_scores, group_score)
-      occupied_slots = (cluster[:start_index] + 1)..(cluster[:end_index] + 1)
-      occupied_slots.begin <= advancing_slots && occupied_slots.end > advancing_slots
+      cluster[:start_index] < advancing_slots
     end
 
     def tie_cluster_for(sorted_group_scores, group_score)
@@ -298,7 +297,7 @@ class GroupStageService
           tied: comparison_reason[:tied],
           needs_decider_match: group_ready_for_decider_check &&
             comparison_reason[:tied] &&
-            unresolved_tie_crosses_advancing_cutoff?(sorted_group_scores, group_score, advancing_slots)
+            unresolved_tie_affects_advancing_placements?(sorted_group_scores, group_score, advancing_slots)
         }
       end
 
