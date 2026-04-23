@@ -4,8 +4,8 @@ FactoryBot.define do
   factory :team_action_list do
     tournament
     name { 'Playoff token collection' }
-    key { 'group_stage_survivor_playoff_tokens' }
+    key { 'playoff_token_collection' }
     action_name { 'Collect playoff token' }
-    source { 'group_stage_survivors' }
+    source { 'all_tournament_teams' }
   end
 end

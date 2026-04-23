@@ -1,34 +1,48 @@
 # frozen_string_literal: true
 
 class TeamActionListService
-  GROUP_STAGE_SURVIVOR_PLAYOFF_TOKEN_KEY = 'group_stage_survivor_playoff_tokens'
+  SUPPORTED_SOURCES = %w[all_tournament_teams group_stage_survivors].freeze
+
+  class InvalidSourceError < StandardError; end
+  class EmptySourceError < StandardError; end
 
   class << self
-    def ensure_group_stage_survivor_playoff_token_list!(tournament)
-      group_stage = tournament.group_stage
-      return nil unless group_stage&.finished?
+    def create!(tournament:, name:, key:, action_name:, source:)
+      teams = teams_for_source!(tournament:, source:)
+      raise EmptySourceError, "Source #{source} does not currently contain any teams" if teams.empty?
 
-      teams = tournament.teams_advancing_from_group_stage
-      return nil if teams.empty?
+      list = nil
+      TeamActionList.transaction do
+        list = tournament.team_action_lists.new(
+          name:,
+          key:,
+          action_name:,
+          source:
+        )
+        list.save!
+        list.sync_teams!(teams)
+      end
 
-      ensure_list!(
-        tournament: tournament,
-        key: GROUP_STAGE_SURVIVOR_PLAYOFF_TOKEN_KEY,
-        name: 'Playoff token collection',
-        action_name: 'Collect playoff token',
-        source: 'group_stage_survivors',
-        teams: teams
-      )
+      TournamentSyncEnqueue.call(tournament)
+      list
     end
 
-    def ensure_list!(tournament:, key:, name:, action_name:, source:, teams:)
-      list = tournament.team_action_lists.find_or_initialize_by(key: key)
-      list.name = name
-      list.action_name = action_name
-      list.source = source
-      list.save!
-      list.sync_teams!(teams)
-      list
+    def source_keys
+      SUPPORTED_SOURCES
+    end
+
+    def teams_for_source!(tournament:, source:)
+      case source
+      when 'all_tournament_teams'
+        tournament.teams.to_a
+      when 'group_stage_survivors'
+        group_stage = tournament.group_stage
+        return [] unless group_stage&.finished?
+
+        tournament.teams_advancing_from_group_stage
+      else
+        raise InvalidSourceError, "Unsupported team action list source: #{source}"
+      end
     end
   end
 end

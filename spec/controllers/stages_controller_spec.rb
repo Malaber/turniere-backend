@@ -92,14 +92,9 @@ RSpec.describe StagesController, type: :controller do
             .to match_array(GroupStageService.get_advancing_teams(running_group_stage))
         end
 
-        it 'creates playoff token collection list for advancing teams' do
+        it 'does not auto-create team action lists' do
           tournament = running_group_stage.tournament.reload
-          list = tournament.team_action_lists.find_by!(key: TeamActionListService::GROUP_STAGE_SURVIVOR_PLAYOFF_TOKEN_KEY)
-
-          expect(list.name).to eq('Playoff token collection')
-          expect(list.team_action_items.includes(:team).map(&:team))
-            .to match_array(GroupStageService.get_advancing_teams(running_group_stage))
-          expect(list.team_action_items.pluck(:completed).uniq).to eq([false])
+          expect(tournament.team_action_lists).to be_empty
         end
       end
 
