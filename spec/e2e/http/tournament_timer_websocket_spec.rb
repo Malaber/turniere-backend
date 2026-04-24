@@ -32,19 +32,19 @@ RSpec.describe 'Tournament timer websocket HTTP E2E' do
     expect(initial_payload.fetch('timestamp')).to be_nil
     expect(initial_payload.fetch('timer_mode')).to be_nil
 
-    countdown = client.patch("/tournaments/#{tournament.fetch(:id)}/set_timer_end", body: { timestamp_seconds: 120 })
+    countdown = client.patch("/tournaments/#{tournament.fetch(:id)}/timer", body: { timestamp_seconds: 120 })
     expect(countdown[:status]).to eq(200)
 
     countdown_payload = wait_for_timer_state!(cable_client, timer_mode: 'countdown')
     expect(countdown_payload.fetch('timestamp')).to eq(countdown.dig(:json, :timestamp))
 
-    countup = client.patch("/tournaments/#{tournament.fetch(:id)}/set_timer_end", body: { timer_mode: 'countup' })
+    countup = client.patch("/tournaments/#{tournament.fetch(:id)}/timer", body: { timer_mode: 'countup' })
     expect(countup[:status]).to eq(200)
 
     countup_payload = wait_for_timer_state!(cable_client, timer_mode: 'countup')
     expect(countup_payload.fetch('timestamp')).to eq(countup.dig(:json, :timestamp))
 
-    clear = client.patch("/tournaments/#{tournament.fetch(:id)}/set_timer_end", body: { clear_timer: true })
+    clear = client.patch("/tournaments/#{tournament.fetch(:id)}/timer", body: { clear_timer: true })
     expect(clear[:status]).to eq(200)
 
     cleared_payload = wait_for_timer_state!(cable_client, timer_mode: nil)

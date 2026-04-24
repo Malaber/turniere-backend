@@ -12,15 +12,15 @@ class TournamentsController < ApplicationController
   end
 
   before_action :set_tournament_for_show, only: %i[show]
-  before_action :set_tournament, only: %i[update destroy set_timer_end timer_end sync_state test_sync]
-  before_action :authenticate_user!, only: %i[create update destroy set_timer_end test_sync]
-  before_action -> { require_owner! @tournament.owner }, only: %i[update destroy set_timer_end test_sync]
+  before_action :set_tournament, only: %i[update destroy set_timer timer sync_state test_sync]
+  before_action :authenticate_user!, only: %i[create update destroy set_timer test_sync]
+  before_action -> { require_owner! @tournament.owner }, only: %i[update destroy set_timer test_sync]
   before_action :validate_create_params, only: %i[create]
   before_action :validate_update_params, only: %i[update]
-  before_action :validate_set_timer_end_params, only: %i[set_timer_end]
+  before_action :validate_set_timer_params, only: %i[set_timer]
   before_action :ensure_update_allowed!, only: %i[update]
   before_action :ensure_destroy_allowed!, only: %i[destroy]
-  before_action :ensure_timer_update_allowed!, only: %i[set_timer_end]
+  before_action :ensure_timer_update_allowed!, only: %i[set_timer]
   before_action :authorize_sync_request!, only: %i[sync_state]
   rescue_from ActiveRecord::RecordNotFound, with: :render_not_found_error
 
@@ -129,14 +129,14 @@ class TournamentsController < ApplicationController
     @tournament.destroy
   end
 
-  # GET /tournaments/:id/timer_end
-  def timer_end
+  # GET /tournaments/:id/timer
+  def timer
     render json: serialize_timer_state(@tournament)
   end
 
-  # PATCH /tournaments/:id/set_timer_end
-  def set_timer_end
-    if @tournament.update(timer_end_params)
+  # PATCH /tournaments/:id/timer
+  def set_timer
+    if @tournament.update(timer_params)
       push_sync_if_needed!(@tournament)
       render json: @tournament
     else
@@ -171,9 +171,9 @@ class TournamentsController < ApplicationController
 
   private
 
-  def timer_end_params
+  def timer_params
     {
-      timer_end: params[:timer_end] || params[:timestamp],
+      timer_end: params[:timer_end],
       timer_mode: params[:timer_mode]
     }
   end
@@ -332,14 +332,11 @@ class TournamentsController < ApplicationController
     TournamentSyncEnqueue.call(tournament)
   end
 
-  def validate_set_timer_end_params
+  def validate_set_timer_params
     timestamp = params[:timestamp]
     timestamp_seconds = params[:timestamp_seconds]
     timer_mode = params[:timer_mode]
     clear_timer = ActiveModel::Type::Boolean.new.cast(params[:clear_timer])
-
-    timestamp = params[:timer_end] if timestamp.blank? && params[:timer_end].present?
-    timestamp_seconds = params[:timer_end_seconds] if timestamp_seconds.blank? && params[:timer_end_seconds].present?
 
     if clear_timer
       if timestamp.present? || timestamp_seconds.present? || timer_mode.present?

@@ -220,12 +220,12 @@ RSpec.describe TournamentsController, type: :controller do
     end
   end
 
-  describe 'GET #timer_end' do
+  describe 'GET #timer' do
     it 'returns timer state in ISO 8601 format' do
       timer_end = Time.utc(2026, 4, 13, 18, 0, 0)
       @tournament.update!(timer_end: timer_end, timer_mode: 'countdown')
 
-      get :timer_end, params: { id: @tournament.to_param }
+      get :timer, params: { id: @tournament.to_param }
 
       expect(response).to be_successful
       expect(deserialize_response(response)[:timestamp]).to eq(timer_end.iso8601)
@@ -233,7 +233,7 @@ RSpec.describe TournamentsController, type: :controller do
     end
   end
 
-  describe 'PATCH #set_timer_end' do
+  describe 'PATCH #set_timer' do
     before(:each) do
       apply_authentication_headers_for @user
     end
@@ -241,7 +241,7 @@ RSpec.describe TournamentsController, type: :controller do
     it 'stores timezone-aware timestamp values without shifting them' do
       timestamp = '2030-04-13T18:00:00+02:00'
 
-      patch :set_timer_end, params: { id: @tournament.to_param, timestamp: timestamp }
+      patch :set_timer, params: { id: @tournament.to_param, timestamp: timestamp }
 
       expect(response).to be_successful
       expect(@tournament.reload.timer_end.iso8601).to eq(Time.iso8601(timestamp).utc.iso8601)
@@ -252,7 +252,7 @@ RSpec.describe TournamentsController, type: :controller do
     it 'starts countup timer at current time when timer_mode=countup' do
       before_request = Time.zone.now
 
-      patch :set_timer_end, params: { id: @tournament.to_param, timer_mode: 'countup' }
+      patch :set_timer, params: { id: @tournament.to_param, timer_mode: 'countup' }
 
       expect(response).to be_successful
       expect(@tournament.reload.timer_mode).to eq('countup')
@@ -263,7 +263,7 @@ RSpec.describe TournamentsController, type: :controller do
     it 'clears timer state when clear_timer=true' do
       @tournament.update!(timer_end: Time.utc(2030, 4, 13, 18, 0, 0), timer_mode: 'countdown')
 
-      patch :set_timer_end, params: { id: @tournament.to_param, clear_timer: true }
+      patch :set_timer, params: { id: @tournament.to_param, clear_timer: true }
 
       expect(response).to be_successful
       expect(@tournament.reload.timer_end).to be_nil
@@ -273,7 +273,7 @@ RSpec.describe TournamentsController, type: :controller do
     end
 
     it 'rejects timestamp_seconds for countup mode' do
-      patch :set_timer_end, params: { id: @tournament.to_param, timer_mode: 'countup', timestamp_seconds: 120 }
+      patch :set_timer, params: { id: @tournament.to_param, timer_mode: 'countup', timestamp_seconds: 120 }
 
       expect(response).to have_http_status(:unprocessable_entity)
       expect(deserialize_response(response)[:error]).to eq('timestamp_seconds is only allowed for countdown mode')
@@ -742,7 +742,7 @@ RSpec.describe TournamentsController, type: :controller do
           playoff_teams_amount: 4,
           instant_finalists_amount: 4,
           intermediate_round_participants_amount: 0,
-          timer_end: nil,
+          timestamp: nil,
           teams: [{ id: 7, name: 'Alpha' }],
           stages: [],
           groups: [],

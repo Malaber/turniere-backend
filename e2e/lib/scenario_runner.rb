@@ -29,7 +29,7 @@ module TurniereE2E
       }
 
       timer_response = patch!(
-        "/tournaments/#{tournament.fetch(:id)}/set_timer_end",
+        "/tournaments/#{tournament.fetch(:id)}/timer",
         body: { timestamp_seconds: 600 }
       )
       checkpoints[:timer_set] = { timestamp: timer_response.fetch(:timestamp) }

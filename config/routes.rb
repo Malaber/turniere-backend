@@ -31,8 +31,8 @@ Rails.application.routes.draw do
       end
     end
     member do
-      get :timer_end
-      patch :set_timer_end
+      get :timer
+      patch :timer, action: :set_timer
       patch :sync_state
       post :test_sync
     end

@@ -125,21 +125,21 @@ RSpec.describe 'Backend API surface HTTP E2E' do
     forbidden_update = other_client.patch("/tournaments/#{tournament.fetch(:id)}", body: { name: 'Not Allowed' })
     unauthenticated_update = anonymous_client.patch("/tournaments/#{tournament.fetch(:id)}", body: { name: 'No Auth' })
 
-    timer_seconds = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/set_timer_end", body: { timestamp_seconds: 120 })
-    timer_show = anonymous_client.get("/tournaments/#{tournament.fetch(:id)}/timer_end")
-    timer_countup = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/set_timer_end", body: { timer_mode: 'countup' })
-    timer_clear = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/set_timer_end", body: { clear_timer: true })
-    timer_double = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/set_timer_end", body: {
+    timer_seconds = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/timer", body: { timestamp_seconds: 120 })
+    timer_show = anonymous_client.get("/tournaments/#{tournament.fetch(:id)}/timer")
+    timer_countup = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/timer", body: { timer_mode: 'countup' })
+    timer_clear = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/timer", body: { clear_timer: true })
+    timer_double = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/timer", body: {
                                         timestamp_seconds: 120,
                                         timestamp: (Time.now.utc + 240).iso8601
                                       })
-    timer_invalid_seconds = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/set_timer_end", body: { timestamp_seconds: 'nope' })
-    timer_past = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/set_timer_end", body: { timestamp_seconds: 0 })
-    timer_countup_seconds = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/set_timer_end", body: {
+    timer_invalid_seconds = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/timer", body: { timestamp_seconds: 'nope' })
+    timer_past = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/timer", body: { timestamp_seconds: 0 })
+    timer_countup_seconds = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/timer", body: {
                                                  timer_mode: 'countup',
                                                  timestamp_seconds: 60
                                                })
-    timer_forbidden = other_client.patch("/tournaments/#{tournament.fetch(:id)}/set_timer_end", body: { timestamp_seconds: 60 })
+    timer_forbidden = other_client.patch("/tournaments/#{tournament.fetch(:id)}/timer", body: { timestamp_seconds: 60 })
 
     destroy_response = owner_client.delete("/tournaments/#{tournament.fetch(:id)}")
     after_destroy = anonymous_client.get("/tournaments/#{tournament.fetch(:id)}")

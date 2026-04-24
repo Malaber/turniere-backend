@@ -24,7 +24,7 @@ Timer state is available in normal tournament payload:
 
 Dedicated timer endpoint also exists:
 
-- `GET /tournaments/:id/timer_end`
+- `GET /tournaments/:id/timer`
 
 Response shape:
 
@@ -95,10 +95,7 @@ Follower tournaments in `read_only_mode` reject writes with `423`.
 
 Endpoint:
 
-- `PATCH /tournaments/:id/set_timer_end`
-
-Current route name still says `set_timer_end`.
-Payload field name is now `timestamp`.
+- `PATCH /tournaments/:id/timer`
 
 ### Start countdown by duration
 
