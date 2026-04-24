@@ -6,8 +6,8 @@ class TournamentMatchesBroadcastPayload
       {
         type: 'tournament_matches.updated',
         tournament_id: tournament.id,
-        state: state,
-        matches: TournamentMatchesPayload.build(tournament, state: state)
+        state:,
+        matches: TournamentMatchesPayload.build(tournament, state:)
       }
     end
   end

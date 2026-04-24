@@ -7,7 +7,7 @@ class TournamentPayload
         tournament,
         serializer: TournamentSerializer,
         include: '**',
-        scope: scope
+        scope:
       ).as_json
     end
   end

@@ -3,7 +3,7 @@
 class TournamentMatchesPayload
   class << self
     def build(tournament, state: nil)
-      serialized_matches(matches_for(tournament, state: state))
+      serialized_matches(matches_for(tournament, state:))
     end
 
     def matches_for(tournament, state: nil)
@@ -16,22 +16,33 @@ class TournamentMatchesPayload
     private
 
     def upcoming_matches_for(tournament)
+      upcoming_group_matches(tournament).presence || upcoming_playoff_matches(tournament)
+    end
+
+    def upcoming_group_matches(tournament)
       group_stage = tournament.stages.find { |stage| stage.level == -1 }
-      group_matches = group_stage&.groups&.map do |group|
+      return [] if group_stage.nil?
+
+      group_stage.groups.filter_map do |group|
         group.matches.select { |match| match.state == 'not_started' }.min_by(&:position)
-      end&.compact
-      return group_matches unless group_matches.blank?
-
-      next_level = nil
-      tournament.stages.reject { |stage| stage.level.nil? }.sort_by(&:level).reverse_each do |stage|
-        next unless stage.matches.any?
-        next unless stage.matches.all?(&:in_progress?)
-
-        next_level = stage.level - 1
-        break
       end
+    end
 
-      tournament.stages.find { |stage| stage.level == next_level }&.matches || []
+    def upcoming_playoff_matches(tournament)
+      active_stage = playoff_stages(tournament).reverse.find do |stage|
+        stage_with_running_matches?(stage)
+      end
+      return [] if active_stage.nil?
+
+      tournament.stages.find { |stage| stage.level == active_stage.level - 1 }&.matches || []
+    end
+
+    def stage_with_running_matches?(stage)
+      stage.matches.any? && stage.matches.all?(&:in_progress?)
+    end
+
+    def playoff_stages(tournament)
+      tournament.stages.reject { |stage| stage.level.nil? }.sort_by(&:level)
     end
 
     def serialized_matches(matches)

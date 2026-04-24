@@ -53,7 +53,7 @@ module TurniereE2E
     def subscribe_tournament!(tournament_id:)
       identifier = {
         channel: 'TournamentChannel',
-        tournament_id: tournament_id
+        tournament_id:
       }.to_json
 
       subscribe!(identifier:) do |message|
@@ -64,8 +64,8 @@ module TurniereE2E
     def subscribe_matches!(tournament_id:, state: nil)
       identifier = {
         channel: 'TournamentMatchesChannel',
-        tournament_id: tournament_id,
-        state: state
+        tournament_id:,
+        state:
       }.compact.to_json
 
       subscribe!(identifier:) do |message|

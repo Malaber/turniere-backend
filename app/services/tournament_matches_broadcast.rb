@@ -10,8 +10,8 @@ class TournamentMatchesBroadcast
 
       STATES.each do |state|
         TournamentMatchesChannel.broadcast_to(
-          stream_target(tournament, state: state),
-          TournamentMatchesBroadcastPayload.build(tournament, state: state)
+          stream_target(tournament, state:),
+          TournamentMatchesBroadcastPayload.build(tournament, state:)
         )
       end
     end
