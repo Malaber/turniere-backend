@@ -6,6 +6,8 @@ stages:
 
 variables:
   DOCKER_IMAGE_ENVS: "production test"
+  DOCKERFILE_PATH: "Dockerfile"
+  DOCKER_BUILD_TARGETS: "production=production test=test"
 
 include:
   - project: 'turniere/turniere-infra'
@@ -13,10 +15,10 @@ include:
 
 rails spec:
   stage: test
-  needs:
-    - job: build_image
   tags:
     - docker
+  needs:
+    - job: build_image
   image: $CI_REGISTRY_IMAGE/test/commits:$CI_COMMIT_SHA
   parallel:
     matrix:
@@ -43,10 +45,10 @@ rails spec:
 
 rails e2e spec:
   stage: e2e
-  needs:
-    - job: build_image
   tags:
     - docker
+  needs:
+    - job: build_image
   image: $CI_REGISTRY_IMAGE/test/commits:$CI_COMMIT_SHA
   services:
     - name: postgres:16
@@ -96,10 +98,10 @@ rails e2e spec:
 
 rails follow sync e2e spec:
   stage: e2e
-  needs:
-    - job: build_image
   tags:
     - docker
+  needs:
+    - job: build_image
   image: $CI_REGISTRY_IMAGE/test/commits:$CI_COMMIT_SHA
   services:
     - name: postgres:16

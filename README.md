@@ -31,6 +31,7 @@ Leader/follower tournament sync docs:
 
 - [doc/leader_follower.md](doc/leader_follower.md)
 - [doc/timer_api.md](doc/timer_api.md)
+- [doc/beamer_live_updates.md](doc/beamer_live_updates.md)
 
 ## Docker
 [Registry](https://gitlab.com/turniere/turniere-backend/container_registry)

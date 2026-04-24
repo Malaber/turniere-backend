@@ -141,10 +141,28 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
     expect(tournament_signature(follower)).to eq(tournament_signature(source))
     expect(follower.fetch(:stages).map { |stage| stage.fetch(:level) }).to include(-1, 0, 1)
     expect(synced_team_id_pairs(source: source, follower: follower)).not_to be_empty
+    expect(source.fetch(:team_action_lists)).to eq([])
+    expect(follower.fetch(:team_action_lists)).to eq([])
+
+    log_phase!('create team action list on source and verify follower mirrors it')
+    created_list = create_team_action_list!(source.fetch(:id))
+    expect(created_list.fetch(:key)).to eq(playoff_token_list_key)
+
+    source = fetch_tournament(client: source_anonymous_client, tournament_id: source.fetch(:id))
+    follower = wait_for_tournament_sync!(source_tournament_id: source.fetch(:id), follower_tournament_id: follower.fetch(:id))
     expect(playoff_token_list(source)).not_to be_nil
     expect(playoff_token_list(follower)).not_to be_nil
     expect(playoff_token_list(follower).fetch(:team_action_items).map { |item| item.dig(:team, :name) })
       .to match_array(playoff_token_list(source).fetch(:team_action_items).map { |item| item.dig(:team, :name) })
+
+    locked_list_create = follower_owner_client.post("/tournaments/#{follower.fetch(:id)}/team_action_lists", body: {
+                                                      name: 'Follower created list',
+                                                      key: 'follower_created_list',
+                                                      action_name: 'Should fail',
+                                                      source: 'all_tournament_teams'
+                                                    })
+    expect(locked_list_create[:status]).to eq(423)
+    expect(locked_list_create.dig(:json, :error)).to eq('Tournament is in read only follower mode')
 
     follower_group = follower.fetch(:stages).find { |stage| stage.fetch(:level) == -1 }.fetch(:groups).first
     follower_team = follower_group.fetch(:matches).first.fetch(:match_scores).first.fetch(:team)
@@ -155,7 +173,7 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
     log_phase!('mark playoff token collected on source through business key route and verify follower mirrors it')
     source_token_item = playoff_token_list(source).fetch(:team_action_items).first
     source_token_update = source_owner_client.patch(
-      "/tournaments/#{source.fetch(:id)}/team_action_lists/group_stage_survivor_playoff_tokens/teams/#{source_token_item.dig(:team, :id)}",
+      "/tournaments/#{source.fetch(:id)}/team_action_lists/#{playoff_token_list_key}/teams/#{source_token_item.dig(:team, :id)}",
       body: { completed: true }
     )
     expect(source_token_update[:status]).to eq(200)
@@ -167,7 +185,7 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
 
     follower_token_item = find_team_action_item(follower, team_name: source_token_item.dig(:team, :name))
     locked_token_update = follower_owner_client.patch(
-      "/tournaments/#{follower.fetch(:id)}/team_action_lists/group_stage_survivor_playoff_tokens/teams/#{follower_token_item.dig(:team, :id)}",
+      "/tournaments/#{follower.fetch(:id)}/team_action_lists/#{playoff_token_list_key}/teams/#{follower_token_item.dig(:team, :id)}",
       body: { completed: false }
     )
     expect(locked_token_update[:status]).to eq(423)
@@ -262,6 +280,17 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
   def fetch_tournament(client:, tournament_id:)
     response = client.get("/tournaments/#{tournament_id}")
     expect(response[:status]).to eq(200)
+    response.fetch(:json)
+  end
+
+  def create_team_action_list!(tournament_id)
+    response = source_owner_client.post("/tournaments/#{tournament_id}/team_action_lists", body: {
+                                          name: 'Playoff token collection',
+                                          key: playoff_token_list_key,
+                                          action_name: 'Collect playoff token',
+                                          source: 'group_stage_survivors'
+                                        })
+    expect(response[:status]).to eq(201)
     response.fetch(:json)
   end
 
@@ -552,8 +581,12 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
 
   def playoff_token_list(tournament)
     tournament.fetch(:team_action_lists, []).find do |list|
-      list.fetch(:key) == 'group_stage_survivor_playoff_tokens'
+      list.fetch(:key) == playoff_token_list_key
     end
+  end
+
+  def playoff_token_list_key
+    'playoff_token_collection'
   end
 
   def find_team_action_item(tournament, team_name:)
