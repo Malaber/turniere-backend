@@ -18,6 +18,7 @@ RSpec.describe TournamentSnapshotImporter do
       follower.reload
       expect(follower.sync_source_tournament_id).to eq(source.id)
       expect(follower.name).to eq(source.name)
+      expect(follower.timer_mode).to eq(source.timer_mode)
       expect(follower.teams.count).to eq(snapshot.fetch(:teams).count)
       expect(follower.beamers.count).to eq(snapshot.fetch(:beamers).count)
       expect(follower.team_action_lists.count).to eq(snapshot.fetch(:team_action_lists).count)
@@ -182,7 +183,8 @@ RSpec.describe TournamentSnapshotImporter do
       playoff_teams_amount: tournament.playoff_teams_amount,
       instant_finalists_amount: tournament.instant_finalists_amount,
       intermediate_round_participants_amount: tournament.intermediate_round_participants_amount,
-      timer_end: tournament.timer_end&.iso8601,
+      timestamp: tournament.timestamp&.iso8601,
+      timer_mode: tournament.timer_mode,
       teams: tournament.teams.order(:name).map { |team| team.name },
       team_action_lists: tournament.team_action_lists.order(:key).map do |list|
         {

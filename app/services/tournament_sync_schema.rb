@@ -12,7 +12,8 @@ class TournamentSyncSchema
         playoff_teams_amount
         instant_finalists_amount
         intermediate_round_participants_amount
-        timer_end
+        timestamp
+        timer_mode
       ].freeze,
       ignored: %w[
         user_id

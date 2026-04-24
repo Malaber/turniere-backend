@@ -11,6 +11,7 @@ class Tournament < ApplicationRecord
 
   validates :name, presence: true
   validates :code, presence: true, uniqueness: true
+  validates :timer_mode, inclusion: { in: %w[countdown countup] }, allow_nil: true
   validates :sync_target_url, format: URI::DEFAULT_PARSER.make_regexp(%w[http https]), allow_blank: true
   validate :sync_configuration_is_complete
 
@@ -21,6 +22,7 @@ class Tournament < ApplicationRecord
   after_initialize :generate_code
   after_create_commit :ensure_default_beamer!
   before_validation :clear_follower_sync_token_when_disabling_read_only_mode
+  after_commit :broadcast_timer_state_change, if: :saved_change_to_timer_state?
 
   def matches
     [stages.map(&:matches), stages.map { |s| s.groups.map(&:matches) }].flatten
@@ -91,5 +93,13 @@ class Tournament < ApplicationRecord
     return if sync_target_url.present?
 
     self.sync_auth_token = nil
+  end
+
+  def saved_change_to_timer_state?
+    saved_change_to_timestamp? || saved_change_to_timer_mode?
+  end
+
+  def broadcast_timer_state_change
+    TournamentTimerBroadcast.call(id)
   end
 end

@@ -11,9 +11,11 @@ class TournamentSerializer < SimpleTournamentSerializer
   has_many :stages
   has_many :team_action_lists
 
-  attribute :timer_end do
-    object.timer_end&.iso8601
+  attribute :timestamp do
+    object.timestamp&.iso8601
   end
+
+  attribute :timer_mode
 
   attribute :sync_last_pushed_at, if: :sync_metadata_visible? do
     object.sync_last_pushed_at&.iso8601

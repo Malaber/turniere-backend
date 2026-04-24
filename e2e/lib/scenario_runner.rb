@@ -29,10 +29,10 @@ module TurniereE2E
       }
 
       timer_response = patch!(
-        "/tournaments/#{tournament.fetch(:id)}/set_timer_end",
-        body: { timer_end_seconds: 600 }
+        "/tournaments/#{tournament.fetch(:id)}/timer",
+        body: { timestamp_seconds: 600 }
       )
-      checkpoints[:timer_set] = { timer_end: timer_response.fetch(:timer_end) }
+      checkpoints[:timer_set] = { timestamp: timer_response.fetch(:timestamp) }
       return result(session: session, tournament: tournament, checkpoints: checkpoints, stop_at: stop_at) if stop_at == :timer_set
 
       upcoming_matches = get!(
