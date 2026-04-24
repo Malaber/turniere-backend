@@ -93,6 +93,8 @@ services:
       TURNIERE_E2E_ALT_PASSWORD: ${TURNIERE_E2E_ALT_PASSWORD:-password123}
       TURNIERE_E2E_ALT_USERNAME: ${TURNIERE_E2E_ALT_USERNAME:-e2e-alt-user}
     networks:
+      - source-db
+      - follower-db
       - sync
 
 volumes:
