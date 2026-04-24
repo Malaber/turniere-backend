@@ -6,7 +6,7 @@ class TournamentTimerBroadcastPayload
       {
         type: 'timer.updated',
         tournament_id: tournament.id,
-        timer_end: tournament.timer_end&.iso8601,
+        timestamp: tournament.timer_end&.iso8601,
         timer_mode: tournament.timer_mode
       }
     end

@@ -173,14 +173,14 @@ class TournamentsController < ApplicationController
 
   def timer_end_params
     {
-      timer_end: params[:timer_end],
+      timer_end: params[:timer_end] || params[:timestamp],
       timer_mode: params[:timer_mode]
     }
   end
 
   def serialize_timer_state(tournament)
     {
-      timer_end: tournament.timer_end&.iso8601,
+      timestamp: tournament.timer_end&.iso8601,
       timer_mode: tournament.timer_mode
     }
   end
@@ -333,14 +333,17 @@ class TournamentsController < ApplicationController
   end
 
   def validate_set_timer_end_params
-    timer_end = params[:timer_end]
-    timer_end_seconds = params[:timer_end_seconds]
+    timestamp = params[:timestamp]
+    timestamp_seconds = params[:timestamp_seconds]
     timer_mode = params[:timer_mode]
     clear_timer = ActiveModel::Type::Boolean.new.cast(params[:clear_timer])
 
+    timestamp = params[:timer_end] if timestamp.blank? && params[:timer_end].present?
+    timestamp_seconds = params[:timer_end_seconds] if timestamp_seconds.blank? && params[:timer_end_seconds].present?
+
     if clear_timer
-      if timer_end.present? || timer_end_seconds.present? || timer_mode.present?
-        return render json: { error: 'clear_timer cannot be combined with timer values or timer_mode' },
+      if timestamp.present? || timestamp_seconds.present? || timer_mode.present?
+        return render json: { error: 'clear_timer cannot be combined with timestamp values or timer_mode' },
                       status: :unprocessable_entity
       end
 
@@ -353,48 +356,48 @@ class TournamentsController < ApplicationController
       return render json: { error: 'Invalid timer_mode' }, status: :unprocessable_entity
     end
 
-    # throw error if both timer_end and timer_end_seconds are present
-    if timer_end.present? && timer_end_seconds.present?
-      return render json: { error: 'Only one of timer_end or timer_end_seconds is allowed' }, status: :unprocessable_entity
+    # throw error if both timestamp and timestamp_seconds are present
+    if timestamp.present? && timestamp_seconds.present?
+      return render json: { error: 'Only one of timestamp or timestamp_seconds is allowed' }, status: :unprocessable_entity
     end
 
-    if timer_mode == 'countup' && timer_end_seconds.present?
-      return render json: { error: 'timer_end_seconds is only allowed for countdown mode' }, status: :unprocessable_entity
+    if timer_mode == 'countup' && timestamp_seconds.present?
+      return render json: { error: 'timestamp_seconds is only allowed for countdown mode' }, status: :unprocessable_entity
     end
 
-    if timer_end_seconds.present?
+    if timestamp_seconds.present?
       begin
-        timer_end_seconds = Integer(timer_end_seconds)
+        timestamp_seconds = Integer(timestamp_seconds)
       rescue ArgumentError
         return render json: { error: 'Invalid seconds format' }, status: :unprocessable_entity
       end
 
-      return render json: { error: 'Timer end must be in the future' }, status: :unprocessable_entity if timer_end_seconds <= 0
+      return render json: { error: 'Timestamp must be in the future for countdown mode' }, status: :unprocessable_entity if timestamp_seconds <= 0
 
-      parsed_time = Time.zone.now + timer_end_seconds
+      parsed_time = Time.zone.now + timestamp_seconds
       params[:timer_end] = parsed_time
       params[:timer_mode] = 'countdown'
-    elsif timer_end.present?
+    elsif timestamp.present?
       begin
-        parsed_time = Time.zone.parse(timer_end)
+        parsed_time = Time.zone.parse(timestamp)
         if parsed_time.nil?
-          return render json: { error: 'Invalid timer_end format' }, status: :unprocessable_entity
+          return render json: { error: 'Invalid timestamp format' }, status: :unprocessable_entity
         elsif timer_mode != 'countup' && !parsed_time.future?
-          return render json: { error: 'Timer end must be in the future' }, status: :unprocessable_entity
+          return render json: { error: 'Timestamp must be in the future for countdown mode' }, status: :unprocessable_entity
         end
 
         params[:timer_end] = parsed_time
         params[:timer_mode] = timer_mode.presence || 'countdown'
       rescue ArgumentError
-        return render json: { error: 'Invalid timer_end format' }, status: :unprocessable_entity
+        return render json: { error: 'Invalid timestamp format' }, status: :unprocessable_entity
       end
     elsif timer_mode == 'countup'
       params[:timer_end] = Time.zone.now
     elsif timer_mode.present?
-      return render json: { error: 'timer_mode requires timer_end, timer_end_seconds, or clear_timer' },
+      return render json: { error: 'timer_mode requires timestamp, timestamp_seconds, or clear_timer' },
                     status: :unprocessable_entity
     else
-      return render json: { error: 'timer_end, timer_end_seconds, or clear_timer is required' },
+      return render json: { error: 'timestamp, timestamp_seconds, or clear_timer is required' },
                     status: :unprocessable_entity
     end
   end

@@ -183,7 +183,7 @@ RSpec.describe TournamentSnapshotImporter do
       playoff_teams_amount: tournament.playoff_teams_amount,
       instant_finalists_amount: tournament.instant_finalists_amount,
       intermediate_round_participants_amount: tournament.intermediate_round_participants_amount,
-      timer_end: tournament.timer_end&.iso8601,
+      timestamp: tournament.timer_end&.iso8601,
       timer_mode: tournament.timer_mode,
       teams: tournament.teams.order(:name).map { |team| team.name },
       team_action_lists: tournament.team_action_lists.order(:key).map do |list|

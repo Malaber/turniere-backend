@@ -474,7 +474,7 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
       playoff_teams_amount: tournament.fetch(:playoff_teams_amount),
       instant_finalists_amount: tournament.fetch(:instant_finalists_amount),
       intermediate_round_participants_amount: tournament.fetch(:intermediate_round_participants_amount),
-      timer_end: tournament[:timer_end],
+      timestamp: tournament[:timestamp],
       teams: tournament.fetch(:teams).map { |team| team.slice(:name, :advancing_from_group_stage) }.sort_by { |team| team.fetch(:name) },
       team_action_lists: tournament.fetch(:team_action_lists, []).sort_by { |list| list.fetch(:key) }.map do |list|
         {

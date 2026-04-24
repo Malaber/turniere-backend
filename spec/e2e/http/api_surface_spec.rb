@@ -125,21 +125,21 @@ RSpec.describe 'Backend API surface HTTP E2E' do
     forbidden_update = other_client.patch("/tournaments/#{tournament.fetch(:id)}", body: { name: 'Not Allowed' })
     unauthenticated_update = anonymous_client.patch("/tournaments/#{tournament.fetch(:id)}", body: { name: 'No Auth' })
 
-    timer_seconds = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/set_timer_end", body: { timer_end_seconds: 120 })
+    timer_seconds = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/set_timer_end", body: { timestamp_seconds: 120 })
     timer_show = anonymous_client.get("/tournaments/#{tournament.fetch(:id)}/timer_end")
     timer_countup = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/set_timer_end", body: { timer_mode: 'countup' })
     timer_clear = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/set_timer_end", body: { clear_timer: true })
     timer_double = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/set_timer_end", body: {
-                                        timer_end_seconds: 120,
-                                        timer_end: (Time.now.utc + 240).iso8601
+                                        timestamp_seconds: 120,
+                                        timestamp: (Time.now.utc + 240).iso8601
                                       })
-    timer_invalid_seconds = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/set_timer_end", body: { timer_end_seconds: 'nope' })
-    timer_past = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/set_timer_end", body: { timer_end_seconds: 0 })
+    timer_invalid_seconds = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/set_timer_end", body: { timestamp_seconds: 'nope' })
+    timer_past = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/set_timer_end", body: { timestamp_seconds: 0 })
     timer_countup_seconds = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/set_timer_end", body: {
                                                  timer_mode: 'countup',
-                                                 timer_end_seconds: 60
+                                                 timestamp_seconds: 60
                                                })
-    timer_forbidden = other_client.patch("/tournaments/#{tournament.fetch(:id)}/set_timer_end", body: { timer_end_seconds: 60 })
+    timer_forbidden = other_client.patch("/tournaments/#{tournament.fetch(:id)}/set_timer_end", body: { timestamp_seconds: 60 })
 
     destroy_response = owner_client.delete("/tournaments/#{tournament.fetch(:id)}")
     after_destroy = anonymous_client.get("/tournaments/#{tournament.fetch(:id)}")
@@ -160,26 +160,26 @@ RSpec.describe 'Backend API surface HTTP E2E' do
     expect(unauthenticated_update[:status]).to eq(401)
 
     expect(timer_seconds[:status]).to eq(200)
-    expect(timer_seconds.dig(:json, :timer_end)).to be_a(String)
+    expect(timer_seconds.dig(:json, :timestamp)).to be_a(String)
     expect(timer_seconds.dig(:json, :timer_mode)).to eq('countdown')
     expect(timer_show[:status]).to eq(200)
-    expect(timer_show.dig(:json, :timer_end)).to eq(timer_seconds.dig(:json, :timer_end))
+    expect(timer_show.dig(:json, :timestamp)).to eq(timer_seconds.dig(:json, :timestamp))
     expect(timer_show.dig(:json, :timer_mode)).to eq('countdown')
     expect(timer_countup[:status]).to eq(200)
-    expect(timer_countup.dig(:json, :timer_end)).to be_a(String)
+    expect(timer_countup.dig(:json, :timestamp)).to be_a(String)
     expect(timer_countup.dig(:json, :timer_mode)).to eq('countup')
     expect(timer_clear[:status]).to eq(200)
-    expect(timer_clear.dig(:json, :timer_end)).to be_nil
+    expect(timer_clear.dig(:json, :timestamp)).to be_nil
     expect(timer_clear.dig(:json, :timer_mode)).to be_nil
 
     expect(timer_double[:status]).to eq(422)
-    expect(timer_double.dig(:json, :error)).to eq('Only one of timer_end or timer_end_seconds is allowed')
+    expect(timer_double.dig(:json, :error)).to eq('Only one of timestamp or timestamp_seconds is allowed')
     expect(timer_invalid_seconds[:status]).to eq(422)
     expect(timer_invalid_seconds.dig(:json, :error)).to eq('Invalid seconds format')
     expect(timer_past[:status]).to eq(422)
-    expect(timer_past.dig(:json, :error)).to eq('Timer end must be in the future')
+    expect(timer_past.dig(:json, :error)).to eq('Timestamp must be in the future for countdown mode')
     expect(timer_countup_seconds[:status]).to eq(422)
-    expect(timer_countup_seconds.dig(:json, :error)).to eq('timer_end_seconds is only allowed for countdown mode')
+    expect(timer_countup_seconds.dig(:json, :error)).to eq('timestamp_seconds is only allowed for countdown mode')
     expect(timer_forbidden[:status]).to eq(403)
 
     expect([200, 204]).to include(destroy_response[:status])

@@ -10,9 +10,9 @@ Backend timer supports:
 - live websocket updates
 - follower sync propagation
 
-Frontend should treat timer state as small state machine:
+Frontend should treat timer state as:
 
-- no timer: `timer_end = null`, `timer_mode = null`
+- no timer: `timestamp = null`, `timer_mode = null`
 - countdown: `timer_mode = "countdown"`
 - countup: `timer_mode = "countup"`
 
@@ -30,7 +30,7 @@ Response shape:
 
 ```json
 {
-  "timer_end": "2026-04-24T10:15:00Z",
+  "timestamp": "2026-04-24T10:15:00Z",
   "timer_mode": "countdown"
 }
 ```
@@ -41,23 +41,23 @@ Possible values:
 - `timer_mode = "countup"`
 - `timer_mode = null`
 
-## Meaning Of `timer_end`
+## Meaning Of `timestamp`
 
-Name old. Semantics now depend on mode.
+Same field. Mode decides meaning.
 
 ### Countdown mode
 
-`timer_end` means exact wall-clock timestamp when countdown reaches zero.
+`timestamp` means exact wall-clock timestamp when countdown reaches zero.
 
 Frontend math:
 
 ```text
-remaining_ms = max(0, timer_end - now)
+remaining_ms = max(0, timestamp - now)
 ```
 
 ### Countup mode
 
-`timer_end` means anchor timestamp when countup started.
+`timestamp` means anchor timestamp when countup started.
 
 It is **not** finish time in this mode.
 Think of it as:
@@ -68,23 +68,23 @@ Think of it as:
 Frontend math:
 
 ```text
-elapsed_ms = max(0, now - timer_end)
+elapsed_ms = max(0, now - timestamp)
 ```
 
 Practical example:
 
 - backend returns:
   - `timer_mode = "countup"`
-  - `timer_end = "2026-04-24T10:00:00Z"`
+  - `timestamp = "2026-04-24T10:00:00Z"`
 - current time:
-  - `2026-04-24T10:03:15Z"`
+  - `2026-04-24T10:03:15Z`
 
 Frontend should display about `03:15` elapsed.
 
 ### Unset timer
 
 - `timer_mode = null`
-- `timer_end = null`
+- `timestamp = null`
 
 Frontend should render no active timer.
 
@@ -97,13 +97,16 @@ Endpoint:
 
 - `PATCH /tournaments/:id/set_timer_end`
 
+Current route name still says `set_timer_end`.
+Payload field name is now `timestamp`.
+
 ### Start countdown by duration
 
 Request:
 
 ```json
 {
-  "timer_end_seconds": 120
+  "timestamp_seconds": 120
 }
 ```
 
@@ -112,7 +115,7 @@ Behavior:
 - backend computes `Time.zone.now + 120`
 - backend stores:
   - `timer_mode = "countdown"`
-  - `timer_end = computed future timestamp`
+  - `timestamp = computed future timestamp`
 
 ### Start countdown by explicit timestamp
 
@@ -120,7 +123,7 @@ Request:
 
 ```json
 {
-  "timer_end": "2026-04-24T10:15:00Z"
+  "timestamp": "2026-04-24T10:15:00Z"
 }
 ```
 
@@ -128,7 +131,7 @@ Optional explicit mode:
 
 ```json
 {
-  "timer_end": "2026-04-24T10:15:00Z",
+  "timestamp": "2026-04-24T10:15:00Z",
   "timer_mode": "countdown"
 }
 ```
@@ -145,10 +148,10 @@ Request:
 
 Behavior:
 
-- backend stores current server time into `timer_end`
+- backend stores current server time into `timestamp`
 - backend stores `timer_mode = "countup"`
 
-Frontend should interpret returned `timer_end` as start time anchor.
+Frontend should interpret returned `timestamp` as start time anchor.
 
 ### Restore countup from explicit anchor
 
@@ -156,7 +159,7 @@ Backend also accepts explicit timestamp with countup mode:
 
 ```json
 {
-  "timer_end": "2026-04-24T10:00:00Z",
+  "timestamp": "2026-04-24T10:00:00Z",
   "timer_mode": "countup"
 }
 ```
@@ -181,17 +184,17 @@ Behavior:
 
 - backend clears both fields
 - response returns:
-  - `timer_end = null`
+  - `timestamp = null`
   - `timer_mode = null`
 
 ## Validation Rules
 
 Backend rejects:
 
-- both `timer_end` and `timer_end_seconds`
+- both `timestamp` and `timestamp_seconds`
 - invalid `timer_mode`
-- `timer_end_seconds <= 0`
-- `timer_end_seconds` together with `timer_mode = "countup"`
+- `timestamp_seconds <= 0`
+- `timestamp_seconds` together with `timer_mode = "countup"`
 - `timer_mode` by itself unless it is `countup`
 - `clear_timer` mixed with timer values
 
@@ -222,7 +225,7 @@ Payload:
 {
   "type": "timer.updated",
   "tournament_id": 123,
-  "timer_end": "2026-04-24T10:15:00Z",
+  "timestamp": "2026-04-24T10:15:00Z",
   "timer_mode": "countdown"
 }
 ```
@@ -243,35 +246,35 @@ Frontend rule:
 Recommended flow:
 
 1. Load tournament via `GET /tournaments/:id`
-2. Read `timer_mode` and `timer_end`
+2. Read `timer_mode` and `timestamp`
 3. Open ActionCable subscription for same tournament id
 4. Replace local timer state whenever `timer.updated` arrives
-5. Derive displayed time from `Date.now()` plus stored server timestamp
+5. Derive displayed time from `Date.now()` plus stored backend timestamp
 
 Recommended client state:
 
 ```ts
 type TimerState =
-  | { mode: null; anchorIso: null }
-  | { mode: "countdown"; anchorIso: string }
-  | { mode: "countup"; anchorIso: string };
+  | { mode: null; timestampIso: null }
+  | { mode: "countdown"; timestampIso: string }
+  | { mode: "countup"; timestampIso: string };
 ```
 
 Suggested derivation logic:
 
 ```ts
 function getTimerDisplay(state: TimerState, nowMs: number) {
-  if (state.mode === null || state.anchorIso === null) {
+  if (state.mode === null || state.timestampIso === null) {
     return { active: false, ms: 0 };
   }
 
-  const anchorMs = new Date(state.anchorIso).getTime();
+  const timestampMs = new Date(state.timestampIso).getTime();
 
   if (state.mode === "countdown") {
-    return { active: true, ms: Math.max(0, anchorMs - nowMs) };
+    return { active: true, ms: Math.max(0, timestampMs - nowMs) };
   }
 
-  return { active: true, ms: Math.max(0, nowMs - anchorMs) };
+  return { active: true, ms: Math.max(0, nowMs - timestampMs) };
 }
 ```
 
@@ -284,13 +287,13 @@ Recommended rendering:
 Recommended local ticking:
 
 - keep backend state as timestamp + mode
-- update rendered value with 250ms or 1s local interval
+- update rendered value with local interval
 - do not poll backend every second
 
 Recommended write UX:
 
 - owner actions send explicit target request
-- after successful response, update local state from response body
+- after success, update local state from response body
 - websocket should converge all viewers to same state
 
 ## Follower Behavior
@@ -300,7 +303,7 @@ Timer state is included in tournament sync snapshots.
 That means:
 
 - leader timer changes propagate to follower
-- follower tournament exposes same `timer_end` / `timer_mode`
+- follower tournament exposes same `timestamp` / `timer_mode`
 - follower websocket subscribers receive `timer.updated`
 - follower still rejects timer writes while read only
 
@@ -322,4 +325,4 @@ Implemented coverage:
 Current note:
 
 - single-backend HTTP E2E timer specs pass
-- follower blackbox task still has environment/network issue in existing Docker follow setup, so production-style follow stack verification is not green yet
+- follower blackbox task still has existing Docker/network issue in follow setup, so production-style follow stack verification is not green yet
