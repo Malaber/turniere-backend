@@ -30,6 +30,7 @@ bundle exec rspec
 Leader/follower tournament sync docs:
 
 - [doc/leader_follower.md](doc/leader_follower.md)
+- [doc/timer_api.md](doc/timer_api.md)
 
 ## Docker
 [Registry](https://gitlab.com/turniere/turniere-backend/container_registry)
