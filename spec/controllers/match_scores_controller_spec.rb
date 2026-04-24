@@ -37,6 +37,7 @@ RSpec.describe MatchScoresController, type: :controller do
         end
         context 'when match_score update succeeds' do
           it 'updates the requested score' do
+            expect(TournamentLiveBroadcast).to receive(:call).with(@match_score.tournament.id)
             put :update, params: { id: @match_score.to_param }.merge(valid_update)
             @match_score.reload
             expect(@match_score.points).to eq(valid_update[:points])

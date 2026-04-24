@@ -32,6 +32,7 @@ class StagesController < ApplicationController
         end
       end
       push_sync_if_needed!(synced_tournament) unless synced_tournament.nil?
+      TournamentLiveBroadcast.call(synced_tournament.id) unless synced_tournament.nil?
     else
       render json: {
         error: 'The state attribute may only be changed to finished'

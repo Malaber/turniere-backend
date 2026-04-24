@@ -111,6 +111,7 @@ RSpec.describe TournamentsController, type: :controller do
       expect(json[:name]).to eq(@tournament.name)
       expect(json[:description]).to eq(@tournament.description)
       expect(json[:public]).to eq(@tournament.public)
+      expect(json).to eq(TournamentPayload.build(@tournament))
     end
 
     it 'does not return sync metadata on unauthenticated requests' do
