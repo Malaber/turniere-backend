@@ -42,6 +42,14 @@ RSpec.describe MatchesController, type: :controller do
         body = deserialize_response response
         expect(body.empty?).to be true
       end
+
+      it 'returns only live match fields' do
+        get :index, params: { tournament_id: @tournament.to_param }
+        match = deserialize_response(response).first
+
+        expect(match.keys).to match_array(%i[id position state teams match_scores group stage])
+        expect(match[:teams]).to all(include(:id, :name))
+      end
     end
     # TODO add test for upcoming once there is test data for a "valid" group stage
   end
@@ -121,6 +129,7 @@ RSpec.describe MatchesController, type: :controller do
         original_first_position = first_match.position
         original_last_position = last_match.position
 
+        expect(TournamentLiveBroadcast).to receive(:call).with(group_stage_tournament.id)
         patch :swap, params: { id: first_match.to_param, other_match_id: last_match.to_param }
 
         expect(response).to be_successful
@@ -189,6 +198,7 @@ RSpec.describe MatchesController, type: :controller do
 
         context 'with valid params' do
           it 'updates the match' do
+            expect(TournamentLiveBroadcast).to receive(:call).with(@match.tournament.id)
             put :update, params: { id: @match.to_param }.merge(valid_update)
             @match.reload
             expect(response).to be_successful

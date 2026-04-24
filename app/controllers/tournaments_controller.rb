@@ -46,11 +46,7 @@ class TournamentsController < ApplicationController
       render json: @tournament, serializer: SimpleTournamentSerializer
     else
       rendered_json = @request_profiling.measure('serialize_tournament') do
-        ActiveModelSerializers::SerializableResource.new(
-          @tournament,
-          include: '**',
-          scope: current_user
-        ).as_json
+        TournamentPayload.build(@tournament, scope: current_user)
       end
       @request_profiling.apply_to(response, label: 'tournament.show')
       render json: rendered_json
@@ -146,6 +142,7 @@ class TournamentsController < ApplicationController
 
   def sync_state
     TournamentSnapshotImporter.import!(tournament: @tournament, snapshot: sync_state_params)
+    TournamentLiveBroadcast.call(@tournament.id)
     render json: @tournament, include: '**'
   rescue KeyError, ArgumentError => e
     render json: { error: e.message }, status: :unprocessable_entity

@@ -13,35 +13,7 @@ class MatchesController < ApplicationController
 
   # GET/tournaments/1/matches
   def index
-    matches = if match_params['state'].nil?
-                @tournament.matches
-
-              # support for upcoming matches for beamer view
-              elsif match_params['state'] == 'upcoming'
-                # for every group within the tournament find the match with the lowest position that is of state 'not_started'
-                upcoming_matches = @tournament.stages.find_by(level: -1)&.groups&.map { |g| g.matches.select { |m| m.state == 'not_started' }.min_by(&:position) }
-                # filter out nil values (this may happen if one of the groups already has no upcoming matches)
-                upcoming_matches = upcoming_matches.reject(&:nil?)
-                # if there are none, the group stage is over, so we have to look into the playoff stages
-                if upcoming_matches.nil?
-                  next_level = 0
-                  @tournament.stages.sort_by(&:level).reverse_each do |stage|
-                    # the following if equates to true if it finds a stage where all matches are of state `in_progress`
-                    if stage.matches.reject { |m| m.state == 'in_progress' }.nil?
-                      next_level = stage.level - 1
-                      break
-                    end
-                  end
-                  @tournament.stages.find_by(level: next_level).matches
-                else
-                  upcoming_matches
-                end
-              else
-                @tournament.matches.select do |m|
-                  m.state == match_params['state']
-                end
-              end
-    render json: matches, each_serializer: ExtendedMatchSerializer, include: %w[match_scores.team bets stage group]
+    render json: TournamentMatchesPayload.build(@tournament, state: match_params['state'])
   end
 
   # GET /matches/1
@@ -58,6 +30,7 @@ class MatchesController < ApplicationController
     elsif match.save
       UpdateGroupsGroupScoresAndSave.call(group: @group)
       push_sync_if_needed!(@group.tournament)
+      TournamentLiveBroadcast.call(@group.tournament.id)
       render json: match, include: %w[match_scores.team group], status: :created
     else
       render json: match.errors, status: :unprocessable_entity
@@ -87,6 +60,7 @@ class MatchesController < ApplicationController
       end
     end
     push_sync_if_needed!(synced_tournament) unless synced_tournament.nil?
+    TournamentLiveBroadcast.call(synced_tournament.id) unless synced_tournament.nil?
   end
 
   # PATCH /matches/1/swap
@@ -111,6 +85,7 @@ class MatchesController < ApplicationController
     swapped_matches = Match.where(id: [@match.id, @swap_target.id]).order(:position)
     render json: swapped_matches, each_serializer: ExtendedMatchSerializer, include: %w[match_scores.team bets stage group]
     push_sync_if_needed!(synced_tournament)
+    TournamentLiveBroadcast.call(synced_tournament.id)
   end
 
   private

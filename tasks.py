@@ -1725,6 +1725,7 @@ def blackbox_follow_service(
         spec_path=[
             "spec/e2e/http/tournament_follow_sync_spec.rb",
             "spec/e2e/http/tournament_follow_sync_websocket_spec.rb",
+            "spec/e2e/http/tournament_follow_sync_live_websocket_spec.rb",
             "spec/e2e/http/tournament_timer_follow_sync_websocket_spec.rb",
             "spec/e2e/http/tournament_follow_sync_beamers_websocket_spec.rb",
         ],

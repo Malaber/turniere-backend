@@ -71,6 +71,7 @@ RSpec.describe StagesController, type: :controller do
         end
 
         before do
+          expect(TournamentLiveBroadcast).to receive(:call).with(running_group_stage.tournament.id)
           put :update, params: { id: running_group_stage.to_param }.merge(finished)
           running_group_stage.reload
         end

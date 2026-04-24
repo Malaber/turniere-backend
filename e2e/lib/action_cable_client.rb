@@ -50,6 +50,29 @@ module TurniereE2E
       end
     end
 
+    def subscribe_tournament!(tournament_id:)
+      identifier = {
+        channel: 'TournamentChannel',
+        tournament_id:
+      }.to_json
+
+      subscribe!(identifier:) do |message|
+        tournament_payload_message?(message)
+      end
+    end
+
+    def subscribe_matches!(tournament_id:, state: nil)
+      identifier = {
+        channel: 'TournamentMatchesChannel',
+        tournament_id:,
+        state:
+      }.compact.to_json
+
+      subscribe!(identifier:) do |message|
+        matches_payload_message?(message)
+      end
+    end
+
     def wait_for_payload!(timeout: 20)
       wait_for!(timeout: timeout) do |message|
         team_action_lists_payload_message?(message)
@@ -65,6 +88,18 @@ module TurniereE2E
     def wait_for_beamer_payload!(timeout: 20)
       wait_for!(timeout: timeout) do |message|
         beamer_payload_message?(message)
+      end.fetch('message')
+    end
+
+    def wait_for_tournament_payload!(timeout: 20)
+      wait_for!(timeout: timeout) do |message|
+        tournament_payload_message?(message)
+      end.fetch('message')
+    end
+
+    def wait_for_matches_payload!(timeout: 20)
+      wait_for!(timeout: timeout) do |message|
+        matches_payload_message?(message)
       end.fetch('message')
     end
 
@@ -193,6 +228,16 @@ module TurniereE2E
     def beamer_payload_message?(message)
       payload = message['message']
       payload.is_a?(Hash) && payload['type'].to_s.start_with?('beamer.')
+    end
+
+    def tournament_payload_message?(message)
+      payload = message['message']
+      payload.is_a?(Hash) && payload['type'] == 'tournament.updated'
+    end
+
+    def matches_payload_message?(message)
+      payload = message['message']
+      payload.is_a?(Hash) && payload['type'] == 'tournament_matches.updated'
     end
   end
 end
