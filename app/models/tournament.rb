@@ -96,7 +96,7 @@ class Tournament < ApplicationRecord
   end
 
   def saved_change_to_timer_state?
-    saved_change_to_timer_end? || saved_change_to_timer_mode?
+    saved_change_to_timestamp? || saved_change_to_timer_mode?
   end
 
   def broadcast_timer_state_change

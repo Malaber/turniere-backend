@@ -12,7 +12,7 @@ class TournamentSerializer < SimpleTournamentSerializer
   has_many :team_action_lists
 
   attribute :timestamp do
-    object.timer_end&.iso8601
+    object.timestamp&.iso8601
   end
 
   attribute :timer_mode

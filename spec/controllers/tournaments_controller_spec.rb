@@ -222,13 +222,13 @@ RSpec.describe TournamentsController, type: :controller do
 
   describe 'GET #timer' do
     it 'returns timer state in ISO 8601 format' do
-      timer_end = Time.utc(2026, 4, 13, 18, 0, 0)
-      @tournament.update!(timer_end: timer_end, timer_mode: 'countdown')
+      timestamp = Time.utc(2026, 4, 13, 18, 0, 0)
+      @tournament.update!(timestamp: timestamp, timer_mode: 'countdown')
 
       get :timer, params: { id: @tournament.to_param }
 
       expect(response).to be_successful
-      expect(deserialize_response(response)[:timestamp]).to eq(timer_end.iso8601)
+      expect(deserialize_response(response)[:timestamp]).to eq(timestamp.iso8601)
       expect(deserialize_response(response)[:timer_mode]).to eq('countdown')
     end
   end
@@ -244,8 +244,8 @@ RSpec.describe TournamentsController, type: :controller do
       patch :set_timer, params: { id: @tournament.to_param, timestamp: timestamp }
 
       expect(response).to be_successful
-      expect(@tournament.reload.timer_end.iso8601).to eq(Time.iso8601(timestamp).utc.iso8601)
-      expect(deserialize_response(response)[:timestamp]).to eq(@tournament.timer_end.iso8601)
+      expect(@tournament.reload.timestamp.iso8601).to eq(Time.iso8601(timestamp).utc.iso8601)
+      expect(deserialize_response(response)[:timestamp]).to eq(@tournament.timestamp.iso8601)
       expect(deserialize_response(response)[:timer_mode]).to eq('countdown')
     end
 
@@ -256,17 +256,17 @@ RSpec.describe TournamentsController, type: :controller do
 
       expect(response).to be_successful
       expect(@tournament.reload.timer_mode).to eq('countup')
-      expect(@tournament.timer_end).to be_between(before_request - 1.second, Time.zone.now + 1.second)
+      expect(@tournament.timestamp).to be_between(before_request - 1.second, Time.zone.now + 1.second)
       expect(deserialize_response(response)[:timer_mode]).to eq('countup')
     end
 
     it 'clears timer state when clear_timer=true' do
-      @tournament.update!(timer_end: Time.utc(2030, 4, 13, 18, 0, 0), timer_mode: 'countdown')
+      @tournament.update!(timestamp: Time.utc(2030, 4, 13, 18, 0, 0), timer_mode: 'countdown')
 
       patch :set_timer, params: { id: @tournament.to_param, clear_timer: true }
 
       expect(response).to be_successful
-      expect(@tournament.reload.timer_end).to be_nil
+      expect(@tournament.reload.timestamp).to be_nil
       expect(@tournament.timer_mode).to be_nil
       expect(deserialize_response(response)[:timestamp]).to be_nil
       expect(deserialize_response(response)[:timer_mode]).to be_nil

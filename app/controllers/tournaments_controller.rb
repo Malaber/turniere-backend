@@ -173,14 +173,14 @@ class TournamentsController < ApplicationController
 
   def timer_params
     {
-      timer_end: params[:timer_end],
+      timestamp: params[:timestamp],
       timer_mode: params[:timer_mode]
     }
   end
 
   def serialize_timer_state(tournament)
     {
-      timestamp: tournament.timer_end&.iso8601,
+      timestamp: tournament.timestamp&.iso8601,
       timer_mode: tournament.timer_mode
     }
   end
@@ -344,7 +344,7 @@ class TournamentsController < ApplicationController
                       status: :unprocessable_entity
       end
 
-      params[:timer_end] = nil
+      params[:timestamp] = nil
       params[:timer_mode] = nil
       return
     end
@@ -372,7 +372,7 @@ class TournamentsController < ApplicationController
       return render json: { error: 'Timestamp must be in the future for countdown mode' }, status: :unprocessable_entity if timestamp_seconds <= 0
 
       parsed_time = Time.zone.now + timestamp_seconds
-      params[:timer_end] = parsed_time
+      params[:timestamp] = parsed_time
       params[:timer_mode] = 'countdown'
     elsif timestamp.present?
       begin
@@ -383,13 +383,13 @@ class TournamentsController < ApplicationController
           return render json: { error: 'Timestamp must be in the future for countdown mode' }, status: :unprocessable_entity
         end
 
-        params[:timer_end] = parsed_time
+        params[:timestamp] = parsed_time
         params[:timer_mode] = timer_mode.presence || 'countdown'
       rescue ArgumentError
         return render json: { error: 'Invalid timestamp format' }, status: :unprocessable_entity
       end
     elsif timer_mode == 'countup'
-      params[:timer_end] = Time.zone.now
+      params[:timestamp] = Time.zone.now
     elsif timer_mode.present?
       return render json: { error: 'timer_mode requires timestamp, timestamp_seconds, or clear_timer' },
                     status: :unprocessable_entity
