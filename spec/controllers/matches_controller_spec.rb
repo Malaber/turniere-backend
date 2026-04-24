@@ -47,7 +47,7 @@ RSpec.describe MatchesController, type: :controller do
         get :index, params: { tournament_id: @tournament.to_param }
         match = deserialize_response(response).first
 
-        expect(match.keys).to match_array(%i[id position state teams match_scores])
+        expect(match.keys).to match_array(%i[id position state teams match_scores group stage])
         expect(match[:teams]).to all(include(:id, :name))
       end
     end

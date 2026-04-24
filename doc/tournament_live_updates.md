@@ -91,6 +91,8 @@ Use this when page only needs match cards/list updates:
 - match id
 - position
 - state
+- group identity
+- stage identity
 - teams
 - score rows
 
@@ -136,6 +138,15 @@ Payload:
       "id": 456,
       "position": 0,
       "state": "in_progress",
+      "group": {
+        "id": 44,
+        "number": 1
+      },
+      "stage": {
+        "id": 33,
+        "level": -1,
+        "state": "in_progress"
+      },
       "teams": [
         {
           "id": 10,
@@ -234,7 +245,7 @@ Recommended update handling:
 
 - do not patch a single nested field from websocket payload
 - replace the full snapshot for that channel/filter
-- use `match.id`, `team.id`, and `match_score.id` as stable keys
+- use `match.id`, `group.id`, `stage.id`, `team.id`, and `match_score.id` as stable keys
 - tolerate duplicate payloads
 - tolerate fast sequences like score update followed by match finish
 
