@@ -54,6 +54,9 @@ DB_DIR = ROOT / "db"
 GEMFILE_LOCK_PATH = ROOT / "Gemfile.lock"
 BUNDLER_VERSION = GEMFILE_LOCK_PATH.read_text(encoding="utf-8").split("BUNDLED WITH", 1)[1].strip().splitlines()[-1].strip()
 
+MANUAL_TEST_DB_PATH = DB_DIR / "funky_manual_tournament_lab_do_not_delete.sqlite3"
+MANUAL_TEST_PORT = "3010"
+MANUAL_TEST_BASE_URL = f"http://127.0.0.1:{MANUAL_TEST_PORT}"
 
 def _env(**overrides):
     env = os.environ.copy()
@@ -329,6 +332,43 @@ def _bootstrap_user_command(email, password, username):
         "user.provider = 'email'; "
         "user.save!\""
     )
+
+
+def _manual_test_env():
+    return _env(
+        RAILS_ENV="test",
+        DATABASE_URL=f"sqlite3:{MANUAL_TEST_DB_PATH}",
+    )
+
+
+def _e2e_seed_scenarios():
+    return [
+        (E2E_EMAIL, E2E_PASSWORD, E2E_USERNAME, "group_stage_main_usecase", "created"),
+        (E2E_EMAIL, E2E_PASSWORD, E2E_USERNAME, "group_stage_main_usecase", "final_finish_attempted"),
+        (E2E_EMAIL, E2E_PASSWORD, E2E_USERNAME, "group_stage_intermediate_round", "completed"),
+        (E2E_EMAIL, E2E_PASSWORD, E2E_USERNAME, "playoff_only", "completed"),
+
+        (E2E_ALT_EMAIL, E2E_ALT_PASSWORD, E2E_ALT_USERNAME, "group_stage_main_usecase", "created"),
+        (E2E_ALT_EMAIL, E2E_ALT_PASSWORD, E2E_ALT_USERNAME, "playoff_only", "completed"),
+    ]
+
+
+def _seed_via_e2e_scenarios(c, base_url, base_env=None):
+    base_env = base_env or {}
+
+    for email, password, username, scenario, stop_at in _e2e_seed_scenarios():
+        _print_header(f"Seeding {scenario} as {email} until {stop_at}")
+        c.run(
+            f"ruby script/e2e_scenarios.rb {scenario} --stop-at {stop_at}",
+            env=_env(
+                **base_env,
+                TURNIERE_E2E_BASE_URL=base_url,
+                TURNIERE_E2E_EMAIL=email,
+                TURNIERE_E2E_PASSWORD=password,
+                TURNIERE_E2E_USERNAME=username,
+            ),
+            pty=True,
+        )
 
 
 def _parse_rspec_report(output):
@@ -1843,3 +1883,156 @@ def docker_test_shard(c, node_index=1, node_total=8, image=TEST_TAG, build=True)
         f"inv test-shard --node-index={node_index} --node-total={node_total}\""
     )
     c.run(command, pty=True)
+
+@task(name="manual-db-migrate")
+def manual_db_migrate(c):
+    """Migrate the funky manual test database without touching db/test.sqlite3."""
+    setup(c)
+    c.run(
+        _bundle_exec("rails", "db:migrate"),
+        env=_manual_test_env(),
+        pty=True,
+    )
+
+
+@task(name="manual-db-seed")
+def manual_db_seed(c, reset=False):
+    """Fill the funky manual test DB with reusable E2E scenario data."""
+    setup(c)
+
+    if reset:
+        for suffix in ("", "-shm", "-wal", ".journal"):
+            candidate = Path(f"{MANUAL_TEST_DB_PATH}{suffix}")
+            if candidate.exists():
+                candidate.unlink()
+
+    manual_db_migrate(c)
+
+    c.run(
+        _bootstrap_user_command(E2E_EMAIL, E2E_PASSWORD, E2E_USERNAME),
+        env=_manual_test_env(),
+        pty=True,
+    )
+    c.run(
+        _bootstrap_user_command(E2E_ALT_EMAIL, E2E_ALT_PASSWORD, E2E_ALT_USERNAME),
+        env=_manual_test_env(),
+        pty=True,
+    )
+
+    process, log_handle = _start_server(
+        f"{_bundle_exec('rails', 's')} -e test -b 127.0.0.1 -p {MANUAL_TEST_PORT}",
+        _manual_test_env(),
+        log_path="/tmp/turniere-manual-db-seed-server.log",
+    )
+
+    try:
+        _wait_for_http(base_url=MANUAL_TEST_BASE_URL, timeout=60)
+        _seed_via_e2e_scenarios(c, MANUAL_TEST_BASE_URL, base_env=_manual_test_env())
+        print(f"Manual DB ready: {MANUAL_TEST_DB_PATH}")
+    finally:
+        _stop_process(process, log_handle)
+
+
+@task(name="manual-server")
+def manual_server(c, host=SERVER_HOST, port=MANUAL_TEST_PORT):
+    """Run local Rails test server against the funky manual DB."""
+    manual_db_migrate(c)
+    c.run(
+        f"{_bundle_exec('rails', 's')} -e test -b {host} -p {port}",
+        env=_manual_test_env(),
+        pty=True,
+    )
+
+@task(name="docker-blackbox-follow-seed-leader")
+def docker_blackbox_follow_seed_leader(
+    c,
+    source_host_port=BLACKBOX_SOURCE_HOST_PORT,
+    follower_host_port=BLACKBOX_FOLLOWER_HOST_PORT,
+    app_image=PRODUCTION_TAG,
+    runner_image=TEST_TAG,
+    postgres_image=BLACKBOX_POSTGRES_IMAGE,
+):
+    """Seed the running source/leader Postgres app with reusable E2E scenario data."""
+    env = _follow_compose_env(
+        source_host_port=source_host_port,
+        follower_host_port=follower_host_port,
+        app_image=app_image,
+        runner_image=runner_image,
+        postgres_image=postgres_image,
+    )
+
+    _print_header("Seeding source/leader Postgres through HTTP E2E scenarios")
+
+    for email, password, username, scenario, stop_at in _e2e_seed_scenarios():
+        _print_header(f"Seeding leader {scenario} as {email} until {stop_at}")
+
+        command = [
+            "run",
+            "--rm",
+            "-e",
+            f"TURNIERE_E2E_BASE_URL={BLACKBOX_SOURCE_INTERNAL_BASE_URL}",
+            "-e",
+            f"TURNIERE_E2E_EMAIL={email}",
+            "-e",
+            f"TURNIERE_E2E_PASSWORD={password}",
+            "-e",
+            f"TURNIERE_E2E_USERNAME={username}",
+            "e2e",
+            "ruby",
+            "script/e2e_scenarios.rb",
+            scenario,
+            "--stop-at",
+            stop_at,
+        ]
+
+        full_command = _docker_compose_cmd(
+            project_name=BLACKBOX_FOLLOW_PROJECT,
+            compose_file=BLACKBOX_FOLLOW_COMPOSE_FILE,
+        ) + command
+
+        print(_format_command(full_command), flush=True)
+
+        result = _stream_subprocess(full_command, env=env, check=False)
+        if result.returncode != 0:
+            raise subprocess.CalledProcessError(
+                result.returncode,
+                result.args,
+                output=result.stdout,
+                stderr=result.stderr,
+            )
+
+
+@task(name="docker-blackbox-follow-manual-seeded-up")
+def docker_blackbox_follow_manual_seeded_up(
+    c,
+    source_host_port=BLACKBOX_SOURCE_HOST_PORT,
+    follower_host_port=BLACKBOX_FOLLOWER_HOST_PORT,
+    app_image=PRODUCTION_TAG,
+    runner_image=TEST_TAG,
+    postgres_image=BLACKBOX_POSTGRES_IMAGE,
+    build=True,
+):
+    """Boot source/follower production stack, migrate/bootstrap users, then seed leader Postgres."""
+    docker_blackbox_follow_manual_up(
+        c,
+        source_host_port=source_host_port,
+        follower_host_port=follower_host_port,
+        app_image=app_image,
+        runner_image=runner_image,
+        postgres_image=postgres_image,
+        build=build,
+    )
+
+    docker_blackbox_follow_seed_leader(
+        c,
+        source_host_port=source_host_port,
+        follower_host_port=follower_host_port,
+        app_image=app_image,
+        runner_image=runner_image,
+        postgres_image=postgres_image,
+    )
+
+    _print_header("Seeded leader/follower manual setup ready")
+    print(f"Leader URL:   http://127.0.0.1:{source_host_port}")
+    print(f"Follower URL: http://127.0.0.1:{follower_host_port}")
+    print(f"Stop it with: inv docker-blackbox-follow-down")
