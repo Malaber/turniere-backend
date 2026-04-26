@@ -13,7 +13,7 @@ class MatchesController < ApplicationController
 
   # GET/tournaments/1/matches
   def index
-    render json: TournamentMatchesPayload.build(@tournament, state: match_params['state'])
+    render json: TournamentMatchesPayload.build(@tournament, match_index_params)
   end
 
   # GET /matches/1
@@ -147,6 +147,10 @@ class MatchesController < ApplicationController
 
   def match_params
     params.slice(:state).permit!
+  end
+
+  def match_index_params
+    params.slice(:state, :stage_id, :stage_level, :position, :group_stage_position).permit!
   end
 
   def create_match_params
