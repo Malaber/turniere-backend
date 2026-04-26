@@ -54,7 +54,7 @@ RUN bundle config set with 'development test' \
 
 FROM runtime-base AS production
 
-ARG GIT_COMMIT_SHA=unknown
+ARG GIT_COMMIT_SHA=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
 ENV RAILS_ENV=production
 ENV GIT_COMMIT_SHA=${GIT_COMMIT_SHA}
@@ -78,7 +78,7 @@ CMD ["sh", "-lc", "bundle exec rails db:migrate && bundle exec rails s -p 3000 -
 
 FROM runtime-base AS test
 
-ARG GIT_COMMIT_SHA=unknown
+ARG GIT_COMMIT_SHA=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
 ENV RAILS_ENV=test
 ENV GIT_COMMIT_SHA=${GIT_COMMIT_SHA}
