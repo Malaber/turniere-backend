@@ -1,26 +1,20 @@
 # frozen_string_literal: true
 
 class TournamentMatchesBroadcast
-  STATES = [nil, 'upcoming', *Match.states.keys].freeze
-
   class << self
     def call(tournament_id)
       tournament = load_tournament(tournament_id)
       return if tournament.nil?
 
-      STATES.each do |state|
-        TournamentMatchesChannel.broadcast_to(
-          stream_target(tournament, state:),
-          TournamentMatchesBroadcastPayload.build(tournament, state:)
-        )
-      end
+      TournamentMatchesChannel.broadcast_to(
+        stream_target(tournament),
+        { type: 'tournament_matches.changed', tournament_id: tournament.id }
+      )
     end
 
-    def stream_target(tournament, state:)
-      "#{tournament.to_gid_param}:matches:#{state.presence || 'all'}"
+    def stream_target(tournament)
+      "#{tournament.to_gid_param}:matches"
     end
-
-    private
 
     def load_tournament(tournament_id)
       Tournament.includes(

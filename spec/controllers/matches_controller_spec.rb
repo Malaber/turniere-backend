@@ -50,6 +50,27 @@ RSpec.describe MatchesController, type: :controller do
         expect(match.keys).to match_array(%i[id position state teams match_scores group stage])
         expect(match[:teams]).to all(include(:id, :name))
       end
+
+      it 'filters group stage matches by position across groups' do
+        get :index, params: { tournament_id: @tournament.to_param, group_stage_position: 0 }
+        body = deserialize_response(response)
+
+        expect(body).not_to be_empty
+        expect(body).to all(include(position: 0))
+        expect(body.map { |match| match.dig(:stage, :level) }.uniq).to eq([-1])
+      end
+    end
+
+    context 'on a playoff tournament' do
+      it 'filters matches by stage level' do
+        stage = @tournament.stages.find_by!(level: 1)
+
+        get :index, params: { tournament_id: @tournament.to_param, stage_level: stage.level }
+        body = deserialize_response(response)
+
+        expect(body.map { |match| match.dig(:stage, :level) }.uniq).to eq([stage.level])
+        expect(body.map { |match| match[:id] }).to match_array(stage.matches.map(&:id))
+      end
     end
     # TODO add test for upcoming once there is test data for a "valid" group stage
   end
