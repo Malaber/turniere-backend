@@ -10,9 +10,9 @@ class Stage < ApplicationRecord
   delegate :owner, to: :tournament
 
   def teams
-    if !matches.size.zero?
+    if !matches.empty?
       matches.map(&:teams).flatten.uniq
-    elsif !groups.size.zero?
+    elsif !groups.empty?
       groups.map(&:teams).flatten.uniq
     else
       []
@@ -20,9 +20,9 @@ class Stage < ApplicationRecord
   end
 
   def over?
-    return matches.find { |m| m.state != 'finished' }.nil? unless matches.size.zero?
+    return matches.find { |m| m.state != 'finished' }.nil? unless matches.empty?
 
-    unless groups.size.zero? && groups.map(&:matches).flatten.size.zero?
+    unless groups.empty? && groups.map(&:matches).flatten.empty?
       relevant_matches = groups.map(&:matches).flatten.reject(&:decider?)
       return relevant_matches.find { |m| m.state != 'finished' }.nil?
     end

@@ -9,7 +9,7 @@ RSpec.describe TournamentSyncEnqueue do
                           sync_target_url: 'https://remote.example.com/tournaments/1/sync_state',
                           sync_auth_token: 'shared-secret')
       entry = TournamentSyncQueueEntry.create!(
-        tournament: tournament,
+        tournament:,
         snapshot_json: '{"old":true}',
         status: 'pending',
         attempts: 4,

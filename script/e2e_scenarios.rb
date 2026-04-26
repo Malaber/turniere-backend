@@ -12,9 +12,9 @@ options = {
   group_count: 4,
   teams_per_group: 4,
   playoff_teams_amount: 8,
-  email: ENV['TURNIERE_E2E_EMAIL'],
-  password: ENV['TURNIERE_E2E_PASSWORD'],
-  username: ENV['TURNIERE_E2E_USERNAME']
+  email: ENV.fetch('TURNIERE_E2E_EMAIL', nil),
+  password: ENV.fetch('TURNIERE_E2E_PASSWORD', nil),
+  username: ENV.fetch('TURNIERE_E2E_USERNAME', nil)
 }
 
 OptionParser.new do |parser|
@@ -22,9 +22,15 @@ OptionParser.new do |parser|
 
   parser.on('--base-url URL', 'API base URL') { |value| options[:base_url] = value }
   parser.on('--stop-at CHECKPOINT', 'Stop scenario at a named checkpoint') { |value| options[:stop_at] = value.to_sym }
-  parser.on('--team-count COUNT', Integer, 'Team count for playoff_only scenario') { |value| options[:team_count] = value }
-  parser.on('--group-count COUNT', Integer, 'Group count for group-stage scenarios') { |value| options[:group_count] = value }
-  parser.on('--teams-per-group COUNT', Integer, 'Teams per group for group-stage scenarios') { |value| options[:teams_per_group] = value }
+  parser.on('--team-count COUNT', Integer, 'Team count for playoff_only scenario') do |value|
+    options[:team_count] = value
+  end
+  parser.on('--group-count COUNT', Integer, 'Group count for group-stage scenarios') do |value|
+    options[:group_count] = value
+  end
+  parser.on('--teams-per-group COUNT', Integer, 'Teams per group for group-stage scenarios') do |value|
+    options[:teams_per_group] = value
+  end
   parser.on('--playoff-teams-amount COUNT', Integer, 'Playoff teams amount for group-stage scenarios') do |value|
     options[:playoff_teams_amount] = value
   end

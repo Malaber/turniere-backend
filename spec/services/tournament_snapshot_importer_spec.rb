@@ -13,7 +13,7 @@ RSpec.describe TournamentSnapshotImporter do
 
       snapshot = TournamentSnapshotBuilder.build(source)
 
-      described_class.import!(tournament: follower, snapshot: snapshot)
+      described_class.import!(tournament: follower, snapshot:)
 
       follower.reload
       expect(follower.sync_source_tournament_id).to eq(source.id)
@@ -25,8 +25,12 @@ RSpec.describe TournamentSnapshotImporter do
       expect(follower.team_action_lists.first.team_action_items.count).to eq(snapshot.fetch(:team_action_items).count)
       expect(follower.stages.count).to eq(source.stages.count)
       expect(follower.matches.count).to eq(source.matches.count)
-      expect(follower.teams.pluck(:sync_source_id)).to match_array(snapshot.fetch(:teams).map { |team| team.fetch(:id) })
-      expect(follower.beamers.pluck(:sync_source_id)).to match_array(snapshot.fetch(:beamers).map { |beamer| beamer.fetch(:id) })
+      expect(follower.teams.pluck(:sync_source_id)).to match_array(snapshot.fetch(:teams).map do |team|
+                                                                     team.fetch(:id)
+                                                                   end)
+      expect(follower.beamers.pluck(:sync_source_id)).to match_array(snapshot.fetch(:beamers).map do |beamer|
+                                                                       beamer.fetch(:id)
+                                                                     end)
     end
 
     it 'ignores stale snapshots that arrive after a newer one' do
@@ -54,7 +58,7 @@ RSpec.describe TournamentSnapshotImporter do
 
       snapshot = TournamentSnapshotBuilder.build(source)
 
-      described_class.import!(tournament: follower, snapshot: snapshot)
+      described_class.import!(tournament: follower, snapshot:)
 
       follower.reload
       expect(follower.id).not_to eq(source.id)
@@ -62,7 +66,7 @@ RSpec.describe TournamentSnapshotImporter do
       expect(follower.teams.count).to eq(128)
       expect(follower.stages.where(level: -1).first.groups.count).to eq(32)
       expect(follower.stages.where('level >= 0').sum { |stage| stage.matches.count }).to eq(64)
-      expect(follower.matches.select(&:decider?).count).to eq(source.matches.select(&:decider?).count)
+      expect(follower.matches.count(&:decider?)).to eq(source.matches.count(&:decider?))
       expect(follower.teams.pluck(:sync_source_id)).to match_array(source.teams.pluck(:id))
       expect(source.teams.pluck(:id) & follower.teams.pluck(:id)).not_to match_array(source.teams.pluck(:id))
     end
@@ -95,15 +99,15 @@ RSpec.describe TournamentSnapshotImporter do
       logo_url: '/logos/stream-b.png'
     )
 
-    group_stage = Stage.create!(tournament: tournament, level: -1, state: :finished)
+    group_stage = Stage.create!(tournament:, level: -1, state: :finished)
     advancing_teams = []
 
     32.times do |group_index|
       group = Group.create!(stage: group_stage, number: group_index + 1)
-      teams = 4.times.map do |seed_index|
+      teams = Array.new(4) do |seed_index|
         create(
           :team,
-          tournament: tournament,
+          tournament:,
           name: "Leader-G#{group_index + 1}-S#{seed_index + 1}"
         )
       end
@@ -111,17 +115,15 @@ RSpec.describe TournamentSnapshotImporter do
       teams[0].update!(name: "#{teams[0].name} Renamed") if group_index.zero?
       teams[1].update!(name: "#{teams[1].name} Renamed") if group_index == 15
 
-      create_group_round_robin!(group: group, teams: teams)
-      create_group_scores!(group: group, teams: teams)
+      create_group_round_robin!(group:, teams:)
+      create_group_scores!(group:, teams:)
 
-      if group_index < 3
-        create_decider_match!(group: group, teams: teams.take(2), hidden_points: [8 - group_index, 4 + group_index])
-      end
+      create_decider_match!(group:, teams: teams.take(2), hidden_points: [8 - group_index, 4 + group_index]) if group_index < 3
 
       advancing_teams.concat(teams.take(2))
     end
 
-    result = AddPlayoffsToTournamentAndSave.call(tournament: tournament, teams: advancing_teams)
+    result = AddPlayoffsToTournamentAndSave.call(tournament:, teams: advancing_teams)
     expect(result).to be_a_success
 
     tournament.reload
@@ -140,23 +142,23 @@ RSpec.describe TournamentSnapshotImporter do
     ]
 
     pairings.each_with_index do |(left_index, right_index, left_points, right_points), position|
-      match = Match.create!(group: group, state: :finished, position: position, decider: false)
-      MatchScore.create!(match: match, team: teams[left_index], points: left_points, hidden_points: 0)
-      MatchScore.create!(match: match, team: teams[right_index], points: right_points, hidden_points: 0)
+      match = Match.create!(group:, state: :finished, position:, decider: false)
+      MatchScore.create!(match:, team: teams[left_index], points: left_points, hidden_points: 0)
+      MatchScore.create!(match:, team: teams[right_index], points: right_points, hidden_points: 0)
     end
   end
 
   def create_decider_match!(group:, teams:, hidden_points:)
-    match = Match.create!(group: group, state: :finished, position: 6, decider: true)
-    MatchScore.create!(match: match, team: teams.first, points: 0, hidden_points: hidden_points.first)
-    MatchScore.create!(match: match, team: teams.second, points: 0, hidden_points: hidden_points.last)
+    match = Match.create!(group:, state: :finished, position: 6, decider: true)
+    MatchScore.create!(match:, team: teams.first, points: 0, hidden_points: hidden_points.first)
+    MatchScore.create!(match:, team: teams.second, points: 0, hidden_points: hidden_points.last)
   end
 
   def create_group_scores!(group:, teams:)
     teams.each_with_index do |team, index|
       GroupScore.create!(
-        group: group,
-        team: team,
+        group:,
+        team:,
         group_points: 9 - index,
         scored_points: 12 - index,
         received_points: index,
@@ -185,7 +187,7 @@ RSpec.describe TournamentSnapshotImporter do
       intermediate_round_participants_amount: tournament.intermediate_round_participants_amount,
       timestamp: tournament.timestamp&.iso8601,
       timer_mode: tournament.timer_mode,
-      teams: tournament.teams.order(:name).map { |team| team.name },
+      teams: tournament.teams.order(:name).map(&:name),
       team_action_lists: tournament.team_action_lists.order(:key).map do |list|
         {
           key: list.key,

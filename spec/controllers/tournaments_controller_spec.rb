@@ -24,7 +24,7 @@ RSpec.describe TournamentsController, type: :controller do
         get :index
         tournaments = deserialize_response response
         public_tournaments = tournaments.select { |t| t[:public] }
-        expect(public_tournaments.map { |t| t[:id] }).to match_array(Tournament.where(public: true).map { |t| t[:id] })
+        expect(public_tournaments.pluck(:id)).to match_array(Tournament.where(public: true).pluck(:id))
       end
     end
 
@@ -35,15 +35,15 @@ RSpec.describe TournamentsController, type: :controller do
 
       it 'returns all private tournaments' do
         apply_authentication_headers_for @another_user
-        get :index, params: params
+        get(:index, params:)
         tournaments = deserialize_response response
-        private_tournaments = Tournament.where(owner: @another_user, public: false).map { |t| t[:id] }
-        returned_private_tournaments = tournaments.filter { |t| !t[:public] }.map { |t| t[:id] }
+        private_tournaments = Tournament.where(owner: @another_user, public: false).pluck(:id)
+        returned_private_tournaments = tournaments.filter { |t| !t[:public] }.pluck(:id)
         expect(returned_private_tournaments).to match_array(private_tournaments)
       end
 
       it 'returns no private tournaments for unauthenticated users' do
-        get :index, params: params
+        get(:index, params:)
         tournaments = deserialize_response response
         private_tournaments = tournaments.reject { |t| t[:public] }
         expect(private_tournaments.size).to eq(0)
@@ -51,14 +51,14 @@ RSpec.describe TournamentsController, type: :controller do
 
       it 'returns no private tournaments owned by another user' do
         apply_authentication_headers_for @user
-        get :index, params: params
+        get(:index, params:)
         tournaments = deserialize_response response
-        expect(tournaments.map { |t| t[:id] }).not_to include(@private_tournament.id)
+        expect(tournaments.pluck(:id)).not_to include(@private_tournament.id)
       end
 
       it 'returns no public tournaments' do
         apply_authentication_headers_for @another_user
-        get :index, params: params
+        get(:index, params:)
         tournaments = deserialize_response response
         expect(tournaments.count { |t| t[:public] }).to eq(0)
       end
@@ -70,15 +70,15 @@ RSpec.describe TournamentsController, type: :controller do
       end
 
       it 'returns all public tournaments' do
-        get :index, params: params
+        get(:index, params:)
         tournaments = deserialize_response response
         public_tournaments = tournaments.select { |t| t[:public] }
-        expect(public_tournaments.map { |t| t[:id] }).to match_array(Tournament.where(public: true).map { |t| t[:id] })
+        expect(public_tournaments.pluck(:id)).to match_array(Tournament.where(public: true).pluck(:id))
       end
 
       it 'returns no private tournaments' do
         apply_authentication_headers_for @another_user
-        get :index, params: params
+        get(:index, params:)
         tournaments = deserialize_response response
         expect(tournaments.count { |t| !t[:public] }).to eq(0)
       end
@@ -224,7 +224,7 @@ RSpec.describe TournamentsController, type: :controller do
   describe 'GET #timer' do
     it 'returns timer state in ISO 8601 format' do
       timestamp = Time.utc(2026, 4, 13, 18, 0, 0)
-      @tournament.update!(timestamp: timestamp, timer_mode: 'countdown')
+      @tournament.update!(timestamp:, timer_mode: 'countdown')
 
       get :timer, params: { id: @tournament.to_param }
 
@@ -242,7 +242,7 @@ RSpec.describe TournamentsController, type: :controller do
     it 'stores timezone-aware timestamp values without shifting them' do
       timestamp = '2030-04-13T18:00:00+02:00'
 
-      patch :set_timer, params: { id: @tournament.to_param, timestamp: timestamp }
+      patch :set_timer, params: { id: @tournament.to_param, timestamp: }
 
       expect(response).to be_successful
       expect(@tournament.reload.timestamp.iso8601).to eq(Time.iso8601(timestamp).utc.iso8601)
@@ -257,7 +257,7 @@ RSpec.describe TournamentsController, type: :controller do
 
       expect(response).to be_successful
       expect(@tournament.reload.timer_mode).to eq('countup')
-      expect(@tournament.timestamp).to be_between(before_request - 1.second, Time.zone.now + 1.second)
+      expect(@tournament.timestamp).to be_between(before_request - 1.second, 1.second.from_now)
       expect(deserialize_response(response)[:timer_mode]).to eq('countup')
     end
 

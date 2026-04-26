@@ -2,12 +2,12 @@
 
 class BeamerBroadcastPayload
   class << self
-    def build(beamer: nil, snapshot: nil, event:)
+    def build(event:, beamer: nil, snapshot: nil)
       data = snapshot || self.snapshot(beamer)
 
       {
         type: "beamer.#{event}",
-        event: event,
+        event:,
         tournament_id: data.fetch(:tournament_id),
         beamer: serialized_beamer(data)
       }

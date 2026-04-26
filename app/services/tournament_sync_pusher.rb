@@ -27,11 +27,9 @@ class TournamentSyncPusher
   end
 
   def push_snapshot!(snapshot)
-    response = perform_request(snapshot: snapshot)
+    response = perform_request(snapshot:)
 
-    unless response.is_a?(Net::HTTPSuccess)
-      raise SyncFailed, "sync push failed with status #{response.code}: #{response.body}"
-    end
+    raise SyncFailed, "sync push failed with status #{response.code}: #{response.body}" unless response.is_a?(Net::HTTPSuccess)
 
     tournament.update_columns(sync_last_pushed_at: Time.current, sync_last_push_error: nil)
     true
@@ -53,7 +51,7 @@ class TournamentSyncPusher
     request['accept'] = 'application/json'
     request['content-type'] = 'application/json'
     request['authorization'] = "Bearer #{tournament.sync_auth_token}"
-    request.body = JSON.dump({ snapshot: snapshot })
+    request.body = JSON.dump({ snapshot: })
 
     Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == 'https') do |http|
       timeout = http_timeout_seconds

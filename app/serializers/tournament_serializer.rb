@@ -6,7 +6,7 @@ class TournamentSerializer < SimpleTournamentSerializer
   attribute :read_only_mode, if: :sync_metadata_visible?
   attribute :sync_target_url, if: :sync_metadata_visible?
   attribute :sync_last_push_error, if: :sync_metadata_visible?
-             # NEVER expose sync_auth_token anywhere - it should only ever be written to or checked against
+  # NEVER expose sync_auth_token anywhere - it should only ever be written to or checked against
 
   has_many :stages
   has_many :team_action_lists

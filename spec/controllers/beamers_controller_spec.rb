@@ -73,9 +73,9 @@ RSpec.describe BeamersController, type: :controller do
       before(:each) { apply_authentication_headers_for @owner }
 
       it 'creates a new beamer' do
-        expect {
+        expect do
           post :create, params: { tournament_id: @tournament.to_param }.merge(valid_params)
-        }.to change(@tournament.beamers, :count).by(1)
+        end.to change(@tournament.beamers, :count).by(1)
         expect(response).to have_http_status(:created)
       end
 
@@ -186,11 +186,11 @@ RSpec.describe BeamersController, type: :controller do
       before(:each) { apply_authentication_headers_for @owner }
 
       it 'deletes the beamer' do
-        expect {
+        expect do
           delete :destroy, params: {
             tournament_id: @tournament.to_param, id: @beamer.to_param
           }
-        }.to change(@tournament.beamers, :count).by(-1)
+        end.to change(@tournament.beamers, :count).by(-1)
         expect(response).to have_http_status(:no_content)
       end
     end

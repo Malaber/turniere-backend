@@ -12,7 +12,7 @@ class TournamentSnapshotImporter
   ].freeze
 
   def self.import!(tournament:, snapshot:)
-    new(tournament: tournament, snapshot: snapshot).import!
+    new(tournament:, snapshot:).import!
   end
 
   def initialize(tournament:, snapshot:)
@@ -214,6 +214,7 @@ class TournamentSnapshotImporter
     stale_records = existing_records.reject { |record| source_ids.include?(record.sync_source_id) }
     stale_records.each(&:destroy!)
   end
+
   def parse_time(value)
     return nil if value.blank?
 
@@ -234,6 +235,6 @@ class TournamentSnapshotImporter
   def code_taken_by_another_tournament?(code)
     return false if code.blank?
 
-    Tournament.where(code: code).where.not(id: tournament.id).exists?
+    Tournament.where(code:).where.not(id: tournament.id).exists?
   end
 end

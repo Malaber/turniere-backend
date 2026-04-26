@@ -45,9 +45,9 @@ class TournamentSyncQueueEntry < ApplicationRecord
   def acquire_lock!
     token = SecureRandom.hex(8)
     updated = self.class
-                  .where(id: id)
+                  .where(id:)
                   .where(locked_at: nil)
-                  .or(self.class.where(id: id).where('locked_at < ?', Time.current - LOCK_TTL))
+                  .or(self.class.where(id:).where('locked_at < ?', Time.current - LOCK_TTL))
                   .update_all(locked_at: Time.current, lock_token: token)
     return nil if updated.zero?
 

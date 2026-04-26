@@ -51,7 +51,7 @@ RSpec.describe MatchesController, type: :controller do
         expect(match[:teams]).to all(include(:id, :name))
       end
     end
-    # TODO add test for upcoming once there is test data for a "valid" group stage
+    # TODO: add test for upcoming once there is test data for a "valid" group stage
   end
 
   describe 'GET #show' do
@@ -65,12 +65,14 @@ RSpec.describe MatchesController, type: :controller do
       get :show, params: { id: @match.to_param }
       body = deserialize_response response
       expect(body[:state]).to eq(@match.state)
-      expect(body[:match_scores].map { |ms| ms[:id] }).to eq(@match.match_scores.map(&:id))
+      expect(body[:match_scores].pluck(:id)).to eq(@match.match_scores.map(&:id))
     end
   end
 
   describe 'POST #create' do
-    let(:group_stage_tournament) { create(:group_stage_tournament, group_count: 1, match_factory: :finished_group_match) }
+    let(:group_stage_tournament) do
+      create(:group_stage_tournament, group_count: 1, match_factory: :finished_group_match)
+    end
     let(:group) { group_stage_tournament.stages.find_by(level: -1).groups.first }
     let(:team_ids) { group.teams.first(2).map(&:id) }
 
@@ -81,7 +83,7 @@ RSpec.describe MatchesController, type: :controller do
 
       it 'creates a decider match at the end of the group' do
         expect do
-          post :create, params: { group_id: group.to_param, team_ids: team_ids }
+          post :create, params: { group_id: group.to_param, team_ids: }
         end.to change { group.matches.reload.count }.by(1)
 
         expect(response).to have_http_status(:created)
@@ -137,8 +139,8 @@ RSpec.describe MatchesController, type: :controller do
         expect(last_match.reload.position).to eq(original_first_position)
 
         body = deserialize_response(response)
-        expect(body.map { |match| match[:id] }).to match_array([first_match.id, last_match.id])
-        expect(body.map { |match| match[:position] }).to match_array([original_first_position, original_last_position])
+        expect(body.pluck(:id)).to match_array([first_match.id, last_match.id])
+        expect(body.pluck(:position)).to match_array([original_first_position, original_last_position])
       end
 
       it 'rejects matches from different groups' do

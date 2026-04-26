@@ -34,7 +34,7 @@ class Beamer < ApplicationRecord
     BeamerBroadcast.call(
       tournament_id: snapshot.fetch(:tournament_id),
       beamer_names: [@broadcast_previous_name, snapshot.fetch(:name)].compact.uniq,
-      payload: BeamerBroadcastPayload.build(snapshot: snapshot, event: broadcast_event)
+      payload: BeamerBroadcastPayload.build(snapshot:, event: broadcast_event)
     )
   ensure
     @broadcast_previous_name = nil

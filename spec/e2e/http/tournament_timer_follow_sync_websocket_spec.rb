@@ -63,7 +63,7 @@ RSpec.describe 'Tournament timer follower sync websocket HTTP E2E' do
   end
 
   def login_client(base_url:)
-    client = TurniereE2E::ApiClient.new(base_url: base_url)
+    client = TurniereE2E::ApiClient.new(base_url:)
     response = client.login!(email: owner_email, password: owner_password)
     expect(response[:status]).to eq(200)
     client
@@ -74,7 +74,7 @@ RSpec.describe 'Tournament timer follower sync websocket HTTP E2E' do
                              name: "#{name_prefix} #{SecureRandom.hex(3)}",
                              description: 'Follower websocket timer source tournament',
                              public: false,
-                             teams: 4.times.map do |index|
+                             teams: Array.new(4) do |index|
                                { name: "#{name_prefix.tr(' ', '')}-#{index + 1}" }
                              end
                            })
@@ -96,12 +96,12 @@ RSpec.describe 'Tournament timer follower sync websocket HTTP E2E' do
   end
 
   def wait_for_timer_state!(cable_client, timer_mode:, timeout: 20)
-    deadline = Time.now + timeout
+    deadline = Time.zone.now + timeout
     loop do
-      payload = cable_client.wait_for_timer_payload!(timeout: [deadline - Time.now, 0.1].max)
+      payload = cable_client.wait_for_timer_payload!(timeout: [deadline - Time.zone.now, 0.1].max)
       return payload if payload.fetch('timer_mode') == timer_mode
 
-      raise "follower timer websocket payload not received within #{timeout}s" if Time.now >= deadline
+      raise "follower timer websocket payload not received within #{timeout}s" if Time.zone.now >= deadline
     end
   end
 end

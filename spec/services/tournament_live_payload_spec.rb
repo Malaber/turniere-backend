@@ -31,7 +31,7 @@ RSpec.describe 'Tournament live payloads' do
       expect(serialized_match[:position]).to eq(match.position)
       expect(serialized_match.dig(:group, :id)).to eq(match.group_id)
       expect(serialized_match.dig(:stage, :id)).to eq(match.group.stage_id)
-      expect(serialized_match[:teams].map { |team| team[:id] }).to match_array(match.teams.map(&:id))
+      expect(serialized_match[:teams].pluck(:id)).to match_array(match.teams.map(&:id))
       expect(serialized_match[:match_scores].map { |score| score[:team][:id] }).to match_array(match.teams.map(&:id))
     end
   end

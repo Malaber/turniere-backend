@@ -28,7 +28,7 @@ module Local
         result = yield
       end
       duration = (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started_at) * 1000.0
-      @measurements << { name: name, duration: duration.round(1), query_count: query_count }
+      @measurements << { name:, duration: duration.round(1), query_count: }
       result
     end
 

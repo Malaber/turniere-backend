@@ -70,11 +70,12 @@ class TournamentsController < ApplicationController
     end
 
     raise ActionController::ParameterMissing, :teams if teams.nil?
+
     if group_stage
       params.require(:playoff_teams_amount)
       groups = organize_teams_in_groups(teams)
       # add groups to tournament
-      result = AddGroupStageToTournamentAndSave.call(tournament: tournament, groups: groups)
+      result = AddGroupStageToTournamentAndSave.call(tournament:, groups:)
       # associate provided teams with tournament on success
       tournament.teams = groups.flatten if result.success?
     else
@@ -83,7 +84,7 @@ class TournamentsController < ApplicationController
       # associate provided teams with tournament
       tournament.teams = teams
       # add playoff stage to tournament
-      result = AddPlayoffsToTournamentAndSave.call(tournament: tournament, teams: tournament.teams)
+      result = AddPlayoffsToTournamentAndSave.call(tournament:, teams: tournament.teams)
     end
     # validate tournament
     unless tournament.valid?
@@ -164,7 +165,6 @@ class TournamentsController < ApplicationController
       tournament: TournamentSerializer.new(@tournament, scope: current_user).as_json
     }, status: :bad_gateway
   end
-
 
   private
 
@@ -253,7 +253,7 @@ class TournamentsController < ApplicationController
     return if ActiveModel::Type::Boolean.new.cast(params[:read_only_mode])
 
     teams = params['teams']
-    return if teams.is_a?(Array) && teams.reject { |t| t.is_a? ActionController::Parameters }.count.zero?
+    return if teams.is_a?(Array) && teams.count { |t| !(t.is_a? ActionController::Parameters) }.zero?
 
     render json: { error: 'Invalid teams array' }, status: :unprocessable_entity
   end
@@ -288,12 +288,16 @@ class TournamentsController < ApplicationController
       error: 'playoff_teams_amount, instant_finalists_amount and intermediate_round_participants_amount don\'t match'
     }, status: :unprocessable_entity
   end
+
   def sync_state_params
     params.require(:snapshot).permit!.to_h
   end
 
   def authorize_sync_request!
-    return render json: { error: 'Tournament is not configured to accept sync pushes' }, status: :unprocessable_entity unless @tournament.sync_accepts_push?
+    unless @tournament.sync_accepts_push?
+      return render json: { error: 'Tournament is not configured to accept sync pushes' },
+                    status: :unprocessable_entity
+    end
 
     token = request.authorization.to_s.delete_prefix('Bearer ').presence || request.headers['X-Tournament-Sync-Token'].to_s
     return render json: { error: 'Missing sync token' }, status: :unauthorized if token.blank?
@@ -346,17 +350,19 @@ class TournamentsController < ApplicationController
       return
     end
 
-    if timer_mode.present? && !%w[countdown countup].include?(timer_mode)
+    if timer_mode.present? && %w[countdown countup].exclude?(timer_mode)
       return render json: { error: 'Invalid timer_mode' }, status: :unprocessable_entity
     end
 
     # throw error if both timestamp and timestamp_seconds are present
     if timestamp.present? && timestamp_seconds.present?
-      return render json: { error: 'Only one of timestamp or timestamp_seconds is allowed' }, status: :unprocessable_entity
+      return render json: { error: 'Only one of timestamp or timestamp_seconds is allowed' },
+                    status: :unprocessable_entity
     end
 
     if timer_mode == 'countup' && timestamp_seconds.present?
-      return render json: { error: 'timestamp_seconds is only allowed for countdown mode' }, status: :unprocessable_entity
+      return render json: { error: 'timestamp_seconds is only allowed for countdown mode' },
+                    status: :unprocessable_entity
     end
 
     if timestamp_seconds.present?
@@ -366,7 +372,10 @@ class TournamentsController < ApplicationController
         return render json: { error: 'Invalid seconds format' }, status: :unprocessable_entity
       end
 
-      return render json: { error: 'Timestamp must be in the future for countdown mode' }, status: :unprocessable_entity if timestamp_seconds <= 0
+      if timestamp_seconds <= 0
+        return render json: { error: 'Timestamp must be in the future for countdown mode' },
+                      status: :unprocessable_entity
+      end
 
       parsed_time = Time.zone.now + timestamp_seconds
       params[:timestamp] = parsed_time
@@ -377,22 +386,23 @@ class TournamentsController < ApplicationController
         if parsed_time.nil?
           return render json: { error: 'Invalid timestamp format' }, status: :unprocessable_entity
         elsif timer_mode != 'countup' && !parsed_time.future?
-          return render json: { error: 'Timestamp must be in the future for countdown mode' }, status: :unprocessable_entity
+          return render json: { error: 'Timestamp must be in the future for countdown mode' },
+                        status: :unprocessable_entity
         end
 
         params[:timestamp] = parsed_time
         params[:timer_mode] = timer_mode.presence || 'countdown'
       rescue ArgumentError
-        return render json: { error: 'Invalid timestamp format' }, status: :unprocessable_entity
+        render json: { error: 'Invalid timestamp format' }, status: :unprocessable_entity
       end
     elsif timer_mode == 'countup'
       params[:timestamp] = Time.zone.now
     elsif timer_mode.present?
-      return render json: { error: 'timer_mode requires timestamp, timestamp_seconds, or clear_timer' },
-                    status: :unprocessable_entity
+      render json: { error: 'timer_mode requires timestamp, timestamp_seconds, or clear_timer' },
+             status: :unprocessable_entity
     else
-      return render json: { error: 'timestamp, timestamp_seconds, or clear_timer is required' },
-                    status: :unprocessable_entity
+      render json: { error: 'timestamp, timestamp_seconds, or clear_timer is required' },
+             status: :unprocessable_entity
     end
   end
 end

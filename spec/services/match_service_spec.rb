@@ -62,7 +62,7 @@ RSpec.describe MatchService do
           first_team = match.match_scores.first.team.name
           second_team = match.match_scores.second.team.name
           expect(first_team).to eq(teams[2 * index].name)
-          expect(second_team).to eq(teams[2 * index + 1].name)
+          expect(second_team).to eq(teams[(2 * index) + 1].name)
         end
       end
     end

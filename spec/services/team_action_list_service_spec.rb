@@ -48,7 +48,8 @@ RSpec.describe TeamActionListService do
           action_name: 'Break',
           source: 'unknown_source'
         )
-      end.to raise_error(TeamActionListService::InvalidSourceError, 'Unsupported team action list source: unknown_source')
+      end.to raise_error(TeamActionListService::InvalidSourceError,
+                         'Unsupported team action list source: unknown_source')
     end
 
     it 'raises when source resolves to no teams' do
@@ -62,7 +63,8 @@ RSpec.describe TeamActionListService do
           action_name: 'Nothing',
           source: 'all_tournament_teams'
         )
-      end.to raise_error(TeamActionListService::EmptySourceError, 'Source all_tournament_teams does not currently contain any teams')
+      end.to raise_error(TeamActionListService::EmptySourceError,
+                         'Source all_tournament_teams does not currently contain any teams')
     end
   end
 end

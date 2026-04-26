@@ -4,7 +4,7 @@ RSpec.describe GroupStageService do
   before do
     @teams1 = create_list(:team, 4)
     @teams2 = create_list(:team, 4)
-    @prepared_groups = Hash[1 => @teams1, 2 => @teams2].values
+    @prepared_groups = { 1 => @teams1, 2 => @teams2 }.values
   end
   describe '#generate_group_stage' do
     let(:prepared_groups_groupstage) do
@@ -52,7 +52,7 @@ RSpec.describe GroupStageService do
     end
   end
 
-  # TODO test get_advancing_teams when test data for running group stage is ready
+  # TODO: test get_advancing_teams when test data for running group stage is ready
 
   describe '#get_group_object_from' do
     it 'returns a group' do
@@ -205,13 +205,13 @@ RSpec.describe GroupStageService do
       team_a = create(:team)
       team_b = create(:team)
 
-      create(:group_match, group: group, state: :finished).tap do |match|
-        create(:match_score, match: match, team: team_a, points: 4)
-        create(:match_score, match: match, team: team_b, points: 2)
+      create(:group_match, group:, state: :finished).tap do |match|
+        create(:match_score, match:, team: team_a, points: 4)
+        create(:match_score, match:, team: team_b, points: 2)
       end
 
-      create(:group_score, group: group, team: team_a, group_points: 3, scored_points: 4, received_points: 2)
-      create(:group_score, group: group, team: team_b, group_points: 3, scored_points: 4, received_points: 2)
+      create(:group_score, group:, team: team_a, group_points: 3, scored_points: 4, received_points: 2)
+      create(:group_score, group:, team: team_b, group_points: 3, scored_points: 4, received_points: 2)
 
       expect(GroupStageService.teams_sorted_by_group_scores(group.reload)).to eq([team_a, team_b])
     end
@@ -224,14 +224,14 @@ RSpec.describe GroupStageService do
              playoff_teams_amount: 2,
              instant_finalists_amount: 2,
              intermediate_round_participants_amount: 0,
-             group_stage: group_stage)
+             group_stage:)
     end
     let(:group_stage) { create(:group_stage, tournament: create(:tournament, teams_count: 0), group_count: 0) }
     let(:group) { create(:group, stage: group_stage, match_count: 0, number: 1) }
-    let(:team_a) { create(:team, tournament: tournament, name: 'A') }
-    let(:team_b) { create(:team, tournament: tournament, name: 'B') }
-    let(:team_c) { create(:team, tournament: tournament, name: 'C') }
-    let(:team_d) { create(:team, tournament: tournament, name: 'D') }
+    let(:team_a) { create(:team, tournament:, name: 'A') }
+    let(:team_b) { create(:team, tournament:, name: 'B') }
+    let(:team_c) { create(:team, tournament:, name: 'C') }
+    let(:team_d) { create(:team, tournament:, name: 'D') }
 
     before do
       group_stage.groups = [group]
@@ -240,13 +240,13 @@ RSpec.describe GroupStageService do
     end
 
     it 'returns direct-comparison metadata for teams separated by head-to-head' do
-      create(:group_match, group: group, state: :finished).tap do |match|
-        create(:match_score, match: match, team: team_a, points: 4)
-        create(:match_score, match: match, team: team_b, points: 2)
+      create(:group_match, group:, state: :finished).tap do |match|
+        create(:match_score, match:, team: team_a, points: 4)
+        create(:match_score, match:, team: team_b, points: 2)
       end
 
-      score_a = create(:group_score, group: group, team: team_a, group_points: 3, scored_points: 4, received_points: 2)
-      score_b = create(:group_score, group: group, team: team_b, group_points: 3, scored_points: 4, received_points: 2)
+      score_a = create(:group_score, group:, team: team_a, group_points: 3, scored_points: 4, received_points: 2)
+      score_b = create(:group_score, group:, team: team_b, group_points: 3, scored_points: 4, received_points: 2)
 
       GroupStageService.send(:recalculate_position_of_group_scores!, [score_a, score_b]).each(&:save!)
 
@@ -269,17 +269,18 @@ RSpec.describe GroupStageService do
     end
 
     it 'keeps shared positions and requests a decider when an unresolved tie affects advancing placements' do
-      tournament.update!(playoff_teams_amount: 1, instant_finalists_amount: 1, intermediate_round_participants_amount: 0)
+      tournament.update!(playoff_teams_amount: 1, instant_finalists_amount: 1,
+                         intermediate_round_participants_amount: 0)
 
-      create(:group_match, group: group, state: :finished).tap do |match|
-        create(:match_score, match: match, team: team_a, points: 2)
-        create(:match_score, match: match, team: team_b, points: 2)
+      create(:group_match, group:, state: :finished).tap do |match|
+        create(:match_score, match:, team: team_a, points: 2)
+        create(:match_score, match:, team: team_b, points: 2)
       end
 
-      score_a = create(:group_score, group: group, team: team_a, group_points: 7, scored_points: 4, received_points: 1)
-      score_b = create(:group_score, group: group, team: team_b, group_points: 7, scored_points: 4, received_points: 1)
-      score_c = create(:group_score, group: group, team: team_c, group_points: 3, scored_points: 2, received_points: 3)
-      score_d = create(:group_score, group: group, team: team_d, group_points: 0, scored_points: 1, received_points: 7)
+      score_a = create(:group_score, group:, team: team_a, group_points: 7, scored_points: 4, received_points: 1)
+      score_b = create(:group_score, group:, team: team_b, group_points: 7, scored_points: 4, received_points: 1)
+      score_c = create(:group_score, group:, team: team_c, group_points: 3, scored_points: 2, received_points: 3)
+      score_d = create(:group_score, group:, team: team_d, group_points: 0, scored_points: 1, received_points: 7)
 
       GroupStageService.send(:recalculate_position_of_group_scores!, [score_a, score_b, score_c, score_d]).each(&:save!)
 
@@ -301,17 +302,18 @@ RSpec.describe GroupStageService do
     end
 
     it 'requests a decider when tied teams both advance but their seeding stays unresolved' do
-      tournament.update!(playoff_teams_amount: 2, instant_finalists_amount: 2, intermediate_round_participants_amount: 0)
+      tournament.update!(playoff_teams_amount: 2, instant_finalists_amount: 2,
+                         intermediate_round_participants_amount: 0)
 
-      create(:group_match, group: group, state: :finished).tap do |match|
-        create(:match_score, match: match, team: team_a, points: 2)
-        create(:match_score, match: match, team: team_b, points: 2)
+      create(:group_match, group:, state: :finished).tap do |match|
+        create(:match_score, match:, team: team_a, points: 2)
+        create(:match_score, match:, team: team_b, points: 2)
       end
 
-      score_a = create(:group_score, group: group, team: team_a, group_points: 7, scored_points: 4, received_points: 1)
-      score_b = create(:group_score, group: group, team: team_b, group_points: 7, scored_points: 4, received_points: 1)
-      score_c = create(:group_score, group: group, team: team_c, group_points: 3, scored_points: 2, received_points: 3)
-      score_d = create(:group_score, group: group, team: team_d, group_points: 0, scored_points: 1, received_points: 7)
+      score_a = create(:group_score, group:, team: team_a, group_points: 7, scored_points: 4, received_points: 1)
+      score_b = create(:group_score, group:, team: team_b, group_points: 7, scored_points: 4, received_points: 1)
+      score_c = create(:group_score, group:, team: team_c, group_points: 3, scored_points: 2, received_points: 3)
+      score_d = create(:group_score, group:, team: team_d, group_points: 0, scored_points: 1, received_points: 7)
 
       GroupStageService.send(:recalculate_position_of_group_scores!, [score_a, score_b, score_c, score_d]).each(&:save!)
 
@@ -333,17 +335,18 @@ RSpec.describe GroupStageService do
     end
 
     it 'does not expose unresolved tie metadata while regular matches in the group are still unfinished' do
-      tournament.update!(playoff_teams_amount: 1, instant_finalists_amount: 1, intermediate_round_participants_amount: 0)
+      tournament.update!(playoff_teams_amount: 1, instant_finalists_amount: 1,
+                         intermediate_round_participants_amount: 0)
 
-      create(:group_match, group: group, state: :in_progress).tap do |match|
-        create(:match_score, match: match, team: team_a, points: 2)
-        create(:match_score, match: match, team: team_b, points: 2)
+      create(:group_match, group:, state: :in_progress).tap do |match|
+        create(:match_score, match:, team: team_a, points: 2)
+        create(:match_score, match:, team: team_b, points: 2)
       end
 
-      score_a = create(:group_score, group: group, team: team_a, group_points: 1, scored_points: 2, received_points: 2)
-      score_b = create(:group_score, group: group, team: team_b, group_points: 1, scored_points: 2, received_points: 2)
-      score_c = create(:group_score, group: group, team: team_c, group_points: 0, scored_points: 0, received_points: 0)
-      score_d = create(:group_score, group: group, team: team_d, group_points: 0, scored_points: 0, received_points: 0)
+      score_a = create(:group_score, group:, team: team_a, group_points: 1, scored_points: 2, received_points: 2)
+      score_b = create(:group_score, group:, team: team_b, group_points: 1, scored_points: 2, received_points: 2)
+      score_c = create(:group_score, group:, team: team_c, group_points: 0, scored_points: 0, received_points: 0)
+      score_d = create(:group_score, group:, team: team_d, group_points: 0, scored_points: 0, received_points: 0)
 
       GroupStageService.send(:recalculate_position_of_group_scores!, [score_a, score_b, score_c, score_d]).each(&:save!)
 
@@ -352,12 +355,15 @@ RSpec.describe GroupStageService do
     end
 
     it 'does not expose unresolved tie metadata outside the advancing cutoff before the group is finished' do
-      tournament.update!(playoff_teams_amount: 2, instant_finalists_amount: 2, intermediate_round_participants_amount: 0)
+      tournament.update!(playoff_teams_amount: 2, instant_finalists_amount: 2,
+                         intermediate_round_participants_amount: 0)
 
-      score_a = create(:group_score, group: group, team: team_a, group_points: 9, scored_points: 5, received_points: 1, position: 1)
-      score_b = create(:group_score, group: group, team: team_b, group_points: 6, scored_points: 4, received_points: 2, position: 2)
-      score_c = create(:group_score, group: group, team: team_c, group_points: 3, scored_points: 2, received_points: 3)
-      score_d = create(:group_score, group: group, team: team_d, group_points: 3, scored_points: 2, received_points: 3)
+      score_a = create(:group_score, group:, team: team_a, group_points: 9, scored_points: 5, received_points: 1,
+                                     position: 1)
+      score_b = create(:group_score, group:, team: team_b, group_points: 6, scored_points: 4, received_points: 2,
+                                     position: 2)
+      score_c = create(:group_score, group:, team: team_c, group_points: 3, scored_points: 2, received_points: 3)
+      score_d = create(:group_score, group:, team: team_d, group_points: 3, scored_points: 2, received_points: 3)
 
       GroupStageService.send(:recalculate_position_of_group_scores!, [score_a, score_b, score_c, score_d]).each(&:save!)
 
@@ -367,21 +373,22 @@ RSpec.describe GroupStageService do
     end
 
     it 'uses the decider hidden points to resolve a cutoff tie' do
-      tournament.update!(playoff_teams_amount: 1, instant_finalists_amount: 1, intermediate_round_participants_amount: 0)
+      tournament.update!(playoff_teams_amount: 1, instant_finalists_amount: 1,
+                         intermediate_round_participants_amount: 0)
 
-      create(:group_match, group: group, state: :finished).tap do |match|
-        create(:match_score, match: match, team: team_a, points: 2)
-        create(:match_score, match: match, team: team_b, points: 2)
+      create(:group_match, group:, state: :finished).tap do |match|
+        create(:match_score, match:, team: team_a, points: 2)
+        create(:match_score, match:, team: team_b, points: 2)
       end
-      create(:group_match, group: group, state: :finished, decider: true).tap do |match|
-        create(:match_score, match: match, team: team_a, hidden_points: 5)
-        create(:match_score, match: match, team: team_b, hidden_points: 3)
+      create(:group_match, group:, state: :finished, decider: true).tap do |match|
+        create(:match_score, match:, team: team_a, hidden_points: 5)
+        create(:match_score, match:, team: team_b, hidden_points: 3)
       end
 
-      score_a = create(:group_score, group: group, team: team_a, group_points: 7, scored_points: 4, received_points: 1)
-      score_b = create(:group_score, group: group, team: team_b, group_points: 7, scored_points: 4, received_points: 1)
-      score_c = create(:group_score, group: group, team: team_c, group_points: 3, scored_points: 2, received_points: 3)
-      score_d = create(:group_score, group: group, team: team_d, group_points: 0, scored_points: 1, received_points: 7)
+      score_a = create(:group_score, group:, team: team_a, group_points: 7, scored_points: 4, received_points: 1)
+      score_b = create(:group_score, group:, team: team_b, group_points: 7, scored_points: 4, received_points: 1)
+      score_c = create(:group_score, group:, team: team_c, group_points: 3, scored_points: 2, received_points: 3)
+      score_d = create(:group_score, group:, team: team_d, group_points: 0, scored_points: 1, received_points: 7)
 
       GroupStageService.send(:recalculate_position_of_group_scores!, [score_a, score_b, score_c, score_d]).each(&:save!)
 
@@ -417,7 +424,7 @@ RSpec.describe GroupStageService do
 
         @tournament = create(:prepared_group_stage_tournament,
                              group_stage: @group_stage,
-                             teams: teams,
+                             teams:,
                              playoff_teams_amount: 16,
                              instant_finalists_amount: 16,
                              intermediate_round_participants_amount: 0)
@@ -427,7 +434,7 @@ RSpec.describe GroupStageService do
             match.match_scores.each do |ms|
               # give the team 10 points minus the number in their name
               # this results in the team 0 always winning and getting to place 1 in the group etc.
-              ms.points = 10 - ms.team.name.split(' ').last.to_i
+              ms.points = 10 - ms.team.name.split.last.to_i
               ms.save!
             end
             match.state = 'finished'
@@ -450,7 +457,7 @@ RSpec.describe GroupStageService do
         advancing_teams.each_with_index do |team, i|
           # if index is even, the team should be of a first place; end in a 0
           # if index is odd, the team should be of a second place; end in a 1
-          team_quality = team.name.split(' ').last.to_i
+          team_quality = team.name.split.last.to_i
           expect(team_quality % 2).to be(i % 2)
         end
       end
@@ -469,9 +476,9 @@ RSpec.describe GroupStageService do
         advancing_teams = GroupStageService.get_advancing_teams(@group_stage)
         advancing_teams.each_slice(2).to_a.each do |matchup|
           # this is the team that landed a first place in the group
-          first_place_team = matchup[0].name.split(' ')[1].to_i
+          first_place_team = matchup[0].name.split[1].to_i
           # this is the team that landed a second place in the group
-          second_place_team = matchup[1].name.split(' ')[1].to_i
+          second_place_team = matchup[1].name.split[1].to_i
           expect(group_first_matchups_expected[first_place_team]).to eq(second_place_team)
         end
       end

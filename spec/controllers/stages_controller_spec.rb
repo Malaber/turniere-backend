@@ -26,7 +26,7 @@ RSpec.describe StagesController, type: :controller do
         match.save!
       end
 
-      UpdateGroupsGroupScoresAndSave.call(group: group)
+      UpdateGroupsGroupScoresAndSave.call(group:)
     end
 
     stage.reload
@@ -179,17 +179,20 @@ RSpec.describe StagesController, type: :controller do
 
       before do
         tournament = group_stage.tournament
-        tournament.update!(playoff_teams_amount: 1, instant_finalists_amount: 1, intermediate_round_participants_amount: 0)
+        tournament.update!(playoff_teams_amount: 1, instant_finalists_amount: 1,
+                           intermediate_round_participants_amount: 0)
         group = create(:group, stage: group_stage, match_count: 0, number: 1)
         group_stage.groups = [group]
-        team_a = create(:team, tournament: tournament, name: 'A')
-        team_b = create(:team, tournament: tournament, name: 'B')
-        create(:group_match, group: group, state: :finished).tap do |match|
-          create(:match_score, match: match, team: team_a, points: 2)
-          create(:match_score, match: match, team: team_b, points: 2)
+        team_a = create(:team, tournament:, name: 'A')
+        team_b = create(:team, tournament:, name: 'B')
+        create(:group_match, group:, state: :finished).tap do |match|
+          create(:match_score, match:, team: team_a, points: 2)
+          create(:match_score, match:, team: team_b, points: 2)
         end
-        score_a = create(:group_score, group: group, team: team_a, group_points: 7, scored_points: 4, received_points: 1)
-        score_b = create(:group_score, group: group, team: team_b, group_points: 7, scored_points: 4, received_points: 1)
+        score_a = create(:group_score, group:, team: team_a, group_points: 7, scored_points: 4,
+                                       received_points: 1)
+        score_b = create(:group_score, group:, team: team_b, group_points: 7, scored_points: 4,
+                                       received_points: 1)
         GroupStageService.send(:recalculate_position_of_group_scores!, [score_a, score_b]).each(&:save!)
 
         apply_authentication_headers_for group_stage.owner
@@ -215,17 +218,20 @@ RSpec.describe StagesController, type: :controller do
 
       before do
         tournament = group_stage.tournament
-        tournament.update!(playoff_teams_amount: 2, instant_finalists_amount: 2, intermediate_round_participants_amount: 0)
+        tournament.update!(playoff_teams_amount: 2, instant_finalists_amount: 2,
+                           intermediate_round_participants_amount: 0)
         group = create(:group, stage: group_stage, match_count: 0, number: 1)
         group_stage.groups = [group]
-        team_a = create(:team, tournament: tournament, name: 'A')
-        team_b = create(:team, tournament: tournament, name: 'B')
-        create(:group_match, group: group, state: :finished).tap do |match|
-          create(:match_score, match: match, team: team_a, points: 2)
-          create(:match_score, match: match, team: team_b, points: 2)
+        team_a = create(:team, tournament:, name: 'A')
+        team_b = create(:team, tournament:, name: 'B')
+        create(:group_match, group:, state: :finished).tap do |match|
+          create(:match_score, match:, team: team_a, points: 2)
+          create(:match_score, match:, team: team_b, points: 2)
         end
-        score_a = create(:group_score, group: group, team: team_a, group_points: 7, scored_points: 4, received_points: 1)
-        score_b = create(:group_score, group: group, team: team_b, group_points: 7, scored_points: 4, received_points: 1)
+        score_a = create(:group_score, group:, team: team_a, group_points: 7, scored_points: 4,
+                                       received_points: 1)
+        score_b = create(:group_score, group:, team: team_b, group_points: 7, scored_points: 4,
+                                       received_points: 1)
         GroupStageService.send(:recalculate_position_of_group_scores!, [score_a, score_b]).each(&:save!)
 
         apply_authentication_headers_for group_stage.owner

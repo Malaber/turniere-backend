@@ -15,17 +15,20 @@ RSpec.describe 'Tournament rendering HTTP E2E' do
   let(:expect_profiling) { ENV.fetch('TURNIERE_E2E_EXPECT_PROFILING', 'true') == 'true' }
   let(:runner) do
     TurniereE2E::ScenarioRunner.new(
-      base_url: base_url,
+      base_url:,
       email: ENV.fetch('TURNIERE_E2E_EMAIL'),
       password: ENV.fetch('TURNIERE_E2E_PASSWORD'),
-      username: ENV['TURNIERE_E2E_USERNAME']
+      username: ENV.fetch('TURNIERE_E2E_USERNAME', nil)
     )
   end
 
   [
-    { group_count: 8, teams_per_group: 4, playoff_teams_amount: 8, max_request_duration_ms: 1000, max_server_duration_ms: 1000 },
-    { group_count: 64, teams_per_group: 6, playoff_teams_amount: 64, max_request_duration_ms: 5000, max_server_duration_ms: 5000 },
-    { group_count: 4, teams_per_group: 32, playoff_teams_amount: 4, max_request_duration_ms: 5000, max_server_duration_ms: 5000 }
+    { group_count: 8, teams_per_group: 4, playoff_teams_amount: 8, max_request_duration_ms: 1000,
+      max_server_duration_ms: 1000 },
+    { group_count: 64, teams_per_group: 6, playoff_teams_amount: 64, max_request_duration_ms: 5000,
+      max_server_duration_ms: 5000 },
+    { group_count: 4, teams_per_group: 32, playoff_teams_amount: 4, max_request_duration_ms: 5000,
+      max_server_duration_ms: 5000 }
   ].each do |scenario|
     it "creates #{scenario[:group_count]}x#{scenario[:teams_per_group]} via API and renders within budget" do
       result = runner.run_group_stage_render_profile(

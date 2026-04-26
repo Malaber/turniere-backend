@@ -670,7 +670,7 @@ def test_shard(c, node_index=1, node_total=8, dry_run=False):
 @task
 def lint(c):
     """Run RuboCop."""
-    c.run(_bundle_exec("rubocop"), pty=True)
+    c.run(_bundle_exec("rubocop", "--cache", "false"), pty=True)
 
 
 @task(name="bootstrap-dev-user")

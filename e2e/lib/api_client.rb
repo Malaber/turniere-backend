@@ -19,7 +19,7 @@ module TurniereE2E
     attr_reader :base_url
 
     def initialize(base_url:)
-      @base_url = base_url.sub(%r{/\z}, '')
+      @base_url = base_url.delete_suffix('/')
       @auth_headers = {}
       @login_credentials = nil
     end
@@ -29,10 +29,10 @@ module TurniereE2E
         :post,
         '/users',
         body: {
-          email: email,
-          password: password,
+          email:,
+          password:,
           password_confirmation: password,
-          username: username
+          username:
         }
       )
       store_auth_headers!(response)
@@ -40,14 +40,14 @@ module TurniereE2E
     end
 
     def login!(email:, password:)
-      @login_credentials = { email: email, password: password }
+      @login_credentials = { email:, password: }
       @auth_headers = {}
       response = request(
         :post,
         '/users/sign_in',
         body: {
-          email: email,
-          password: password
+          email:,
+          password:
         }
       )
       store_auth_headers!(response)
@@ -59,19 +59,19 @@ module TurniereE2E
     end
 
     def get(path, params: nil, headers: {})
-      request(:get, path, params: params, headers: headers)
+      request(:get, path, params:, headers:)
     end
 
     def post(path, body: nil, params: nil, headers: {})
-      request(:post, path, body: body, params: params, headers: headers)
+      request(:post, path, body:, params:, headers:)
     end
 
     def patch(path, body: nil, params: nil, headers: {})
-      request(:patch, path, body: body, params: params, headers: headers)
+      request(:patch, path, body:, params:, headers:)
     end
 
     def delete(path, params: nil, headers: {})
-      request(:delete, path, params: params, headers: headers)
+      request(:delete, path, params:, headers:)
     end
 
     private
@@ -80,7 +80,7 @@ module TurniereE2E
       login!(**@login_credentials) if refresh_session && should_refresh_session?(method, path)
 
       uri = URI.parse("#{base_url}#{path}")
-      uri.query = URI.encode_www_form(params) if params && !params.empty?
+      uri.query = URI.encode_www_form(params) if params.present?
 
       request_class = case method
                       when :get then Net::HTTP::Get
@@ -108,7 +108,8 @@ module TurniereE2E
       store_auth_headers!(result)
       if retry_on_unauthorized && result[:status] == 401 && can_reauthenticate?(path)
         login!(**@login_credentials)
-        return request(method, path, body: body, params: params, headers: headers, retry_on_unauthorized: false, refresh_session: false)
+        return request(method, path, body:, params:, headers:, retry_on_unauthorized: false,
+                                     refresh_session: false)
       end
       result
     end

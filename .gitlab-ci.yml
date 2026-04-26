@@ -13,6 +13,21 @@ include:
   - project: 'turniere/turniere-infra'
     file: '/ci/pipeline.yaml'
 
+lint:
+  stage: test
+  tags:
+    - docker
+  needs:
+    - job: build_image
+  image: $CI_REGISTRY_IMAGE/test/commits:$CI_COMMIT_SHA
+  rules:
+    - if: $CI_PIPELINE_SOURCE != "push"
+      when: never
+    - when: always
+  script:
+    - cd /app
+    - inv lint
+
 rails spec:
   stage: test
   tags:

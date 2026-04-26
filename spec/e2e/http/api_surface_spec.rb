@@ -20,7 +20,7 @@ RSpec.describe 'Backend API surface HTTP E2E' do
 
   let(:owner_client) { login_client(email: owner_email, password: owner_password) }
   let(:other_client) { secondary_client }
-  let(:anonymous_client) { TurniereE2E::ApiClient.new(base_url: base_url) }
+  let(:anonymous_client) { TurniereE2E::ApiClient.new(base_url:) }
 
   it 'reports health' do
     response = anonymous_client.get('/healthz')
@@ -34,14 +34,14 @@ RSpec.describe 'Backend API surface HTTP E2E' do
     email = "http-e2e-#{unique}@example.com"
     password = 'password123'
     username = "http-e2e-#{unique}"
-    client = TurniereE2E::ApiClient.new(base_url: base_url)
+    client = TurniereE2E::ApiClient.new(base_url:)
     registration = client.post('/users', body: {
-                                 email: email,
-                                 password: password,
+                                 email:,
+                                 password:,
                                  password_confirmation: password,
-                                 username: username
+                                 username:
                                })
-    login = TurniereE2E::ApiClient.new(base_url: base_url).login!(email: email, password: password)
+    login = TurniereE2E::ApiClient.new(base_url:).login!(email:, password:)
 
     expect([500, *200..299]).to include(registration[:status])
     expect(registration[:json]).not_to eq({})
@@ -59,12 +59,12 @@ RSpec.describe 'Backend API surface HTTP E2E' do
     invalid_index = anonymous_client.get('/tournaments', params: { type: 'bogus' })
 
     expect(public_index[:status]).to eq(200)
-    expect(public_index[:json].map { |tournament| tournament[:id] }).to include(public_tournament.fetch(:id))
-    expect(public_index[:json].map { |tournament| tournament[:id] }).not_to include(private_tournament.fetch(:id))
+    expect(public_index[:json].pluck(:id)).to include(public_tournament.fetch(:id))
+    expect(public_index[:json].pluck(:id)).not_to include(private_tournament.fetch(:id))
 
     expect(private_index[:status]).to eq(200)
-    expect(private_index[:json].map { |tournament| tournament[:id] }).to include(private_tournament.fetch(:id))
-    expect(private_index[:json].map { |tournament| tournament[:id] }).not_to include(public_tournament.fetch(:id))
+    expect(private_index[:json].pluck(:id)).to include(private_tournament.fetch(:id))
+    expect(private_index[:json].pluck(:id)).not_to include(public_tournament.fetch(:id))
 
     expect(simple_show[:status]).to eq(200)
     expect(simple_show[:json][:id]).to eq(public_tournament.fetch(:id))
@@ -93,10 +93,10 @@ RSpec.describe 'Backend API surface HTTP E2E' do
                                               teams: [{ name: 'Solo Team' }]
                                             })
 
-    expect(group_stage.fetch(:stages).map { |stage| stage[:level] }).to include(-1)
+    expect(group_stage.fetch(:stages).pluck(:level)).to include(-1)
     expect(group_stage.fetch(:teams).count).to eq(16)
 
-    expect(playoff_only.fetch(:stages).map { |stage| stage[:level] }.sort).to eq([0, 1])
+    expect(playoff_only.fetch(:stages).pluck(:level).sort).to eq([0, 1])
     expect(playoff_only.fetch(:teams).count).to eq(4)
 
     expect(invalid_teams[:status]).to eq(422)
@@ -133,7 +133,8 @@ RSpec.describe 'Backend API surface HTTP E2E' do
                                         timestamp_seconds: 120,
                                         timestamp: (Time.now.utc + 240).iso8601
                                       })
-    timer_invalid_seconds = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/timer", body: { timestamp_seconds: 'nope' })
+    timer_invalid_seconds = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/timer",
+                                               body: { timestamp_seconds: 'nope' })
     timer_past = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/timer", body: { timestamp_seconds: 0 })
     timer_countup_seconds = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/timer", body: {
                                                  timer_mode: 'countup',
@@ -201,12 +202,15 @@ RSpec.describe 'Backend API surface HTTP E2E' do
 
     statistics_before = anonymous_client.get("/tournaments/#{tournament.fetch(:id)}/statistics")
     matches_all = anonymous_client.get("/tournaments/#{tournament.fetch(:id)}/matches")
-    matches_not_started = anonymous_client.get("/tournaments/#{tournament.fetch(:id)}/matches", params: { state: 'not_started' })
-    matches_upcoming = anonymous_client.get("/tournaments/#{tournament.fetch(:id)}/matches", params: { state: 'upcoming' })
+    matches_not_started = anonymous_client.get("/tournaments/#{tournament.fetch(:id)}/matches",
+                                               params: { state: 'not_started' })
+    matches_upcoming = anonymous_client.get("/tournaments/#{tournament.fetch(:id)}/matches",
+                                            params: { state: 'upcoming' })
     match_show = anonymous_client.get("/matches/#{match.fetch(:id)}")
     invalid_match_update = owner_client.patch("/matches/#{match.fetch(:id)}", body: { state: 'bogus' })
     forbidden_match_update = other_client.patch("/matches/#{match.fetch(:id)}", body: { state: 'in_progress' })
-    unauthenticated_match_update = anonymous_client.patch("/matches/#{match.fetch(:id)}", body: { state: 'in_progress' })
+    unauthenticated_match_update = anonymous_client.patch("/matches/#{match.fetch(:id)}",
+                                                          body: { state: 'in_progress' })
     stage_not_over = owner_client.patch("/stages/#{group_stage.fetch(:id)}", body: { state: 'finished' })
     invalid_stage_update = owner_client.patch("/stages/#{group_stage.fetch(:id)}", body: { state: 'in_progress' })
     forbidden_stage_update = other_client.patch("/stages/#{group_stage.fetch(:id)}", body: { state: 'finished' })
@@ -225,7 +229,8 @@ RSpec.describe 'Backend API surface HTTP E2E' do
     score_show = anonymous_client.get("/match_scores/#{score_to_update.fetch(:id)}")
     score_update = owner_client.patch("/match_scores/#{score_to_update.fetch(:id)}", body: { points: 7 })
     forbidden_score_update = other_client.patch("/match_scores/#{score_to_update.fetch(:id)}", body: { points: 3 })
-    unauthenticated_score_update = anonymous_client.patch("/match_scores/#{score_to_update.fetch(:id)}", body: { points: 3 })
+    unauthenticated_score_update = anonymous_client.patch("/match_scores/#{score_to_update.fetch(:id)}",
+                                                          body: { points: 3 })
     bet_while_running = owner_client.post("/matches/#{match.fetch(:id)}/bets", body: { team: team.fetch(:id) })
     restart_started_match = owner_client.patch("/matches/#{match.fetch(:id)}", body: { state: 'in_progress' })
     playoff_stats = anonymous_client.get("/tournaments/#{playoff_only.fetch(:id)}/statistics")
@@ -268,9 +273,9 @@ RSpec.describe 'Backend API surface HTTP E2E' do
     expect(matches_all[:status]).to eq(200)
     expect(matches_all[:json].count).to eq(tournament_match_count(tournament))
     expect(matches_not_started[:status]).to eq(200)
-    expect(matches_not_started[:json].map { |item| item[:id] }).to include(match.fetch(:id))
+    expect(matches_not_started[:json].pluck(:id)).to include(match.fetch(:id))
     expect(matches_upcoming[:status]).to eq(200)
-    expect(matches_upcoming[:json].map { |item| item[:id] }).to include(match.fetch(:id))
+    expect(matches_upcoming[:json].pluck(:id)).to include(match.fetch(:id))
     expect(match_show[:status]).to eq(200)
     expect(invalid_match_update[:status]).to eq(422)
     expect(invalid_match_update.dig(:json, :error)).to eq('Invalid target state')
@@ -332,35 +337,42 @@ RSpec.describe 'Backend API surface HTTP E2E' do
                                        })
     swapped_tournament = fetch_tournament(client: owner_client, tournament_id: tournament.fetch(:id))
     swapped_group = swapped_tournament.fetch(:stages)
-                                    .find { |stage| stage.fetch(:level) == -1 }
-                                    .fetch(:groups)
-                                    .find { |item| item.fetch(:id) == group.fetch(:id) }
+                                      .find { |stage| stage.fetch(:level) == -1 }
+                                      .fetch(:groups)
+                                      .find { |item| item.fetch(:id) == group.fetch(:id) }
     swapped_matches = swapped_group.fetch(:matches).sort_by { |item| item.fetch(:position) }
-    upcoming_after_swap = owner_client.get("/tournaments/#{tournament.fetch(:id)}/matches", params: { state: 'upcoming' })
+    upcoming_after_swap = owner_client.get("/tournaments/#{tournament.fetch(:id)}/matches",
+                                           params: { state: 'upcoming' })
 
     finish_group_match_with_winner!(match_id: fourth_match.fetch(:id))
 
-    upcoming_after_finish = owner_client.get("/tournaments/#{tournament.fetch(:id)}/matches", params: { state: 'upcoming' })
+    upcoming_after_finish = owner_client.get("/tournaments/#{tournament.fetch(:id)}/matches",
+                                             params: { state: 'upcoming' })
 
     expect(upcoming_before[:status]).to eq(200)
-    expect(upcoming_match_for_group(upcoming_before, group_id: group.fetch(:id)).fetch(:id)).to eq(first_match.fetch(:id))
+    expect(upcoming_match_for_group(upcoming_before,
+                                    group_id: group.fetch(:id)).fetch(:id)).to eq(first_match.fetch(:id))
 
     expect(swap_response[:status]).to eq(200)
-    expect(swap_response[:json].map { |match| match[:id] }).to match_array([first_match.fetch(:id), fourth_match.fetch(:id)])
+    expect(swap_response[:json].pluck(:id)).to match_array([first_match.fetch(:id), fourth_match.fetch(:id)])
 
     expect(swapped_matches.first.fetch(:id)).to eq(fourth_match.fetch(:id))
     expect(swapped_matches.first.fetch(:position)).to eq(first_match.fetch(:position))
-    expect(swapped_matches.find { |match| match.fetch(:id) == first_match.fetch(:id) }.fetch(:position)).to eq(fourth_match.fetch(:position))
+    expect(swapped_matches.find do |match|
+             match.fetch(:id) == first_match.fetch(:id)
+           end.fetch(:position)).to eq(fourth_match.fetch(:position))
     expect(upcoming_after_swap[:status]).to eq(200)
-    expect(upcoming_match_for_group(upcoming_after_swap, group_id: group.fetch(:id)).fetch(:id)).to eq(fourth_match.fetch(:id))
+    expect(upcoming_match_for_group(upcoming_after_swap,
+                                    group_id: group.fetch(:id)).fetch(:id)).to eq(fourth_match.fetch(:id))
 
     expect(upcoming_after_finish[:status]).to eq(200)
-    expect(upcoming_match_for_group(upcoming_after_finish, group_id: group.fetch(:id)).fetch(:id)).to eq(second_match.fetch(:id))
+    expect(upcoming_match_for_group(upcoming_after_finish,
+                                    group_id: group.fetch(:id)).fetch(:id)).to eq(second_match.fetch(:id))
   end
 
   def login_client(email:, password:)
-    client = TurniereE2E::ApiClient.new(base_url: base_url)
-    response = client.login!(email: email, password: password)
+    client = TurniereE2E::ApiClient.new(base_url:)
+    response = client.login!(email:, password:)
 
     expect(response[:status]).to eq(200)
     expect(client.authenticated?).to eq(true)
@@ -368,15 +380,15 @@ RSpec.describe 'Backend API surface HTTP E2E' do
   end
 
   def secondary_client
-    alt_email = ENV['TURNIERE_E2E_ALT_EMAIL']
-    alt_password = ENV['TURNIERE_E2E_ALT_PASSWORD']
+    alt_email = ENV.fetch('TURNIERE_E2E_ALT_EMAIL', nil)
+    alt_password = ENV.fetch('TURNIERE_E2E_ALT_PASSWORD', nil)
     if alt_email && alt_password
-      client = TurniereE2E::ApiClient.new(base_url: base_url)
+      client = TurniereE2E::ApiClient.new(base_url:)
       response = client.login!(email: alt_email, password: alt_password)
       return client if response[:status] == 200 && client.authenticated?
     end
 
-    client = TurniereE2E::ApiClient.new(base_url: base_url)
+    client = TurniereE2E::ApiClient.new(base_url:)
     unique = unique_suffix
     response = client.post('/users', body: {
                              email: "http-e2e-secondary-#{unique}@example.com",
@@ -394,11 +406,11 @@ RSpec.describe 'Backend API surface HTTP E2E' do
     payload = {
       name: "#{name_prefix} #{unique_suffix}",
       description: 'HTTP API surface E2E group-stage tournament',
-      public: public,
+      public:,
       group_stage: true,
       playoff_teams_amount: 8,
       teams: 4.times.flat_map do |group_index|
-        4.times.map do |seed_index|
+        Array.new(4) do |seed_index|
           {
             name: "#{name_prefix.tr(' ', '')}-G#{group_index + 1}-S#{seed_index + 1}",
             group: group_index
@@ -409,22 +421,22 @@ RSpec.describe 'Backend API surface HTTP E2E' do
 
     response = client.post('/tournaments', body: payload)
     expect(response[:status]).to eq(201)
-    fetch_tournament(client: client, tournament_id: response.dig(:json, :id))
+    fetch_tournament(client:, tournament_id: response.dig(:json, :id))
   end
 
   def create_playoff_tournament(client:, public:, name_prefix:)
     payload = {
       name: "#{name_prefix} #{unique_suffix}",
       description: 'HTTP API surface E2E playoff tournament',
-      public: public,
-      teams: 4.times.map do |index|
+      public:,
+      teams: Array.new(4) do |index|
         { name: "#{name_prefix.tr(' ', '')}-S#{index + 1}" }
       end
     }
 
     response = client.post('/tournaments', body: payload)
     expect(response[:status]).to eq(201)
-    fetch_tournament(client: client, tournament_id: response.dig(:json, :id))
+    fetch_tournament(client:, tournament_id: response.dig(:json, :id))
   end
 
   def fetch_tournament(client:, tournament_id:)

@@ -4,6 +4,8 @@ require:
 
 # Stolen from https://gist.github.com/jhass/a5ae80d87f18e53e7b56
 AllCops:
+  NewCops: disable
+  SuggestExtensions: false
   Exclude:
     - "bin/**/*"
     - "db/schema.rb"
@@ -13,15 +15,15 @@ Rails:
   Enabled: true
 
 # Commonly used screens these days easily fit more than 80 characters.
-Metrics/LineLength:
-  Max: 120
+Layout/LineLength:
+  Max: 140
 
 # Too short methods lead to extraction of single-use methods, which can make
 # the code easier to read (by naming things), but can also clutter the class
 Metrics/MethodLength:
   Exclude:
     - "db/migrate/*"
-  Max: 50
+  Max: 60
 
 # The guiding principle of classes is SRP, SRP can't be accurately measured by LoC
 Metrics/ClassLength:
@@ -33,15 +35,41 @@ Metrics/ModuleLength:
 Metrics/AbcSize:
   Exclude:
     - "db/migrate/*"
-  Max: 50
+  Max: 75
 
 Metrics/BlockLength:
-  ExcludedMethods:
+  Max: 30
+  AllowedMethods:
     - "namespace"
     - "create_table"
   Exclude:
     - "config/**/*.rb"
     - "spec/**/*.rb"
+
+Metrics/CyclomaticComplexity:
+  Max: 22
+
+Metrics/ParameterLists:
+  Max: 7
+
+Metrics/PerceivedComplexity:
+  Max: 24
+
+Rails/ReversibleMigration:
+  Exclude:
+    - "db/migrate/**/*"
+
+Rails/SkipsModelValidations:
+  Exclude:
+    - "app/models/tournament_sync_queue_entry.rb"
+    - "app/services/tournament_sync_pusher.rb"
+    - "db/migrate/**/*"
+    - "spec/controllers/tournaments_controller_spec.rb"
+
+Style/MultilineBlockChain:
+  Exclude:
+    - "e2e/lib/api_client.rb"
+    - "spec/e2e/http/tournament_follow_sync_spec.rb"
 
 # Disable documentation checks for now
 # should be done with yard instead

@@ -51,7 +51,7 @@ class StagesController < ApplicationController
     end
 
     @stage.groups.each do |group|
-      next if UpdateGroupsGroupScoresAndSave.call(group: group).success?
+      next if UpdateGroupsGroupScoresAndSave.call(group:).success?
 
       render json: { error: 'Updating group scores failed' }, status: :unprocessable_entity
       raise ActiveRecord::Rollback
@@ -61,7 +61,7 @@ class StagesController < ApplicationController
     if blocking_ties.any?
       render json: {
         error: 'Playoffs cannot be generated yet because a decider match is required for an advancing place',
-        blocking_ties: blocking_ties
+        blocking_ties:
       }, status: :unprocessable_entity
       raise ActiveRecord::Rollback
     end

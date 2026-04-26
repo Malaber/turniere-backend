@@ -47,9 +47,7 @@ class MatchesController < ApplicationController
         handle_match_end if new_state == 'finished'
         if @match.group_match? && new_state == 'in_progress'
           group = @match.group
-          unless UpdateGroupsGroupScoresAndSave.call(group: group).success?
-            logger.warn "Updating groups group score failed for #{group}"
-          end
+          logger.warn "Updating groups group score failed for #{group}" unless UpdateGroupsGroupScoresAndSave.call(group:).success?
         end
 
         render json: @match
@@ -66,7 +64,8 @@ class MatchesController < ApplicationController
   # PATCH /matches/1/swap
   def swap
     unless @match.swappable_with?(@swap_target)
-      render json: { error: 'Matches must be different group matches from the same group' }, status: :unprocessable_entity
+      render json: { error: 'Matches must be different group matches from the same group' },
+             status: :unprocessable_entity
       return
     end
 
@@ -83,7 +82,8 @@ class MatchesController < ApplicationController
     end
 
     swapped_matches = Match.where(id: [@match.id, @swap_target.id]).order(:position)
-    render json: swapped_matches, each_serializer: ExtendedMatchSerializer, include: %w[match_scores.team bets stage group]
+    render json: swapped_matches, each_serializer: ExtendedMatchSerializer,
+           include: %w[match_scores.team bets stage group]
     push_sync_if_needed!(synced_tournament)
     TournamentLiveBroadcast.call(synced_tournament.id)
   end
@@ -93,9 +93,7 @@ class MatchesController < ApplicationController
   def handle_match_end
     if @match.group_match?
       group = @match.group
-      unless UpdateGroupsGroupScoresAndSave.call(group: group).success?
-        logger.warn "Updating groups group score failed for #{group}"
-      end
+      logger.warn "Updating groups group score failed for #{group}" unless UpdateGroupsGroupScoresAndSave.call(group:).success?
     end
 
     return if @match.group_match?
@@ -116,11 +114,9 @@ class MatchesController < ApplicationController
   def validate_params
     case match_params['state']
     when 'in_progress'
-      render json: { error: 'Match can\'t start in this state' }, status: :unprocessable_entity \
-        unless @match.not_started?
+      render json: { error: 'Match can\'t start in this state' }, status: :unprocessable_entity unless @match.not_started?
     when 'finished'
-      render json: { error: 'Match can\'t finish in this state' }, status: :unprocessable_entity \
-        unless @match.in_progress?
+      render json: { error: 'Match can\'t finish in this state' }, status: :unprocessable_entity unless @match.in_progress?
     else
       render json: { error: 'Invalid target state' }, status: :unprocessable_entity
     end
@@ -162,11 +158,9 @@ class MatchesController < ApplicationController
       state: :not_started,
       position: (@group.matches.maximum(:position) || -1) + 1,
       decider: true,
-      match_scores: teams.map { |team| MatchScore.new(team: team) }
+      match_scores: teams.map { |team| MatchScore.new(team:) }
     ).tap do |match|
-      if team_ids.size != 2 || teams.size != 2
-        match.errors.add(:team_ids, 'must contain exactly two teams from this group')
-      end
+      match.errors.add(:team_ids, 'must contain exactly two teams from this group') if team_ids.size != 2 || teams.size != 2
     end
   end
 
