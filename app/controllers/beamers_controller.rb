@@ -68,7 +68,12 @@ class BeamersController < ApplicationController
   end
 
   def beamer_params
-    params.permit(:name, :display_state, :qr_code_url, :logo_url)
+    permitted = params.permit(:name, :display_state).to_h
+    config = params.key?(:config) ? params[:config] : params.dig(:beamer, :config)
+    return permitted unless config
+
+    permitted[:config] = config.respond_to?(:to_unsafe_h) ? config.to_unsafe_h : config
+    permitted
   end
 
   def push_sync_if_needed!

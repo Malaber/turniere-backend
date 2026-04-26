@@ -109,8 +109,7 @@ class TournamentSnapshotImporter
       beamer.name = attrs.fetch(:name)
       beamer.display_state = attrs.fetch(:display_state)
       beamer.is_default = attrs.fetch(:is_default, false)
-      beamer.qr_code_url = attrs[:qr_code_url]
-      beamer.logo_url = attrs[:logo_url]
+      beamer.config = attrs.fetch(:config, {})
       beamer.save!
       beamers_by_source_id[source_id] = beamer
     end

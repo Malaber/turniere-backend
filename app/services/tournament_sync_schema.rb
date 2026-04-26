@@ -33,7 +33,7 @@ class TournamentSyncSchema
       ignored: %w[tournament_id created_at updated_at sync_source_id].freeze
     }.freeze,
     Beamer => {
-      synced: %w[id name display_state is_default qr_code_url logo_url].freeze,
+      synced: %w[id name display_state is_default config].freeze,
       ignored: %w[tournament_id created_at updated_at sync_source_id].freeze
     }.freeze,
     Stage => {
