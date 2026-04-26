@@ -14,12 +14,6 @@ class ReplaceBeamerAssetFieldsWithConfig < ActiveRecord::Migration[7.0]
       END
     SQL
 
-    execute <<~SQL.squish
-      UPDATE beamers
-      SET config = '{"match_filter":"state:in_progress"}'
-      WHERE name = 'default'
-    SQL
-
     change_column_default :beamers, :display_state, from: 'matches_all', to: 'during_game'
     remove_column :beamers, :qr_code_url, :string
     remove_column :beamers, :logo_url, :string
