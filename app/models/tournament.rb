@@ -76,7 +76,7 @@ class Tournament < ApplicationRecord
 
   def ensure_default_beamer!
     beamers.find_or_create_by!(name: Beamer::DEFAULT_NAME) do |beamer|
-      beamer.display_state = 'matches_all'
+      beamer.display_state = 'during_game'
     end
   end
 

@@ -32,7 +32,7 @@ RSpec.describe 'Tournament follower sync beamer websocket HTTP E2E' do
     follower = create_follower_tournament(name_prefix: 'Ws Beamer Follower')
 
     configure_sync = source_client.patch("/tournaments/#{source.fetch(:id)}", body: {
-                                           sync_target_url: "#{follower_base_url}/tournaments/#{follower.fetch(:id)}/sync_state",
+                                           sync_target_url: follower_sync_url(follower),
                                            sync_auth_token: sync_token
                                          })
     expect(configure_sync[:status]).to eq(200)
@@ -40,21 +40,35 @@ RSpec.describe 'Tournament follower sync beamer websocket HTTP E2E' do
     follower_default_beamer = wait_for_default_beamer!(tournament_id: follower.fetch(:id))
 
     cable_client = TurniereE2E::ActionCableClient.new(base_url: follower_base_url)
-    cable_client.subscribe_beamer!(tournament_id: follower.fetch(:id), beamer_name: follower_default_beamer.fetch(:name))
+    cable_client.subscribe_beamer!(
+      tournament_id: follower.fetch(:id),
+      beamer_name: follower_default_beamer.fetch(:name)
+    )
     cable_client.wait_for_beamer_payload!
 
-    source_default_beamer = fetch_beamer(base_url: source_base_url, tournament_id: source.fetch(:id), beamer_name: DEFAULT_BEAMER_NAME)
-    update = source_client.patch("/tournaments/#{source.fetch(:id)}/beamers/#{source_default_beamer.fetch(:id)}", body: {
-                                   display_state: 'groups'
-                                 })
+    source_default_beamer = fetch_beamer(
+      base_url: source_base_url,
+      tournament_id: source.fetch(:id),
+      beamer_name: DEFAULT_BEAMER_NAME
+    )
+    update = source_client.patch(
+      "/tournaments/#{source.fetch(:id)}/beamers/#{source_default_beamer.fetch(:id)}",
+      body: {
+        display_state: 'static_image',
+        config: {
+          image_key: 'bpwstr_logo'
+        }
+      }
+    )
     expect(update[:status]).to eq(200)
 
     follower_payload = wait_for_beamer_payload!(
       cable_client,
       event_type: 'beamer.updated',
-      display_state: 'groups'
+      display_state: 'static_image'
     )
     expect(follower_payload.dig('beamer', 'name')).to eq(DEFAULT_BEAMER_NAME)
+    expect(follower_payload.dig('beamer', 'config')).to eq('image_key' => 'bpwstr_logo')
   ensure
     cable_client&.close
   end
@@ -97,6 +111,10 @@ RSpec.describe 'Tournament follower sync beamer websocket HTTP E2E' do
     response = client.get("/tournaments/#{tournament_id}")
     expect(response[:status]).to eq(200)
     response.fetch(:json)
+  end
+
+  def follower_sync_url(follower)
+    "#{follower_base_url}/tournaments/#{follower.fetch(:id)}/sync_state"
   end
 
   def fetch_beamer(base_url:, tournament_id:, beamer_name:)

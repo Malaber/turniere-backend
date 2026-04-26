@@ -10,17 +10,16 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.0].define(version: 2026_04_24_120000) do
+ActiveRecord::Schema[7.0].define(version: 2026_04_26_120000) do
   create_table "beamers", force: :cascade do |t|
     t.string "name", null: false
-    t.string "display_state", default: "matches_all", null: false
+    t.string "display_state", default: "during_game", null: false
     t.boolean "is_default", default: false
-    t.string "qr_code_url"
-    t.string "logo_url"
     t.integer "tournament_id", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.integer "sync_source_id"
+    t.json "config", default: {}, null: false
     t.index ["tournament_id", "name"], name: "index_beamers_on_tournament_id_and_name", unique: true
     t.index ["tournament_id"], name: "index_beamers_on_tournament_id"
   end
