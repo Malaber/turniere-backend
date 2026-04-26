@@ -9,9 +9,10 @@ FactoryBot.define do
 
     factory :default_beamer do
       name { Beamer::DEFAULT_NAME }
+      config { Beamer::DEFAULT_CONFIG }
 
       initialize_with do
-        tournament.beamers.find_or_initialize_by(name: name)
+        tournament.beamers.find_or_initialize_by(name:)
       end
     end
   end

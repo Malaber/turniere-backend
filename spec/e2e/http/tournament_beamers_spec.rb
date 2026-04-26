@@ -38,20 +38,26 @@ RSpec.describe 'Tournament beamer HTTP E2E' do
 
     expect(default_beamer[:status]).to eq(200)
     expect(default_beamer.dig(:json, :name)).to eq('default')
-    expect(default_beamer.dig(:json, :display_state)).to eq('matches_all')
+    expect(default_beamer.dig(:json, :display_state)).to eq('during_game')
+    expect(default_beamer.dig(:json, :config)).to eq(match_filter: 'state:in_progress')
     expect(default_show[:status]).to eq(200)
+    expect(default_show.dig(:json, :config)).to eq(match_filter: 'state:in_progress')
 
     create_response = owner_client.post("/tournaments/#{tournament.fetch(:id)}/beamers", body: {
                                           name: 'hall-a',
-                                          display_state: 'groups',
-                                          qr_code_url: 'https://example.com/hall-a',
-                                          logo_url: '/logos/hall-a.png'
+                                          display_state: 'group_tables',
+                                          config: {
+                                            match_filter: 'stage:groups',
+                                            table_view: 'compact'
+                                          }
                                         })
     expect(create_response[:status]).to eq(201)
     beamer = create_response.fetch(:json)
     expect(beamer.fetch(:name)).to eq('hall-a')
-    expect(beamer.fetch(:display_state)).to eq('groups')
-    expect(beamer.fetch(:qr_code_url)).to eq('https://example.com/hall-a')
+    expect(beamer.fetch(:display_state)).to eq('group_tables')
+    expect(beamer.fetch(:config)).to eq(match_filter: 'stage:groups', table_view: 'compact')
+    expect(beamer).not_to have_key(:qr_code_url)
+    expect(beamer).not_to have_key(:logo_url)
 
     index_response = anonymous_client.get("/tournaments/#{tournament.fetch(:id)}/beamers")
     show_response = anonymous_client.get("/tournaments/#{tournament.fetch(:id)}/beamers/#{beamer.fetch(:id)}")
@@ -65,34 +71,41 @@ RSpec.describe 'Tournament beamer HTTP E2E' do
     expect(by_name_response.dig(:json, :id)).to eq(beamer.fetch(:id))
 
     update_response = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/beamers/#{beamer.fetch(:id)}", body: {
-                                           display_state: 'during_game',
-                                           qr_code_url: 'https://example.com/live',
-                                           logo_url: '/logos/live.png'
+                                           display_state: 'static_image',
+                                           config: {
+                                             image_key: 'bpwstr_logo'
+                                           }
                                          })
     expect(update_response[:status]).to eq(200)
-    expect(update_response.dig(:json, :display_state)).to eq('during_game')
-    expect(update_response.dig(:json, :qr_code_url)).to eq('https://example.com/live')
-    expect(update_response.dig(:json, :logo_url)).to eq('/logos/live.png')
+    expect(update_response.dig(:json, :display_state)).to eq('static_image')
+    expect(update_response.dig(:json, :config)).to eq(image_key: 'bpwstr_logo')
+    expect(update_response[:json]).not_to have_key(:qr_code_url)
+    expect(update_response[:json]).not_to have_key(:logo_url)
 
     invalid_update = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/beamers/#{beamer.fetch(:id)}", body: {
                                           display_state: 'bogus'
                                         })
+    invalid_config_update = owner_client.patch(
+      "/tournaments/#{tournament.fetch(:id)}/beamers/#{beamer.fetch(:id)}",
+      body: { config: ['not-an-object'] }
+    )
     duplicate_create = owner_client.post("/tournaments/#{tournament.fetch(:id)}/beamers", body: {
                                            name: 'hall-a',
-                                           display_state: 'matches_all'
+                                           display_state: 'during_game'
                                          })
     forbidden_update = other_client.patch("/tournaments/#{tournament.fetch(:id)}/beamers/#{beamer.fetch(:id)}", body: {
-                                            display_state: 'groups'
+                                            display_state: 'group_tables'
                                           })
     unauthenticated_create = anonymous_client.post(
       "/tournaments/#{tournament.fetch(:id)}/beamers",
       body: {
         name: 'anon',
-        display_state: 'groups'
+        display_state: 'group_tables'
       }
     )
 
     expect(invalid_update[:status]).to eq(422)
+    expect(invalid_config_update[:status]).to eq(422)
     expect(duplicate_create[:status]).to eq(422)
     expect(forbidden_update[:status]).to eq(403)
     expect(unauthenticated_create[:status]).to eq(401)
@@ -108,7 +121,7 @@ RSpec.describe 'Tournament beamer HTTP E2E' do
     )
     locked_update = owner_client.patch(
       beamer_path(read_only_tournament.fetch(:id), read_only_beamer.dig(:json, :id)),
-      body: { display_state: 'groups' }
+      body: { display_state: 'group_tables' }
     )
     expect(locked_update[:status]).to eq(423)
 

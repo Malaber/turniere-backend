@@ -2,6 +2,7 @@
 
 class Beamer < ApplicationRecord
   DEFAULT_NAME = 'default'
+  DEFAULT_CONFIG = { 'match_filter' => 'state:in_progress' }.freeze
   DISPLAY_STATES = %w[
     during_game between_games static_image group_tables
   ].freeze

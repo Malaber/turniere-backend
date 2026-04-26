@@ -67,25 +67,30 @@ class Tournament < ApplicationRecord
   end
 
   def sync_configuration_is_complete
-    return if sync_target_url.blank? && sync_auth_token.blank?
-    return if sync_target_url.present? && sync_auth_token.present?
-    return if read_only_mode? && sync_auth_token.present? && sync_target_url.blank?
+    return if sync_configuration_blank?
+    return if sync_configuration_complete?
+    return if follower_sync_token_only?
 
     errors.add(:base, 'sync_target_url and sync_auth_token must be configured together')
+  end
+
+  def sync_configuration_blank?
+    sync_target_url.blank? && sync_auth_token.blank?
+  end
+
+  def sync_configuration_complete?
+    sync_target_url.present? && sync_auth_token.present?
+  end
+
+  def follower_sync_token_only?
+    read_only_mode? && sync_auth_token.present? && sync_target_url.blank?
   end
 
   def ensure_default_beamer!
     beamers.find_or_create_by!(name: Beamer::DEFAULT_NAME) do |beamer|
       beamer.display_state = 'during_game'
+      beamer.config = Beamer::DEFAULT_CONFIG
     end
-  end
-
-  def sync_configuration_is_complete
-    return if sync_target_url.blank? && sync_auth_token.blank?
-    return if sync_target_url.present? && sync_auth_token.present?
-    return if read_only_mode? && sync_auth_token.present? && sync_target_url.blank?
-
-    errors.add(:base, 'sync_target_url and sync_auth_token must be configured together')
   end
 
   def clear_follower_sync_token_when_disabling_read_only_mode
