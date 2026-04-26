@@ -54,7 +54,10 @@ RUN bundle config set with 'development test' \
 
 FROM runtime-base AS production
 
+ARG GIT_COMMIT_SHA=unknown
+
 ENV RAILS_ENV=production
+ENV GIT_COMMIT_SHA=${GIT_COMMIT_SHA}
 
 COPY --from=bundle-production /usr/local/bundle /usr/local/bundle
 COPY --from=bundle-production /app/vendor/bundle /app/vendor/bundle
@@ -75,7 +78,10 @@ CMD ["sh", "-lc", "bundle exec rails db:migrate && bundle exec rails s -p 3000 -
 
 FROM runtime-base AS test
 
+ARG GIT_COMMIT_SHA=unknown
+
 ENV RAILS_ENV=test
+ENV GIT_COMMIT_SHA=${GIT_COMMIT_SHA}
 
 RUN apt-get update -qq \
     && apt-get install -y --no-install-recommends \

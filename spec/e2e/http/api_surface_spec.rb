@@ -29,6 +29,13 @@ RSpec.describe 'Backend API surface HTTP E2E' do
     expect(response.dig(:json, :errors)).to eq([])
   end
 
+  it 'reports running version' do
+    response = anonymous_client.get('/version')
+
+    expect(response[:status]).to eq(200)
+    expect(response.dig(:json, :git_commit_sha)).to match(/\A[0-9a-f]{40}\z/)
+  end
+
   it 'supports registration for new users and still requires confirmation for login' do
     unique = unique_suffix
     email = "http-e2e-#{unique}@example.com"
