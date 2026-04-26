@@ -41,7 +41,8 @@ RSpec.describe 'Tournament follower sync beamer HTTP E2E' do
     follower_default = wait_for_follower_beamer!(
       tournament_id: follower.fetch(:id),
       beamer_name: 'default',
-      display_state: source_default.fetch(:display_state)
+      display_state: source_default.fetch(:display_state),
+      config: source_default.fetch(:config)
     )
     expect(follower_default.fetch(:name)).to eq('default')
 
@@ -49,8 +50,10 @@ RSpec.describe 'Tournament follower sync beamer HTTP E2E' do
       beamer_path(source.fetch(:id), source_default.fetch(:id)),
       body: {
         display_state: 'between_games',
-        qr_code_url: 'https://example.com/leader-default',
-        logo_url: '/logos/default.png'
+        config: {
+          match_filter: 'state:queued',
+          rotation_seconds: 10
+        }
       }
     )
     expect(leader_default_update[:status]).to eq(200)
@@ -60,16 +63,22 @@ RSpec.describe 'Tournament follower sync beamer HTTP E2E' do
       tournament_id: follower.fetch(:id),
       beamer_name: 'default',
       display_state: 'between_games',
-      qr_code_url: 'https://example.com/leader-default',
-      logo_url: '/logos/default.png'
+      config: {
+        match_filter: 'state:queued',
+        rotation_seconds: 10
+      }
     )
     expect(mirrored_default.fetch(:name)).to eq('default')
+    expect(mirrored_default).not_to have_key(:qr_code_url)
+    expect(mirrored_default).not_to have_key(:logo_url)
 
     leader_create = source_client.post("/tournaments/#{source.fetch(:id)}/beamers", body: {
                                          name: 'stage-left',
-                                         display_state: 'groups',
-                                         qr_code_url: 'https://example.com/stage-left',
-                                         logo_url: '/logos/stage-left.png'
+                                         display_state: 'group_tables',
+                                         config: {
+                                           match_filter: 'stage:groups',
+                                           table_view: 'compact'
+                                         }
                                        })
     expect(leader_create[:status]).to eq(201)
     sync_now_if_requested!(source.fetch(:id))
@@ -77,17 +86,23 @@ RSpec.describe 'Tournament follower sync beamer HTTP E2E' do
     mirrored_created = wait_for_follower_beamer!(
       tournament_id: follower.fetch(:id),
       beamer_name: 'stage-left',
-      display_state: 'groups',
-      qr_code_url: 'https://example.com/stage-left',
-      logo_url: '/logos/stage-left.png'
+      display_state: 'group_tables',
+      config: {
+        match_filter: 'stage:groups',
+        table_view: 'compact'
+      }
     )
     expect(mirrored_created.fetch(:name)).to eq('stage-left')
+    expect(mirrored_created).not_to have_key(:qr_code_url)
+    expect(mirrored_created).not_to have_key(:logo_url)
 
     leader_update = source_client.patch(
       beamer_path(source.fetch(:id), leader_create.dig(:json, :id)),
       body: {
-        display_state: 'during_game',
-        qr_code_url: 'https://example.com/stage-left-live'
+        display_state: 'static_image',
+        config: {
+          image_key: 'stage-left-live'
+        }
       }
     )
     expect(leader_update[:status]).to eq(200)
@@ -96,14 +111,17 @@ RSpec.describe 'Tournament follower sync beamer HTTP E2E' do
     mirrored_updated = wait_for_follower_beamer!(
       tournament_id: follower.fetch(:id),
       beamer_name: 'stage-left',
-      display_state: 'during_game',
-      qr_code_url: 'https://example.com/stage-left-live'
+      display_state: 'static_image',
+      config: {
+        image_key: 'stage-left-live'
+      }
     )
-    expect(mirrored_updated.fetch(:logo_url)).to eq('/logos/stage-left.png')
+    expect(mirrored_updated).not_to have_key(:qr_code_url)
+    expect(mirrored_updated).not_to have_key(:logo_url)
 
     locked_follower_update = follower_client.patch(
       beamer_path(follower.fetch(:id), mirrored_updated.fetch(:id)),
-      body: { display_state: 'matches_finished' }
+      body: { display_state: 'during_game' }
     )
     expect(locked_follower_update[:status]).to eq(423)
 
@@ -150,7 +168,7 @@ RSpec.describe 'Tournament follower sync beamer HTTP E2E' do
       response = follower_read_client.get(beamer_by_name_path(tournament_id), params: { name: beamer_name })
       if response[:status] == 200 && response.dig(:json, :name) == beamer_name
         beamer = response.fetch(:json)
-        return beamer if expected_attrs.all? { |key, value| beamer.fetch(key) == value }
+        return beamer if expected_attrs.all? { |key, value| beamer[key] == value }
       end
 
       raise "follower beamer #{beamer_name} not synced within #{timeout}s" if Time.now.utc >= deadline
