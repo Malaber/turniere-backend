@@ -8,6 +8,7 @@ class ApplicationController < ActionController::API
   rescue_from ActionController::ParameterMissing do |e|
     render json: { error: e.message }, status: :bad_request
   end
+  rescue_from ActiveRecord::RecordNotFound, with: :render_not_found_error
 
   protected
 
