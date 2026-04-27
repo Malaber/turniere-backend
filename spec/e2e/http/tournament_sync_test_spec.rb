@@ -103,18 +103,21 @@ RSpec.describe 'Tournament sync test HTTP E2E' do
 
     missing_item_update = client.patch('/team_action_items/999999999', body: { completed: true })
     expect(missing_item_update[:status]).to eq(404)
+    expect(missing_item_update.dig(:json, :error)).to include("Couldn't find TeamActionItem")
 
     missing_list_update = client.patch(
       "/tournaments/#{leader.fetch(:id)}/team_action_lists/unknown_key/teams/#{first_item.dig(:team, :id)}",
       body: { completed: true }
     )
     expect(missing_list_update[:status]).to eq(404)
+    expect(missing_list_update.dig(:json, :error)).to include("Couldn't find TeamActionList")
 
     missing_team_update = client.patch(
       "/tournaments/#{leader.fetch(:id)}/team_action_lists/#{playoff_token_list_key}/teams/999999999",
       body: { completed: true }
     )
     expect(missing_team_update[:status]).to eq(404)
+    expect(missing_team_update.dig(:json, :error)).to include("Couldn't find TeamActionItem")
   end
 
   def login_client
