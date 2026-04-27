@@ -33,7 +33,9 @@ RSpec.describe 'Backend API surface HTTP E2E' do
     response = anonymous_client.get('/version')
 
     expect(response[:status]).to eq(200)
-    expect(response.dig(:json, :git_commit_sha)).to match(/\A[0-9a-f]{40}\z/)
+    sha = response.dig(:json, :git_commit_sha)
+    expect(sha).to match(/\A[0-9a-f]{40}\z/)
+    expect(sha).not_to eq("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
   end
 
   it 'supports registration for new users and still requires confirmation for login' do

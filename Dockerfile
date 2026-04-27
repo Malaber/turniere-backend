@@ -57,7 +57,7 @@ FROM runtime-base AS production
 ARG GIT_COMMIT_SHA=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
 ENV RAILS_ENV=production
-ENV GIT_COMMIT_SHA=${GIT_COMMIT_SHA}
+ENV GIT_COMMIT_SHA=${base_commit}
 
 COPY --from=bundle-production /usr/local/bundle /usr/local/bundle
 COPY --from=bundle-production /app/vendor/bundle /app/vendor/bundle
@@ -81,7 +81,7 @@ FROM runtime-base AS test
 ARG GIT_COMMIT_SHA=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
 ENV RAILS_ENV=test
-ENV GIT_COMMIT_SHA=${GIT_COMMIT_SHA}
+ENV GIT_COMMIT_SHA=${base_commit}
 
 RUN apt-get update -qq \
     && apt-get install -y --no-install-recommends \
