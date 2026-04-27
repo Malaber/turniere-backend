@@ -235,6 +235,13 @@ def _format_command(command):
     return " ".join(shlex.quote(part) for part in command)
 
 
+def _git_commit_sha():
+    try:
+        return subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+    except subprocess.CalledProcessError:
+        return "unknown"
+
+
 def _docker_build_command(tag, target, platforms=None, push=False):
     if platforms and "," in str(platforms) and not push:
         raise ValueError("multi-platform buildx builds require push=True")
@@ -246,6 +253,8 @@ def _docker_build_command(tag, target, platforms=None, push=False):
             "build",
             "--target",
             target,
+            "--build-arg",
+            f"GIT_COMMIT_SHA={_git_commit_sha()}",
             "-t",
             tag,
             "-f",
@@ -257,7 +266,19 @@ def _docker_build_command(tag, target, platforms=None, push=False):
         command.append(".")
         return _format_command(command)
 
-    return f"docker build --target {target} -t {tag} -f {DOCKERFILE_PATH} ."
+    return _format_command([
+        "docker",
+        "build",
+        "--target",
+        target,
+        "--build-arg",
+        f"GIT_COMMIT_SHA={_git_commit_sha()}",
+        "-t",
+        tag,
+        "-f",
+        DOCKERFILE_PATH,
+        ".",
+    ])
 
 
 def _rspec_command(*paths):
@@ -1764,6 +1785,7 @@ def blackbox_follow_service(
         alt_username,
         spec_path=[
             "spec/e2e/http/tournament_follow_sync_spec.rb",
+            "spec/e2e/http/tournament_follow_sync_beamers_spec.rb",
             "spec/e2e/http/tournament_follow_sync_websocket_spec.rb",
             "spec/e2e/http/tournament_follow_sync_live_websocket_spec.rb",
             "spec/e2e/http/tournament_timer_follow_sync_websocket_spec.rb",

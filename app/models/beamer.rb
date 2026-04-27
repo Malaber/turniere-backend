@@ -2,15 +2,16 @@
 
 class Beamer < ApplicationRecord
   DEFAULT_NAME = 'default'
+  DEFAULT_CONFIG = { 'match_filter' => 'state:in_progress' }.freeze
   DISPLAY_STATES = %w[
-    matches_all matches_in_progress matches_upcoming matches_not_started
-    matches_finished groups between_games during_game
+    during_game between_games static_image group_tables
   ].freeze
 
   belongs_to :tournament
 
   validates :name, presence: true, uniqueness: { scope: :tournament_id }
   validates :display_state, presence: true, inclusion: { in: DISPLAY_STATES }
+  validate :config_is_hash
 
   delegate :owner, to: :tournament
 
@@ -45,5 +46,11 @@ class Beamer < ApplicationRecord
     return 'deleted' if destroyed?
 
     previous_changes.key?('id') ? 'created' : 'updated'
+  end
+
+  def config_is_hash
+    return if config.is_a?(Hash)
+
+    errors.add(:config, 'must be an object')
   end
 end

@@ -66,7 +66,11 @@ RSpec.describe BeamersController, type: :controller do
 
   describe 'POST #create' do
     let(:valid_params) do
-      { name: 'new-beamer', display_state: 'groups' }
+      {
+        name: 'new-beamer',
+        display_state: 'during_game',
+        config: { match_filter: 'state:in_progress' }
+      }
     end
 
     context 'as owner' do
@@ -83,7 +87,8 @@ RSpec.describe BeamersController, type: :controller do
         post :create, params: { tournament_id: @tournament.to_param }.merge(valid_params)
         body = deserialize_response response
         expect(body[:name]).to eq('new-beamer')
-        expect(body[:display_state]).to eq('groups')
+        expect(body[:display_state]).to eq('during_game')
+        expect(body[:config]).to eq(match_filter: 'state:in_progress')
       end
 
       it 'rejects invalid display_state' do
@@ -95,7 +100,7 @@ RSpec.describe BeamersController, type: :controller do
 
       it 'rejects duplicate name in same tournament' do
         post :create, params: {
-          tournament_id: @tournament.to_param, name: @beamer.name, display_state: 'matches_all'
+          tournament_id: @tournament.to_param, name: @beamer.name, display_state: 'during_game'
         }
         expect(response).to have_http_status(:unprocessable_entity)
       end
@@ -133,15 +138,18 @@ RSpec.describe BeamersController, type: :controller do
         expect(@beamer.reload.display_state).to eq('during_game')
       end
 
-      it 'updates optional fields' do
+      it 'replaces config' do
+        @beamer.update!(config: { match_filter: 'state:upcoming', image_key: 'old-logo' })
+
         patch :update, params: {
           tournament_id: @tournament.to_param, id: @beamer.to_param,
-          qr_code_url: 'https://example.com/qr', logo_url: '/static/logo.png'
+          config: { image_key: 'bpwstr_logo' }
         }
         expect(response).to be_successful
+        body = deserialize_response response
+        expect(body[:config]).to eq(image_key: 'bpwstr_logo')
         @beamer.reload
-        expect(@beamer.qr_code_url).to eq('https://example.com/qr')
-        expect(@beamer.logo_url).to eq('/static/logo.png')
+        expect(@beamer.config).to eq('image_key' => 'bpwstr_logo')
       end
 
       it 'rejects invalid display_state' do
@@ -159,7 +167,7 @@ RSpec.describe BeamersController, type: :controller do
       it 'returns forbidden' do
         patch :update, params: {
           tournament_id: @tournament.to_param, id: @beamer.to_param,
-          display_state: 'groups'
+          display_state: 'group_tables'
         }
         expect(response).to have_http_status(:forbidden)
       end
@@ -174,7 +182,7 @@ RSpec.describe BeamersController, type: :controller do
       it 'returns locked' do
         patch :update, params: {
           tournament_id: @tournament.to_param, id: @beamer.to_param,
-          display_state: 'groups'
+          display_state: 'group_tables'
         }
         expect(response).to have_http_status(:locked)
       end

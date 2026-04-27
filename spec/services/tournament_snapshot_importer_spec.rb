@@ -6,7 +6,11 @@ RSpec.describe TournamentSnapshotImporter do
   describe '.import!' do
     it 'replaces follower tournament graph using source ids as stable mapping keys' do
       source = create(:group_stage_tournament, group_count: 2, match_factory: :filled_group_match)
-      source.beamers.create!(name: 'stream-a', display_state: 'during_game', qr_code_url: 'https://example.com/qr')
+      source.beamers.create!(
+        name: 'stream-a',
+        display_state: 'during_game',
+        config: { match_filter: 'state:in_progress' }
+      )
       list = create(:team_action_list, tournament: source)
       create(:team_action_item, team_action_list: list, team: source.teams.first, completed: true)
       follower = create(:tournament, read_only_mode: true, sync_auth_token: 'shared-secret')
@@ -82,21 +86,18 @@ RSpec.describe TournamentSnapshotImporter do
       intermediate_round_participants_amount: 0
     )
     tournament.beamers.find_by!(name: Beamer::DEFAULT_NAME).update!(
-      display_state: 'groups',
-      qr_code_url: 'https://example.com/default-qr',
-      logo_url: '/logos/default.png'
+      display_state: 'group_tables',
+      config: { match_filter: 'state:in_progress' }
     )
     tournament.beamers.create!(
       name: 'stream-a',
       display_state: 'during_game',
-      qr_code_url: 'https://example.com/stream-a',
-      logo_url: '/logos/stream-a.png'
+      config: { match_filter: 'state:in_progress' }
     )
     tournament.beamers.create!(
       name: 'stream-b',
       display_state: 'between_games',
-      qr_code_url: 'https://example.com/stream-b',
-      logo_url: '/logos/stream-b.png'
+      config: { image_key: 'bpwstr_logo' }
     )
 
     group_stage = Stage.create!(tournament:, level: -1, state: :finished)
@@ -204,7 +205,7 @@ RSpec.describe TournamentSnapshotImporter do
         }
       end,
       beamers: tournament.beamers.order(:name).map do |beamer|
-        beamer.slice(:name, :display_state, :is_default, :qr_code_url, :logo_url).symbolize_keys
+        beamer.slice(:name, :display_state, :is_default, :config).symbolize_keys
       end,
       stages: tournament.stages.order(level: :asc).map do |stage|
         {

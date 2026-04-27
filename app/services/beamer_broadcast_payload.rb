@@ -19,8 +19,7 @@ class BeamerBroadcastPayload
         tournament_id: beamer.tournament_id,
         name: beamer.name,
         display_state: beamer.display_state,
-        qr_code_url: beamer.qr_code_url,
-        logo_url: beamer.logo_url
+        config: beamer.config
       }
     end
 
@@ -31,8 +30,7 @@ class BeamerBroadcastPayload
         id: snapshot.fetch(:id),
         name: snapshot.fetch(:name),
         display_state: snapshot.fetch(:display_state),
-        qr_code_url: snapshot[:qr_code_url],
-        logo_url: snapshot[:logo_url]
+        config: snapshot.fetch(:config)
       }
     end
   end

@@ -26,7 +26,10 @@ RSpec.describe 'Tournament beamer websocket HTTP E2E' do
     tournament = create_tournament(name_prefix: 'Ws Beamer')
     create_beamer = client.post("/tournaments/#{tournament.fetch(:id)}/beamers", body: {
                                   name: 'projector-a',
-                                  display_state: 'matches_all'
+                                  display_state: 'during_game',
+                                  config: {
+                                    match_filter: 'state:in_progress'
+                                  }
                                 })
     expect(create_beamer[:status]).to eq(201)
     beamer = create_beamer.fetch(:json)
@@ -37,22 +40,25 @@ RSpec.describe 'Tournament beamer websocket HTTP E2E' do
     initial_payload = cable_client.wait_for_beamer_payload!
     expect(initial_payload.fetch('type')).to eq('beamer.snapshot')
     expect(initial_payload.dig('beamer', 'id')).to eq(beamer.fetch(:id))
-    expect(initial_payload.dig('beamer', 'display_state')).to eq('matches_all')
+    expect(initial_payload.dig('beamer', 'display_state')).to eq('during_game')
+    expect(initial_payload.dig('beamer', 'config', 'match_filter')).to eq('state:in_progress')
 
     update = client.patch("/tournaments/#{tournament.fetch(:id)}/beamers/#{beamer.fetch(:id)}", body: {
-                            display_state: 'during_game',
-                            qr_code_url: 'https://example.com/qr',
-                            logo_url: '/static/logo.png'
+                            display_state: 'static_image',
+                            config: {
+                              image_key: 'bpwstr_logo'
+                            }
                           })
     expect(update[:status]).to eq(200)
 
     updated_payload = wait_for_beamer_payload!(
       cable_client,
       event_type: 'beamer.updated',
-      display_state: 'during_game'
+      display_state: 'static_image'
     )
-    expect(updated_payload.dig('beamer', 'qr_code_url')).to eq('https://example.com/qr')
-    expect(updated_payload.dig('beamer', 'logo_url')).to eq('/static/logo.png')
+    expect(updated_payload.dig('beamer', 'config')).to eq('image_key' => 'bpwstr_logo')
+    expect(updated_payload['beamer']).not_to have_key('qr_code_url')
+    expect(updated_payload['beamer']).not_to have_key('logo_url')
 
     delete = client.delete("/tournaments/#{tournament.fetch(:id)}/beamers/#{beamer.fetch(:id)}")
     expect(delete[:status]).to eq(204)
@@ -60,7 +66,7 @@ RSpec.describe 'Tournament beamer websocket HTTP E2E' do
     deleted_payload = wait_for_beamer_payload!(
       cable_client,
       event_type: 'beamer.deleted',
-      display_state: 'during_game'
+      display_state: 'static_image'
     )
     expect(deleted_payload.dig('beamer', 'name')).to eq('projector-a')
   ensure

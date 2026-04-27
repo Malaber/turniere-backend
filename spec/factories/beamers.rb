@@ -3,11 +3,13 @@
 FactoryBot.define do
   factory :beamer do
     sequence(:name) { |n| "beamer-#{n}" }
-    display_state { 'matches_all' }
+    display_state { 'during_game' }
+    config { {} }
     tournament
 
     factory :default_beamer do
       name { Beamer::DEFAULT_NAME }
+      config { Beamer::DEFAULT_CONFIG }
 
       initialize_with do
         tournament.beamers.find_or_initialize_by(name:)

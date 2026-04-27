@@ -29,6 +29,13 @@ RSpec.describe 'Backend API surface HTTP E2E' do
     expect(response.dig(:json, :errors)).to eq([])
   end
 
+  it 'reports running version' do
+    response = anonymous_client.get('/version')
+
+    expect(response[:status]).to eq(200)
+    expect(response.dig(:json, :git_commit_sha)).to match(/\A[0-9a-f]{40}\z/)
+  end
+
   it 'supports registration for new users and still requires confirmation for login' do
     unique = unique_suffix
     email = "http-e2e-#{unique}@example.com"
@@ -206,6 +213,14 @@ RSpec.describe 'Backend API surface HTTP E2E' do
                                                params: { state: 'not_started' })
     matches_upcoming = anonymous_client.get("/tournaments/#{tournament.fetch(:id)}/matches",
                                             params: { state: 'upcoming' })
+    matches_group_position = anonymous_client.get(
+      "/tournaments/#{tournament.fetch(:id)}/matches",
+      params: { group_stage_position: match.fetch(:position) }
+    )
+    matches_group_stage = anonymous_client.get(
+      "/tournaments/#{tournament.fetch(:id)}/matches",
+      params: { stage_level: group_stage.fetch(:level) }
+    )
     match_show = anonymous_client.get("/matches/#{match.fetch(:id)}")
     invalid_match_update = owner_client.patch("/matches/#{match.fetch(:id)}", body: { state: 'bogus' })
     forbidden_match_update = other_client.patch("/matches/#{match.fetch(:id)}", body: { state: 'in_progress' })
@@ -276,6 +291,12 @@ RSpec.describe 'Backend API surface HTTP E2E' do
     expect(matches_not_started[:json].pluck(:id)).to include(match.fetch(:id))
     expect(matches_upcoming[:status]).to eq(200)
     expect(matches_upcoming[:json].pluck(:id)).to include(match.fetch(:id))
+    expect(matches_group_position[:status]).to eq(200)
+    expect(matches_group_position[:json].map { |item| item.dig(:stage, :level) }.uniq).to eq([-1])
+    expect(matches_group_position[:json]).to all(include(position: match.fetch(:position)))
+    expect(matches_group_stage[:status]).to eq(200)
+    expect(matches_group_stage[:json].count).to eq(tournament_match_count(tournament))
+    expect(matches_group_stage[:json].map { |item| item.dig(:stage, :id) }.uniq).to eq([group_stage.fetch(:id)])
     expect(match_show[:status]).to eq(200)
     expect(invalid_match_update[:status]).to eq(422)
     expect(invalid_match_update.dig(:json, :error)).to eq('Invalid target state')

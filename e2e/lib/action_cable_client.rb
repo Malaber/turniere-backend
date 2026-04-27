@@ -61,11 +61,15 @@ module TurniereE2E
       end
     end
 
-    def subscribe_matches!(tournament_id:, state: nil)
+    def subscribe_matches!(tournament_id:, **filters)
       identifier = {
         channel: 'TournamentMatchesChannel',
         tournament_id:,
-        state:
+        state: filters[:state],
+        stage_id: filters[:stage_id],
+        stage_level: filters[:stage_level],
+        position: filters[:position],
+        group_stage_position: filters[:group_stage_position]
       }.compact.to_json
 
       subscribe!(identifier:) do |message|

@@ -24,6 +24,12 @@ RSpec.describe Beamer, type: :model do
       expect(beamer).not_to be_valid
     end
 
+    it 'requires config to be an object' do
+      beamer = build(:beamer, config: ['not-an-object'])
+      expect(beamer).not_to be_valid
+      expect(beamer.errors[:config]).to include('must be an object')
+    end
+
     Beamer::DISPLAY_STATES.each do |state|
       it "accepts display_state '#{state}'" do
         beamer = build(:beamer, display_state: state)
@@ -54,10 +60,15 @@ RSpec.describe Beamer, type: :model do
         expect(args.fetch(:beamer_names)).to eq(['projector'])
       end
 
-      tournament.beamers.create!(name: 'projector', display_state: 'groups')
+      tournament.beamers.create!(
+        name: 'projector',
+        display_state: 'group_tables',
+        config: { 'match_filter' => 'state:in_progress' }
+      )
 
       expect(payload[:type]).to eq('beamer.created')
-      expect(payload.dig(:beamer, :display_state)).to eq('groups')
+      expect(payload.dig(:beamer, :display_state)).to eq('group_tables')
+      expect(payload.dig(:beamer, :config)).to eq('match_filter' => 'state:in_progress')
     end
 
     it 'broadcasts update payload to previous and current beamer names when renamed' do
@@ -69,15 +80,17 @@ RSpec.describe Beamer, type: :model do
         expect(args.fetch(:beamer_names)).to contain_exactly('old-name', 'new-name')
       end
 
-      beamer.update!(name: 'new-name', display_state: 'during_game')
+      beamer.update!(name: 'new-name', display_state: 'during_game', config: { 'image_key' => 'bpwstr_logo' })
 
       expect(payload[:type]).to eq('beamer.updated')
       expect(payload.dig(:beamer, :name)).to eq('new-name')
       expect(payload.dig(:beamer, :display_state)).to eq('during_game')
+      expect(payload.dig(:beamer, :config)).to eq('image_key' => 'bpwstr_logo')
     end
 
     it 'broadcasts delete payload with last persisted snapshot' do
-      beamer = create(:beamer, name: 'projector', display_state: 'between_games')
+      beamer = create(:beamer, name: 'projector', display_state: 'between_games',
+                               config: { 'match_filter' => 'state:in_progress' })
       payload = nil
 
       expect(BeamerBroadcast).to receive(:call) do |args|
@@ -90,6 +103,7 @@ RSpec.describe Beamer, type: :model do
       expect(payload[:type]).to eq('beamer.deleted')
       expect(payload.dig(:beamer, :name)).to eq('projector')
       expect(payload.dig(:beamer, :display_state)).to eq('between_games')
+      expect(payload.dig(:beamer, :config)).to eq('match_filter' => 'state:in_progress')
     end
   end
 end

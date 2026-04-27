@@ -29,14 +29,32 @@ RSpec.describe 'Tournament live websocket HTTP E2E' do
 
     tournament_cable = TurniereE2E::ActionCableClient.new(base_url:)
     matches_cable = TurniereE2E::ActionCableClient.new(base_url:)
+    filtered_matches_cable = TurniereE2E::ActionCableClient.new(base_url:)
+    stage_matches_cable = TurniereE2E::ActionCableClient.new(base_url:)
+    group_position_filter = { group_stage_position: match.fetch(:position) }
+    stage_filter = { stage_level: group_stage.fetch(:level) }
     tournament_cable.subscribe_tournament!(tournament_id: tournament.fetch(:id))
     matches_cable.subscribe_matches!(tournament_id: tournament.fetch(:id))
+    filtered_matches_cable.subscribe_matches!(
+      tournament_id: tournament.fetch(:id),
+      **group_position_filter
+    )
+    stage_matches_cable.subscribe_matches!(
+      tournament_id: tournament.fetch(:id),
+      **stage_filter
+    )
 
     expect(tournament_cable.wait_for_tournament_payload!.fetch('tournament')).to(
       eq(json_for_api(fetch_tournament(tournament.fetch(:id))))
     )
     expect(matches_cable.wait_for_matches_payload!.fetch('matches')).to(
       eq(json_for_api(fetch_matches(tournament.fetch(:id))))
+    )
+    expect(filtered_matches_cable.wait_for_matches_payload!.fetch('matches')).to(
+      eq(json_for_api(fetch_matches(tournament.fetch(:id), params: group_position_filter)))
+    )
+    expect(stage_matches_cable.wait_for_matches_payload!.fetch('matches')).to(
+      eq(json_for_api(fetch_matches(tournament.fetch(:id), params: stage_filter)))
     )
 
     play_match!(match.fetch(:id), first_score: 3, second_score: 1)
@@ -55,9 +73,29 @@ RSpec.describe 'Tournament live websocket HTTP E2E' do
 
     matches_payload = wait_for_matches_payload!(matches_cable, match_id: match.fetch(:id), state: 'finished')
     expect(matches_payload.fetch('matches')).to eq(json_for_api(fetch_matches(tournament.fetch(:id))))
+
+    filtered_matches_payload = wait_for_matches_payload!(
+      filtered_matches_cable,
+      match_id: match.fetch(:id),
+      state: 'finished'
+    )
+    expect(filtered_matches_payload.fetch('matches')).to(
+      eq(json_for_api(fetch_matches(tournament.fetch(:id), params: group_position_filter)))
+    )
+
+    stage_matches_payload = wait_for_matches_payload!(
+      stage_matches_cable,
+      match_id: match.fetch(:id),
+      state: 'finished'
+    )
+    expect(stage_matches_payload.fetch('matches')).to(
+      eq(json_for_api(fetch_matches(tournament.fetch(:id), params: stage_filter)))
+    )
   ensure
     tournament_cable&.close
     matches_cable&.close
+    filtered_matches_cable&.close
+    stage_matches_cable&.close
   end
 
   def login_client
@@ -111,8 +149,8 @@ RSpec.describe 'Tournament live websocket HTTP E2E' do
     response.fetch(:json)
   end
 
-  def fetch_matches(tournament_id)
-    response = TurniereE2E::ApiClient.new(base_url:).get("/tournaments/#{tournament_id}/matches")
+  def fetch_matches(tournament_id, params: {})
+    response = TurniereE2E::ApiClient.new(base_url:).get("/tournaments/#{tournament_id}/matches", params:)
     expect(response[:status]).to eq(200)
     response.fetch(:json)
   end

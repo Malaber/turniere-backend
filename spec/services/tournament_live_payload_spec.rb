@@ -34,6 +34,29 @@ RSpec.describe 'Tournament live payloads' do
       expect(serialized_match[:teams].pluck(:id)).to match_array(match.teams.map(&:id))
       expect(serialized_match[:match_scores].map { |score| score[:team][:id] }).to match_array(match.teams.map(&:id))
     end
+
+    it 'filters group stage matches by position across groups' do
+      tournament = create(:group_stage_tournament, group_count: 2, match_factory: :filled_group_match)
+      tournament.group_stage.groups.each do |group|
+        group.matches.each_with_index { |match, index| match.update!(position: index) }
+      end
+
+      matches = described_class.matches_for(tournament, group_stage_position: 0)
+
+      expect(matches).to all(be_group_match)
+      expect(matches.map(&:position).uniq).to eq([0])
+      expect(matches.map { |match| match.group.stage.level }.uniq).to eq([-1])
+      expect(matches.map(&:group_id)).to match_array(tournament.group_stage.groups.map(&:id))
+    end
+
+    it 'filters all matches belonging to a stage level' do
+      tournament = create(:stage_tournament, stage_count: 2)
+      stage = tournament.stages.find_by!(level: 1)
+
+      matches = described_class.matches_for(tournament, stage_level: stage.level)
+
+      expect(matches).to match_array(stage.matches)
+    end
   end
 
   describe TournamentBroadcastPayload do

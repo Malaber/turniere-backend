@@ -35,8 +35,11 @@ RSpec.describe Tournament, type: :model do
   describe 'default beamer' do
     it 'creates a default beamer automatically' do
       tournament = create(:tournament)
+      default_beamer = tournament.beamers.find_by!(name: Beamer::DEFAULT_NAME)
 
       expect(tournament.beamers.pluck(:name)).to include(Beamer::DEFAULT_NAME)
+      expect(default_beamer.display_state).to eq('during_game')
+      expect(default_beamer.config).to eq(Beamer::DEFAULT_CONFIG)
     end
   end
 

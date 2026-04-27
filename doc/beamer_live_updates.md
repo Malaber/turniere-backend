@@ -30,9 +30,10 @@ Initial subscribe snapshot:
   "beamer": {
     "id": 34,
     "name": "default",
-    "display_state": "matches_all",
-    "qr_code_url": null,
-    "logo_url": null
+    "display_state": "during_game",
+    "config": {
+      "match_filter": "state:in_progress"
+    }
   }
 }
 ```
