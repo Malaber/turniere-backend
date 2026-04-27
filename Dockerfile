@@ -2,6 +2,7 @@
 
 ARG RUBY_VERSION=3.1.2
 ARG BUNDLER_VERSION=2.3.13
+ARG base_commit=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
 FROM ruby:${RUBY_VERSION}-slim AS runtime-base
 
@@ -54,13 +55,14 @@ RUN bundle config set with 'development test' \
 
 FROM runtime-base AS production
 
-ARG GIT_COMMIT_SHA=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+ARG base_commit=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
-ENV RAILS_ENV=production
-ENV GIT_COMMIT_SHA=${base_commit}
+ENV RAILS_ENV=production \
+    GIT_COMMIT_SHA=${base_commit}
 
 COPY --from=bundle-production /usr/local/bundle /usr/local/bundle
 COPY --from=bundle-production /app/vendor/bundle /app/vendor/bundle
+
 COPY Gemfile Gemfile.lock /app/
 COPY app /app/app
 COPY bin /app/bin
@@ -69,6 +71,7 @@ COPY db /app/db
 COPY public /app/public
 COPY script /app/script
 COPY config.ru Rakefile /app/
+
 # Duplicate production environment to beta environment
 COPY config/environments/production.rb /app/config/environments/beta.rb
 
@@ -78,10 +81,10 @@ CMD ["sh", "-lc", "bundle exec rails db:migrate && bundle exec rails s -p 3000 -
 
 FROM runtime-base AS test
 
-ARG GIT_COMMIT_SHA=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+ARG base_commit=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
-ENV RAILS_ENV=test
-ENV GIT_COMMIT_SHA=${base_commit}
+ENV RAILS_ENV=test \
+    GIT_COMMIT_SHA=${base_commit}
 
 RUN apt-get update -qq \
     && apt-get install -y --no-install-recommends \
@@ -93,6 +96,7 @@ RUN apt-get update -qq \
 
 COPY --from=bundle-test /usr/local/bundle /usr/local/bundle
 COPY --from=bundle-test /app/vendor/bundle /app/vendor/bundle
+
 COPY Gemfile Gemfile.lock /app/
 COPY app /app/app
 COPY bin /app/bin
