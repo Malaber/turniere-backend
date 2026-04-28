@@ -14,6 +14,8 @@ class TournamentSyncSchema
         intermediate_round_participants_amount
         timestamp
         timer_mode
+        timer_reason
+        timer_reason_text
       ].freeze,
       ignored: %w[
         user_id
