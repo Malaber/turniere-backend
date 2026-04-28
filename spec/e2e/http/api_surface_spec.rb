@@ -134,15 +134,32 @@ RSpec.describe 'Backend API surface HTTP E2E' do
     forbidden_update = other_client.patch("/tournaments/#{tournament.fetch(:id)}", body: { name: 'Not Allowed' })
     unauthenticated_update = anonymous_client.patch("/tournaments/#{tournament.fetch(:id)}", body: { name: 'No Auth' })
 
-    timer_seconds = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/timer", body: { timestamp_seconds: 120 })
+    timer_seconds = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/timer", body: {
+                                         timestamp_seconds: 120,
+                                         timer_reason: 'tournament_start'
+                                       })
     timer_show = anonymous_client.get("/tournaments/#{tournament.fetch(:id)}/timer")
-    timer_countup = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/timer", body: { timer_mode: 'countup' })
+    timer_countup = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/timer", body: {
+                                         timer_mode: 'countup',
+                                         timer_reason: 'custom',
+                                         timer_reason_text: 'Pause ran long'
+                                       })
     timer_clear = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/timer", body: { clear_timer: true })
     timer_double = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/timer", body: {
                                         timestamp_seconds: 120,
                                         timestamp: (Time.now.utc + 240).iso8601
                                       })
-    timer_invalid_seconds = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/timer", body: { timestamp_seconds: 'nope' })
+    timer_invalid_reason = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/timer", body: {
+                                                timestamp_seconds: 120,
+                                                timer_reason: 'ceremony'
+                                              })
+    timer_custom_without_text = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/timer", body: {
+                                                    timestamp_seconds: 120,
+                                                    timer_reason: 'custom'
+                                                  })
+    timer_invalid_seconds = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/timer", body: {
+                                                 timestamp_seconds: 'nope'
+                                               })
     timer_past = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/timer", body: { timestamp_seconds: 0 })
     timer_countup_seconds = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/timer", body: {
                                                  timer_mode: 'countup',
@@ -171,18 +188,31 @@ RSpec.describe 'Backend API surface HTTP E2E' do
     expect(timer_seconds[:status]).to eq(200)
     expect(timer_seconds.dig(:json, :timestamp)).to be_a(String)
     expect(timer_seconds.dig(:json, :timer_mode)).to eq('countdown')
+    expect(timer_seconds.dig(:json, :timer_reason)).to eq('tournament_start')
+    expect(timer_seconds.dig(:json, :timer_reason_text)).to be_nil
     expect(timer_show[:status]).to eq(200)
     expect(timer_show.dig(:json, :timestamp)).to eq(timer_seconds.dig(:json, :timestamp))
     expect(timer_show.dig(:json, :timer_mode)).to eq('countdown')
+    expect(timer_show.dig(:json, :timer_reason)).to eq('tournament_start')
     expect(timer_countup[:status]).to eq(200)
     expect(timer_countup.dig(:json, :timestamp)).to be_a(String)
     expect(timer_countup.dig(:json, :timer_mode)).to eq('countup')
+    expect(timer_countup.dig(:json, :timer_reason)).to eq('custom')
+    expect(timer_countup.dig(:json, :timer_reason_text)).to eq('Pause ran long')
     expect(timer_clear[:status]).to eq(200)
     expect(timer_clear.dig(:json, :timestamp)).to be_nil
     expect(timer_clear.dig(:json, :timer_mode)).to be_nil
+    expect(timer_clear.dig(:json, :timer_reason)).to be_nil
+    expect(timer_clear.dig(:json, :timer_reason_text)).to be_nil
 
     expect(timer_double[:status]).to eq(422)
     expect(timer_double.dig(:json, :error)).to eq('Only one of timestamp or timestamp_seconds is allowed')
+    expect(timer_invalid_reason[:status]).to eq(422)
+    expect(timer_invalid_reason.dig(:json, :error)).to eq('Invalid timer_reason')
+    expect(timer_custom_without_text[:status]).to eq(422)
+    expect(timer_custom_without_text.dig(:json, :error)).to eq(
+      'timer_reason_text is required for custom timer_reason'
+    )
     expect(timer_invalid_seconds[:status]).to eq(422)
     expect(timer_invalid_seconds.dig(:json, :error)).to eq('Invalid seconds format')
     expect(timer_past[:status]).to eq(422)

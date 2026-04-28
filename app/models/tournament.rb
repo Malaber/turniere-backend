@@ -3,6 +3,9 @@
 require 'securerandom'
 
 class Tournament < ApplicationRecord
+  TIMER_MODES = %w[countdown countup].freeze
+  TIMER_REASONS = %w[tournament_start playoff_start match_end custom].freeze
+
   belongs_to :user
   has_many :teams, dependent: :destroy
   has_many :stages, dependent: :destroy
@@ -11,16 +14,19 @@ class Tournament < ApplicationRecord
 
   validates :name, presence: true
   validates :code, presence: true, uniqueness: true
-  validates :timer_mode, inclusion: { in: %w[countdown countup] }, allow_nil: true
+  validates :timer_mode, inclusion: { in: TIMER_MODES }, allow_nil: true
+  validates :timer_reason, inclusion: { in: TIMER_REASONS }, allow_nil: true
   validates :sync_target_url, format: URI::DEFAULT_PARSER.make_regexp(%w[http https]), allow_blank: true
   validate :sync_configuration_is_complete
 
   validate :playoff_teams_amount_is_positive_power_of_two
+  validate :timer_reason_text_matches_reason
 
   alias_attribute :owner, :user
 
   after_initialize :generate_code
   after_create_commit :ensure_default_beamer!
+  before_validation :normalize_timer_reason
   before_validation :clear_follower_sync_token_when_disabling_read_only_mode
   after_commit :broadcast_timer_state_change, if: :saved_change_to_timer_state?
 
@@ -100,8 +106,24 @@ class Tournament < ApplicationRecord
     self.sync_auth_token = nil
   end
 
+  def normalize_timer_reason
+    self.timer_reason = timer_reason.presence
+    self.timer_reason_text = timer_reason_text&.strip&.presence
+  end
+
+  def timer_reason_text_matches_reason
+    if timer_reason == 'custom'
+      errors.add(:timer_reason_text, "can't be blank") if timer_reason_text.blank?
+    elsif timer_reason_text.present?
+      errors.add(:timer_reason_text, 'is only allowed when timer_reason is custom')
+    end
+  end
+
   def saved_change_to_timer_state?
-    saved_change_to_timestamp? || saved_change_to_timer_mode?
+    saved_change_to_timestamp? ||
+      saved_change_to_timer_mode? ||
+      saved_change_to_timer_reason? ||
+      saved_change_to_timer_reason_text?
   end
 
   def broadcast_timer_state_change

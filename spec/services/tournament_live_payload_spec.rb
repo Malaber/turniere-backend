@@ -83,4 +83,27 @@ RSpec.describe 'Tournament live payloads' do
       expect(payload[:matches]).to eq(TournamentMatchesPayload.build(tournament, state: 'not_started'))
     end
   end
+
+  describe TournamentTimerBroadcastPayload do
+    it 'serializes timer reason fields for websocket subscribers' do
+      tournament = create(
+        :tournament,
+        timestamp: Time.utc(2026, 4, 24, 10, 15, 0),
+        timer_mode: 'countdown',
+        timer_reason: 'custom',
+        timer_reason_text: 'Opening ceremony'
+      )
+
+      payload = described_class.build(tournament)
+
+      expect(payload).to include(
+        type: 'timer.updated',
+        tournament_id: tournament.id,
+        timestamp: '2026-04-24T10:15:00Z',
+        timer_mode: 'countdown',
+        timer_reason: 'custom',
+        timer_reason_text: 'Opening ceremony'
+      )
+    end
+  end
 end

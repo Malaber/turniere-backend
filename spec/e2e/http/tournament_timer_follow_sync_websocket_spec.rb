@@ -40,24 +40,42 @@ RSpec.describe 'Tournament timer follower sync websocket HTTP E2E' do
     initial_payload = cable_client.wait_for_timer_payload!
     expect(initial_payload.fetch('timestamp')).to be_nil
     expect(initial_payload.fetch('timer_mode')).to be_nil
+    expect(initial_payload.fetch('timer_reason')).to be_nil
+    expect(initial_payload.fetch('timer_reason_text')).to be_nil
 
-    countdown = source_client.patch("/tournaments/#{source.fetch(:id)}/timer", body: { timestamp_seconds: 120 })
+    countdown = source_client.patch("/tournaments/#{source.fetch(:id)}/timer", body: {
+                                      timestamp_seconds: 120,
+                                      timer_reason: 'match_end'
+                                    })
     expect(countdown[:status]).to eq(200)
+    sync_now_if_requested!(source.fetch(:id))
 
     countdown_payload = wait_for_timer_state!(cable_client, timer_mode: 'countdown')
     expect(countdown_payload.fetch('timestamp')).to eq(countdown.dig(:json, :timestamp))
+    expect(countdown_payload.fetch('timer_reason')).to eq('match_end')
+    expect(countdown_payload.fetch('timer_reason_text')).to be_nil
 
-    countup = source_client.patch("/tournaments/#{source.fetch(:id)}/timer", body: { timer_mode: 'countup' })
+    countup = source_client.patch("/tournaments/#{source.fetch(:id)}/timer", body: {
+                                    timer_mode: 'countup',
+                                    timer_reason: 'custom',
+                                    timer_reason_text: 'Follower sync custom reason'
+                                  })
     expect(countup[:status]).to eq(200)
+    sync_now_if_requested!(source.fetch(:id))
 
     countup_payload = wait_for_timer_state!(cable_client, timer_mode: 'countup')
     expect(countup_payload.fetch('timestamp')).to eq(countup.dig(:json, :timestamp))
+    expect(countup_payload.fetch('timer_reason')).to eq('custom')
+    expect(countup_payload.fetch('timer_reason_text')).to eq('Follower sync custom reason')
 
     clear = source_client.patch("/tournaments/#{source.fetch(:id)}/timer", body: { clear_timer: true })
     expect(clear[:status]).to eq(200)
+    sync_now_if_requested!(source.fetch(:id))
 
     cleared_payload = wait_for_timer_state!(cable_client, timer_mode: nil)
     expect(cleared_payload.fetch('timestamp')).to be_nil
+    expect(cleared_payload.fetch('timer_reason')).to be_nil
+    expect(cleared_payload.fetch('timer_reason_text')).to be_nil
   ensure
     cable_client&.close
   end
@@ -93,6 +111,13 @@ RSpec.describe 'Tournament timer follower sync websocket HTTP E2E' do
                            })
     expect(response[:status]).to eq(201)
     response.fetch(:json)
+  end
+
+  def sync_now_if_requested!(source_tournament_id)
+    return unless ENV.fetch('TURNIERE_E2E_SYNC_MODE', nil) == 'manual'
+
+    response = source_client.post("/tournaments/#{source_tournament_id}/test_sync")
+    expect(response[:status]).to eq(200)
   end
 
   def wait_for_timer_state!(cable_client, timer_mode:, timeout: 20)

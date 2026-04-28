@@ -70,6 +70,8 @@ Payload:
     "intermediate_round_participants_amount": 0,
     "timestamp": null,
     "timer_mode": null,
+    "timer_reason": null,
+    "timer_reason_text": null,
     "owner_username": "owner",
     "stages": [],
     "teams": [],

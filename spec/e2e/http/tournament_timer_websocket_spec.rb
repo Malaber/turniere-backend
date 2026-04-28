@@ -31,24 +31,39 @@ RSpec.describe 'Tournament timer websocket HTTP E2E' do
     initial_payload = cable_client.wait_for_timer_payload!
     expect(initial_payload.fetch('timestamp')).to be_nil
     expect(initial_payload.fetch('timer_mode')).to be_nil
+    expect(initial_payload.fetch('timer_reason')).to be_nil
+    expect(initial_payload.fetch('timer_reason_text')).to be_nil
 
-    countdown = client.patch("/tournaments/#{tournament.fetch(:id)}/timer", body: { timestamp_seconds: 120 })
+    countdown = client.patch("/tournaments/#{tournament.fetch(:id)}/timer", body: {
+                               timestamp_seconds: 120,
+                               timer_reason: 'playoff_start'
+                             })
     expect(countdown[:status]).to eq(200)
 
     countdown_payload = wait_for_timer_state!(cable_client, timer_mode: 'countdown')
     expect(countdown_payload.fetch('timestamp')).to eq(countdown.dig(:json, :timestamp))
+    expect(countdown_payload.fetch('timer_reason')).to eq('playoff_start')
+    expect(countdown_payload.fetch('timer_reason_text')).to be_nil
 
-    countup = client.patch("/tournaments/#{tournament.fetch(:id)}/timer", body: { timer_mode: 'countup' })
+    countup = client.patch("/tournaments/#{tournament.fetch(:id)}/timer", body: {
+                             timer_mode: 'countup',
+                             timer_reason: 'custom',
+                             timer_reason_text: 'Manual overtime'
+                           })
     expect(countup[:status]).to eq(200)
 
     countup_payload = wait_for_timer_state!(cable_client, timer_mode: 'countup')
     expect(countup_payload.fetch('timestamp')).to eq(countup.dig(:json, :timestamp))
+    expect(countup_payload.fetch('timer_reason')).to eq('custom')
+    expect(countup_payload.fetch('timer_reason_text')).to eq('Manual overtime')
 
     clear = client.patch("/tournaments/#{tournament.fetch(:id)}/timer", body: { clear_timer: true })
     expect(clear[:status]).to eq(200)
 
     cleared_payload = wait_for_timer_state!(cable_client, timer_mode: nil)
     expect(cleared_payload.fetch('timestamp')).to be_nil
+    expect(cleared_payload.fetch('timer_reason')).to be_nil
+    expect(cleared_payload.fetch('timer_reason_text')).to be_nil
   ensure
     cable_client&.close
   end

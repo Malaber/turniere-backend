@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.0].define(version: 2026_04_26_121000) do
+ActiveRecord::Schema[7.0].define(version: 2026_04_28_120000) do
   create_table "beamers", force: :cascade do |t|
     t.string "name", null: false
     t.string "display_state", default: "during_game", null: false
@@ -167,6 +167,8 @@ ActiveRecord::Schema[7.0].define(version: 2026_04_26_121000) do
     t.string "sync_last_push_error"
     t.datetime "sync_last_imported_snapshot_at"
     t.string "timer_mode"
+    t.string "timer_reason"
+    t.text "timer_reason_text"
     t.index ["code"], name: "index_tournaments_on_code", unique: true
     t.index ["user_id"], name: "index_tournaments_on_user_id"
   end

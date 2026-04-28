@@ -525,7 +525,7 @@ def _run_blackbox_rspec(base_url, email, password, username, alt_email=E2E_ALT_E
 def _start_server(command, env, log_path="/tmp/turniere-e2e-server.log"):
     log_handle = open(log_path, "w")
     process = subprocess.Popen(
-        ["/bin/sh", "-lc", command],
+        ["/bin/sh", "-c", command],
         env=env,
         stdout=log_handle,
         stderr=subprocess.STDOUT,

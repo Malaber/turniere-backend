@@ -69,6 +69,8 @@ class TournamentSnapshotImporter
     root_attrs[:code] = tournament.code if code_taken_by_another_tournament?(root_attrs[:code])
     root_attrs[:timestamp] = parse_time(snapshot[:timestamp])
     root_attrs[:timer_mode] = snapshot[:timer_mode]
+    root_attrs[:timer_reason] = snapshot[:timer_reason]
+    root_attrs[:timer_reason_text] = snapshot[:timer_reason_text]
     root_attrs[:sync_source_tournament_id] = snapshot[:id]
     root_attrs[:sync_last_imported_snapshot_at] = snapshot_generated_at
     tournament.update!(root_attrs)

@@ -105,7 +105,7 @@ RSpec.describe TournamentsController, type: :controller do
       expected_keys = %i[
         id name code public description playoff_teams_amount
         instant_finalists_amount intermediate_round_participants_amount
-        timestamp timer_mode owner_username stages teams team_action_lists
+        timestamp timer_mode timer_reason timer_reason_text owner_username stages teams team_action_lists
       ]
       expect(json.keys).to match_array(expected_keys)
       expect(json[:name]).to eq(@tournament.name)
@@ -224,13 +224,20 @@ RSpec.describe TournamentsController, type: :controller do
   describe 'GET #timer' do
     it 'returns timer state in ISO 8601 format' do
       timestamp = Time.utc(2026, 4, 13, 18, 0, 0)
-      @tournament.update!(timestamp: timestamp, timer_mode: 'countdown')
+      @tournament.update!(
+        timestamp: timestamp,
+        timer_mode: 'countdown',
+        timer_reason: 'custom',
+        timer_reason_text: 'Opening ceremony'
+      )
 
       get :timer, params: { id: @tournament.to_param }
 
       expect(response).to be_successful
       expect(deserialize_response(response)[:timestamp]).to eq(timestamp.iso8601)
       expect(deserialize_response(response)[:timer_mode]).to eq('countdown')
+      expect(deserialize_response(response)[:timer_reason]).to eq('custom')
+      expect(deserialize_response(response)[:timer_reason_text]).to eq('Opening ceremony')
     end
   end
 
@@ -242,35 +249,60 @@ RSpec.describe TournamentsController, type: :controller do
     it 'stores timezone-aware timestamp values without shifting them' do
       timestamp = '2030-04-13T18:00:00+02:00'
 
-      patch :set_timer, params: { id: @tournament.to_param, timestamp: timestamp }
+      patch :set_timer, params: {
+        id: @tournament.to_param,
+        timestamp: timestamp,
+        timer_reason: 'tournament_start'
+      }
 
       expect(response).to be_successful
       expect(@tournament.reload.timestamp.iso8601).to eq(Time.iso8601(timestamp).utc.iso8601)
+      expect(@tournament.timer_reason).to eq('tournament_start')
+      expect(@tournament.timer_reason_text).to be_nil
       expect(deserialize_response(response)[:timestamp]).to eq(@tournament.timestamp.iso8601)
       expect(deserialize_response(response)[:timer_mode]).to eq('countdown')
+      expect(deserialize_response(response)[:timer_reason]).to eq('tournament_start')
     end
 
     it 'starts countup timer at current time when timer_mode=countup' do
       before_request = Time.zone.now
 
-      patch :set_timer, params: { id: @tournament.to_param, timer_mode: 'countup' }
+      patch :set_timer, params: {
+        id: @tournament.to_param,
+        timer_mode: 'countup',
+        timer_reason: 'custom',
+        timer_reason_text: 'Tie-break delay'
+      }
 
       expect(response).to be_successful
       expect(@tournament.reload.timer_mode).to eq('countup')
+      expect(@tournament.timer_reason).to eq('custom')
+      expect(@tournament.timer_reason_text).to eq('Tie-break delay')
       expect(@tournament.timestamp).to be_between(before_request - 1.second, Time.zone.now + 1.second)
       expect(deserialize_response(response)[:timer_mode]).to eq('countup')
+      expect(deserialize_response(response)[:timer_reason]).to eq('custom')
+      expect(deserialize_response(response)[:timer_reason_text]).to eq('Tie-break delay')
     end
 
     it 'clears timer state when clear_timer=true' do
-      @tournament.update!(timestamp: Time.utc(2030, 4, 13, 18, 0, 0), timer_mode: 'countdown')
+      @tournament.update!(
+        timestamp: Time.utc(2030, 4, 13, 18, 0, 0),
+        timer_mode: 'countdown',
+        timer_reason: 'custom',
+        timer_reason_text: 'Warm-up pause'
+      )
 
       patch :set_timer, params: { id: @tournament.to_param, clear_timer: true }
 
       expect(response).to be_successful
       expect(@tournament.reload.timestamp).to be_nil
       expect(@tournament.timer_mode).to be_nil
+      expect(@tournament.timer_reason).to be_nil
+      expect(@tournament.timer_reason_text).to be_nil
       expect(deserialize_response(response)[:timestamp]).to be_nil
       expect(deserialize_response(response)[:timer_mode]).to be_nil
+      expect(deserialize_response(response)[:timer_reason]).to be_nil
+      expect(deserialize_response(response)[:timer_reason_text]).to be_nil
     end
 
     it 'rejects timestamp_seconds for countup mode' do
@@ -278,6 +310,34 @@ RSpec.describe TournamentsController, type: :controller do
 
       expect(response).to have_http_status(:unprocessable_entity)
       expect(deserialize_response(response)[:error]).to eq('timestamp_seconds is only allowed for countdown mode')
+    end
+
+    it 'rejects invalid timer reason values' do
+      patch :set_timer, params: { id: @tournament.to_param, timestamp_seconds: 120, timer_reason: 'ceremony' }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(deserialize_response(response)[:error]).to eq('Invalid timer_reason')
+    end
+
+    it 'requires timer_reason_text for custom timer reason' do
+      patch :set_timer, params: { id: @tournament.to_param, timestamp_seconds: 120, timer_reason: 'custom' }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(deserialize_response(response)[:error]).to eq('timer_reason_text is required for custom timer_reason')
+    end
+
+    it 'rejects timer_reason_text for predefined timer reasons' do
+      patch :set_timer, params: {
+        id: @tournament.to_param,
+        timestamp_seconds: 120,
+        timer_reason: 'match_end',
+        timer_reason_text: 'Extra info'
+      }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(deserialize_response(response)[:error]).to eq(
+        'timer_reason_text is only allowed when timer_reason is custom'
+      )
     end
   end
 
