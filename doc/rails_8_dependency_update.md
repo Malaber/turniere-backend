@@ -9,6 +9,12 @@ The project no longer uses the Thor77 `devise_token_auth` fork. The released
 gem currently supports this stack through `devise_token_auth` 1.2.6 with
 `devise` 4.9.4.
 
+Because this is an API-only app without session middleware,
+`DeviseTokenAuth.bypass_sign_in` must stay disabled. With the gem default
+enabled, authenticated token requests call Devise session bypass code and fail
+in API-only production. Disabled mode still authenticates token requests with
+`store: false`.
+
 ## Docker Versioning
 
 Container versioning still uses the shared pipeline `base_commit` build arg.
