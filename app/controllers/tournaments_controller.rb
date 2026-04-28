@@ -12,15 +12,18 @@ class TournamentsController < ApplicationController
   end
 
   before_action :set_tournament_for_show, only: %i[show]
-  before_action :set_tournament, only: %i[update destroy set_timer timer sync_state test_sync]
-  before_action :authenticate_user!, only: %i[create update destroy set_timer test_sync]
-  before_action -> { require_owner! @tournament.owner }, only: %i[update destroy set_timer test_sync]
+  before_action :set_tournament,
+                only: %i[update destroy set_timer timer sync_state test_sync start_next_group_matches]
+  before_action :authenticate_user!, only: %i[create update destroy set_timer test_sync start_next_group_matches]
+  before_action -> { require_owner! @tournament.owner },
+                only: %i[update destroy set_timer test_sync start_next_group_matches]
   before_action :validate_create_params, only: %i[create]
   before_action :validate_update_params, only: %i[update]
   before_action :validate_set_timer_params, only: %i[set_timer]
   before_action :ensure_update_allowed!, only: %i[update]
   before_action :ensure_destroy_allowed!, only: %i[destroy]
   before_action :ensure_timer_update_allowed!, only: %i[set_timer]
+  before_action -> { require_writable_tournament!(@tournament) }, only: %i[start_next_group_matches]
   before_action :authorize_sync_request!, only: %i[sync_state]
   rescue_from ActiveRecord::RecordNotFound, with: :render_not_found_error
 
@@ -165,6 +168,20 @@ class TournamentsController < ApplicationController
     }, status: :bad_gateway
   end
 
+  # PATCH /tournaments/:id/start_next_group_matches
+  def start_next_group_matches
+    started_matches = TournamentGroupMatchStarter.start_next!(@tournament, logger:)
+    if started_matches.any?
+      push_sync_if_needed!(@tournament)
+      TournamentLiveBroadcast.call(@tournament.id)
+    end
+
+    render json: ActiveModelSerializers::SerializableResource.new(
+      started_matches,
+      each_serializer: LiveMatchSerializer,
+      include: %w[match_scores.team]
+    ).as_json
+  end
 
   private
 

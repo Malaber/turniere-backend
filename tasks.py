@@ -537,7 +537,7 @@ def _start_server(command, env, log_path="/tmp/turniere-e2e-server.log"):
 def _start_test_server(host=SERVER_HOST, port=SERVER_PORT):
     return _start_server(
         f"{_bundle_exec('rails', 's')} -e test -b {host} -p {port}",
-        _env(),
+        _env(GIT_COMMIT_SHA=_git_commit_sha()),
     )
 
 
