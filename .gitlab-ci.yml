@@ -55,6 +55,9 @@ rails e2e spec:
       alias: postgres
     - name: $CI_REGISTRY_IMAGE/production/commits:$CI_COMMIT_SHA
       alias: app
+      variables:
+        GIT_COMMIT_SHA: $CI_COMMIT_SHA
+        TURNIERE_DISABLE_EMAIL_DELIVERY: "1"
       command:
         - bundle
         - exec
@@ -125,6 +128,8 @@ rails follow sync e2e spec:
         SECRET_KEY_BASE: turniere-blackbox-secret-key-base-please-change-in-real-prod
         MAILGUN_API_KEY: blackbox-test-api-key
         MAILGUN_DOMAIN: blackbox.example.com
+        GIT_COMMIT_SHA: $CI_COMMIT_SHA
+        TURNIERE_DISABLE_EMAIL_DELIVERY: "1"
         TOURNAMENT_SYNC_HTTP_TIMEOUT_SECONDS: "3"
         NO_PROXY: source-app,follower-app,source-postgres,follower-postgres,localhost,127.0.0.1
         no_proxy: source-app,follower-app,source-postgres,follower-postgres,localhost,127.0.0.1
@@ -148,6 +153,8 @@ rails follow sync e2e spec:
         SECRET_KEY_BASE: turniere-blackbox-secret-key-base-please-change-in-real-prod
         MAILGUN_API_KEY: blackbox-test-api-key
         MAILGUN_DOMAIN: blackbox.example.com
+        GIT_COMMIT_SHA: $CI_COMMIT_SHA
+        TURNIERE_DISABLE_EMAIL_DELIVERY: "1"
         TOURNAMENT_SYNC_HTTP_TIMEOUT_SECONDS: "3"
         NO_PROXY: source-app,follower-app,source-postgres,follower-postgres,localhost,127.0.0.1
         no_proxy: source-app,follower-app,source-postgres,follower-postgres,localhost,127.0.0.1

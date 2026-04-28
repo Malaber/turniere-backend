@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_26_121000) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_28_120000) do
   create_table "beamers", force: :cascade do |t|
     t.json "config", default: {}, null: false
     t.datetime "created_at", null: false
@@ -165,6 +165,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_26_121000) do
     t.string "sync_target_url"
     t.string "timer_mode"
     t.datetime "timestamp"
+    t.string "timer_reason"
+    t.text "timer_reason_text"
     t.datetime "updated_at", precision: nil, null: false
     t.integer "user_id", null: false
     t.index ["code"], name: "index_tournaments_on_code", unique: true

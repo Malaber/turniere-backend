@@ -6,6 +6,12 @@ RSpec.describe TournamentSnapshotImporter do
   describe '.import!' do
     it 'replaces follower tournament graph using source ids as stable mapping keys' do
       source = create(:group_stage_tournament, group_count: 2, match_factory: :filled_group_match)
+      source.update!(
+        timestamp: Time.utc(2026, 4, 24, 10, 15, 0),
+        timer_mode: 'countdown',
+        timer_reason: 'custom',
+        timer_reason_text: 'Opening ceremony'
+      )
       source.beamers.create!(
         name: 'stream-a',
         display_state: 'during_game',
@@ -23,6 +29,8 @@ RSpec.describe TournamentSnapshotImporter do
       expect(follower.sync_source_tournament_id).to eq(source.id)
       expect(follower.name).to eq(source.name)
       expect(follower.timer_mode).to eq(source.timer_mode)
+      expect(follower.timer_reason).to eq(source.timer_reason)
+      expect(follower.timer_reason_text).to eq(source.timer_reason_text)
       expect(follower.teams.count).to eq(snapshot.fetch(:teams).count)
       expect(follower.beamers.count).to eq(snapshot.fetch(:beamers).count)
       expect(follower.team_action_lists.count).to eq(snapshot.fetch(:team_action_lists).count)
@@ -127,6 +135,11 @@ RSpec.describe TournamentSnapshotImporter do
 
     tournament.reload
     play_some_playoff_matches!(tournament)
+    tournament.update!(
+      timestamp: Time.utc(2026, 4, 24, 10, 15, 0),
+      timer_mode: 'countdown',
+      timer_reason: 'playoff_start'
+    )
     tournament.reload
   end
 
@@ -186,6 +199,8 @@ RSpec.describe TournamentSnapshotImporter do
       intermediate_round_participants_amount: tournament.intermediate_round_participants_amount,
       timestamp: tournament.timestamp&.iso8601,
       timer_mode: tournament.timer_mode,
+      timer_reason: tournament.timer_reason,
+      timer_reason_text: tournament.timer_reason_text,
       teams: tournament.teams.order(:name).map { |team| team.name },
       team_action_lists: tournament.team_action_lists.order(:key).map do |list|
         {

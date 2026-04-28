@@ -171,14 +171,18 @@ class TournamentsController < ApplicationController
   def timer_params
     {
       timestamp: params[:timestamp],
-      timer_mode: params[:timer_mode]
+      timer_mode: params[:timer_mode],
+      timer_reason: params[:timer_reason],
+      timer_reason_text: params[:timer_reason_text]
     }
   end
 
   def serialize_timer_state(tournament)
     {
       timestamp: tournament.timestamp&.iso8601,
-      timer_mode: tournament.timer_mode
+      timer_mode: tournament.timer_mode,
+      timer_reason: tournament.timer_reason,
+      timer_reason_text: tournament.timer_reason_text
     }
   end
 
@@ -333,40 +337,41 @@ class TournamentsController < ApplicationController
     timestamp = params[:timestamp]
     timestamp_seconds = params[:timestamp_seconds]
     timer_mode = params[:timer_mode]
+    normalize_timer_reason_params
+    timer_reason = params[:timer_reason]
+    timer_reason_text = params[:timer_reason_text]
     clear_timer = ActiveModel::Type::Boolean.new.cast(params[:clear_timer])
 
     if clear_timer
-      if timestamp.present? || timestamp_seconds.present? || timer_mode.present?
-        return render json: { error: 'clear_timer cannot be combined with timestamp values or timer_mode' },
-                      status: :unprocessable_entity
-      end
-
-      params[:timestamp] = nil
-      params[:timer_mode] = nil
-      return
+      return validate_clear_timer_params(timestamp, timestamp_seconds, timer_mode, timer_reason, timer_reason_text)
     end
 
-    if timer_mode.present? && !%w[countdown countup].include?(timer_mode)
-      return render json: { error: 'Invalid timer_mode' }, status: :unprocessable_entity
+    if timer_mode.present? && !Tournament::TIMER_MODES.include?(timer_mode)
+      return render_timer_validation_error('Invalid timer_mode')
     end
+
+    timer_reason_error = validate_timer_reason_params(timer_reason, timer_reason_text)
+    return render_timer_validation_error(timer_reason_error) if timer_reason_error
 
     # throw error if both timestamp and timestamp_seconds are present
     if timestamp.present? && timestamp_seconds.present?
-      return render json: { error: 'Only one of timestamp or timestamp_seconds is allowed' }, status: :unprocessable_entity
+      return render_timer_validation_error('Only one of timestamp or timestamp_seconds is allowed')
     end
 
     if timer_mode == 'countup' && timestamp_seconds.present?
-      return render json: { error: 'timestamp_seconds is only allowed for countdown mode' }, status: :unprocessable_entity
+      return render_timer_validation_error('timestamp_seconds is only allowed for countdown mode')
     end
 
     if timestamp_seconds.present?
       begin
         timestamp_seconds = Integer(timestamp_seconds)
       rescue ArgumentError
-        return render json: { error: 'Invalid seconds format' }, status: :unprocessable_entity
+        return render_timer_validation_error('Invalid seconds format')
       end
 
-      return render json: { error: 'Timestamp must be in the future for countdown mode' }, status: :unprocessable_entity if timestamp_seconds <= 0
+      if timestamp_seconds <= 0
+        return render_timer_validation_error('Timestamp must be in the future for countdown mode')
+      end
 
       parsed_time = Time.zone.now + timestamp_seconds
       params[:timestamp] = parsed_time
@@ -375,24 +380,63 @@ class TournamentsController < ApplicationController
       begin
         parsed_time = Time.zone.parse(timestamp)
         if parsed_time.nil?
-          return render json: { error: 'Invalid timestamp format' }, status: :unprocessable_entity
+          return render_timer_validation_error('Invalid timestamp format')
         elsif timer_mode != 'countup' && !parsed_time.future?
-          return render json: { error: 'Timestamp must be in the future for countdown mode' }, status: :unprocessable_entity
+          return render_timer_validation_error('Timestamp must be in the future for countdown mode')
         end
 
         params[:timestamp] = parsed_time
         params[:timer_mode] = timer_mode.presence || 'countdown'
       rescue ArgumentError
-        return render json: { error: 'Invalid timestamp format' }, status: :unprocessable_entity
+        return render_timer_validation_error('Invalid timestamp format')
       end
     elsif timer_mode == 'countup'
       params[:timestamp] = Time.zone.now
     elsif timer_mode.present?
-      return render json: { error: 'timer_mode requires timestamp, timestamp_seconds, or clear_timer' },
-                    status: :unprocessable_entity
+      return render_timer_validation_error('timer_mode requires timestamp, timestamp_seconds, or clear_timer')
     else
-      return render json: { error: 'timestamp, timestamp_seconds, or clear_timer is required' },
-                    status: :unprocessable_entity
+      return render_timer_validation_error('timestamp, timestamp_seconds, or clear_timer is required')
     end
+  end
+
+  def normalize_timer_reason_params
+    params[:timer_reason] = params[:timer_reason].presence
+    params[:timer_reason_text] = timer_reason_text_param
+  end
+
+  def timer_reason_text_param
+    return nil unless params.key?(:timer_reason_text)
+
+    params[:timer_reason_text].to_s.strip.presence
+  end
+
+  def validate_clear_timer_params(timestamp, timestamp_seconds, timer_mode, timer_reason, timer_reason_text)
+    if timestamp.present? || timestamp_seconds.present? || timer_mode.present? ||
+       timer_reason.present? || timer_reason_text.present?
+      return render_timer_validation_error('clear_timer cannot be combined with timer values or timer reason')
+    end
+
+    params[:timestamp] = nil
+    params[:timer_mode] = nil
+    params[:timer_reason] = nil
+    params[:timer_reason_text] = nil
+  end
+
+  def validate_timer_reason_params(timer_reason, timer_reason_text)
+    return if timer_reason.blank? && timer_reason_text.blank?
+    return 'timer_reason_text is only allowed when timer_reason is custom' if timer_reason.blank?
+    return 'Invalid timer_reason' unless Tournament::TIMER_REASONS.include?(timer_reason)
+
+    if timer_reason == 'custom' && timer_reason_text.blank?
+      return 'timer_reason_text is required for custom timer_reason'
+    end
+
+    if timer_reason != 'custom' && timer_reason_text.present?
+      'timer_reason_text is only allowed when timer_reason is custom'
+    end
+  end
+
+  def render_timer_validation_error(message)
+    render json: { error: message }, status: :unprocessable_entity
   end
 end
