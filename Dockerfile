@@ -2,7 +2,7 @@
 
 ARG RUBY_VERSION=4.0.3
 ARG BUNDLER_VERSION=4.0.6
-ARG GIT_COMMIT_SHA=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+ARG base_commit=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
 FROM ruby:${RUBY_VERSION}-slim AS runtime-base
 
@@ -57,10 +57,10 @@ RUN bundle config set with 'development test' \
 
 FROM runtime-base AS production
 
-ARG GIT_COMMIT_SHA=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+ARG base_commit=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
 ENV RAILS_ENV=production \
-    GIT_COMMIT_SHA=${GIT_COMMIT_SHA}
+    GIT_COMMIT_SHA=${base_commit}
 
 COPY --from=bundle-production /usr/local/bundle /usr/local/bundle
 COPY --from=bundle-production /app/vendor/bundle /app/vendor/bundle
@@ -83,10 +83,10 @@ CMD ["sh", "-lc", "bundle exec rails db:migrate && bundle exec rails s -p 3000 -
 
 FROM runtime-base AS test
 
-ARG GIT_COMMIT_SHA=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+ARG base_commit=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
 ENV RAILS_ENV=test \
-    GIT_COMMIT_SHA=${GIT_COMMIT_SHA}
+    GIT_COMMIT_SHA=${base_commit}
 
 RUN apt-get update -qq \
     && apt-get install -y --no-install-recommends \

@@ -10,10 +10,6 @@ class ApplicationController < ActionController::API
   end
   rescue_from ActiveRecord::RecordNotFound, with: :render_not_found_error
 
-  def bypass_sign_in(_resource, scope: nil)
-    true
-  end
-
   protected
 
   def configure_permitted_parameters
