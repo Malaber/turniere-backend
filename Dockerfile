@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1.7
 
-ARG RUBY_VERSION=3.1.2
-ARG BUNDLER_VERSION=2.3.13
-ARG base_commit=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+ARG RUBY_VERSION=4.0.3
+ARG BUNDLER_VERSION=4.0.6
+ARG GIT_COMMIT_SHA=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
 FROM ruby:${RUBY_VERSION}-slim AS runtime-base
 
@@ -19,6 +19,7 @@ WORKDIR /app
 RUN apt-get update -qq \
     && apt-get install -y --no-install-recommends \
         libpq5 \
+        libyaml-0-2 \
         nodejs \
         openssl \
     && rm -rf /var/lib/apt/lists/* \
@@ -33,6 +34,7 @@ RUN apt-get update -qq \
         git \
         libpq-dev \
         libsqlite3-dev \
+        libyaml-dev \
         pkg-config \
         python3 \
         python3-pip \
@@ -55,10 +57,10 @@ RUN bundle config set with 'development test' \
 
 FROM runtime-base AS production
 
-ARG base_commit=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+ARG GIT_COMMIT_SHA=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
 ENV RAILS_ENV=production \
-    GIT_COMMIT_SHA=${base_commit}
+    GIT_COMMIT_SHA=${GIT_COMMIT_SHA}
 
 COPY --from=bundle-production /usr/local/bundle /usr/local/bundle
 COPY --from=bundle-production /app/vendor/bundle /app/vendor/bundle
@@ -81,10 +83,10 @@ CMD ["sh", "-lc", "bundle exec rails db:migrate && bundle exec rails s -p 3000 -
 
 FROM runtime-base AS test
 
-ARG base_commit=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+ARG GIT_COMMIT_SHA=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
 ENV RAILS_ENV=test \
-    GIT_COMMIT_SHA=${base_commit}
+    GIT_COMMIT_SHA=${GIT_COMMIT_SHA}
 
 RUN apt-get update -qq \
     && apt-get install -y --no-install-recommends \
@@ -92,7 +94,7 @@ RUN apt-get update -qq \
         python3 \
         python3-pip \
     && rm -rf /var/lib/apt/lists/* \
-    && python3 -m pip install --no-cache-dir invoke
+    && python3 -m pip install --break-system-packages --no-cache-dir invoke
 
 COPY --from=bundle-test /usr/local/bundle /usr/local/bundle
 COPY --from=bundle-test /app/vendor/bundle /app/vendor/bundle

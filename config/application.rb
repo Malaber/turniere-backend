@@ -50,7 +50,5 @@ module TurniereBackend
       from: 'noreply@turnie.re'
     }
 
-    # Active Record
-    config.active_record.legacy_connection_handling = false
   end
 end

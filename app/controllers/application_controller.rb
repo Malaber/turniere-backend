@@ -10,6 +10,10 @@ class ApplicationController < ActionController::API
   end
   rescue_from ActiveRecord::RecordNotFound, with: :render_not_found_error
 
+  def bypass_sign_in(_resource, scope: nil)
+    true
+  end
+
   protected
 
   def configure_permitted_parameters
@@ -42,6 +46,11 @@ class ApplicationController < ActionController::API
   end
 
   def render_not_found_error(exception)
-    render json: { error: exception.to_s }, status: :not_found
+    error = if exception.is_a?(ActiveRecord::RecordNotFound) && exception.model.present?
+              "Couldn't find #{exception.model} with '#{exception.primary_key}'=#{exception.id.inspect}"
+            else
+              'Record not found'
+            end
+    render json: { error: error }, status: :not_found
   end
 end
