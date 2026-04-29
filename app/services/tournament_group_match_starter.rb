@@ -3,17 +3,11 @@
 class TournamentGroupMatchStarter
   class << self
     def upcoming_matches(tournament)
-      group_stage = tournament.group_stage
-      return [] if group_stage.nil?
-
-      next_matches = group_stage.groups.filter_map do |group|
-        group.matches.not_started.order(:position).first
-      end
-      lowest_position = next_matches.map(&:position).min
+      group_matches = not_started_group_matches(tournament)
+      lowest_position = group_matches.minimum(:position)
       return [] if lowest_position.nil?
 
-      next_matches.select { |match| match.position == lowest_position }
-                  .sort_by { |match| [match.position, match.group.number, match.id] }
+      selected_lowest_matches(group_matches, lowest_position)
     end
 
     def start_next!(tournament, logger: Rails.logger)
@@ -29,6 +23,25 @@ class TournamentGroupMatchStarter
     end
 
     private
+
+    def not_started_group_matches(tournament)
+      group_stage = tournament.group_stage
+      return Match.none if group_stage.nil?
+
+      group_ids = group_stage.groups.ids
+      return Match.none if group_ids.empty?
+
+      Match.where(group_id: group_ids).not_started
+    end
+
+    def selected_lowest_matches(group_matches, lowest_position)
+      group_matches.where(position: lowest_position)
+                   .includes(:group)
+                   .group_by(&:group_id)
+                   .values
+                   .map { |matches| matches.min_by(&:id) }
+                   .sort_by { |match| [match.position, match.group.number, match.id] }
+    end
 
     def recalculate_group_scores!(matches, logger:)
       matches.map(&:group).uniq.each do |group|
