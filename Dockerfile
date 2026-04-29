@@ -37,7 +37,6 @@ RUN apt-get update -qq \
         libyaml-dev \
         pkg-config \
         python3 \
-        python3-pip \
     && rm -rf /var/lib/apt/lists/*
 
 COPY Gemfile Gemfile.lock ./
@@ -92,9 +91,8 @@ RUN apt-get update -qq \
     && apt-get install -y --no-install-recommends \
         libsqlite3-0 \
         python3 \
-        python3-pip \
-    && rm -rf /var/lib/apt/lists/* \
-    && python3 -m pip install --break-system-packages --no-cache-dir invoke
+        python3-invoke \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY --from=bundle-test /usr/local/bundle /usr/local/bundle
 COPY --from=bundle-test /app/vendor/bundle /app/vendor/bundle
