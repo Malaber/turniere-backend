@@ -28,6 +28,14 @@ E2E_USERNAME = "e2e-user"
 E2E_ALT_EMAIL = "e2e-alt@example.com"
 E2E_ALT_PASSWORD = "password123"
 E2E_ALT_USERNAME = "e2e-alt-user"
+LOAD_HTTP_CLIENTS = "1,10,50,100"
+LOAD_WEBSOCKET_CLIENTS = "1,10,50,100,200"
+LOAD_HTTP_REQUESTS_PER_CLIENT = "3"
+LOAD_WEBSOCKET_HOLD_SECONDS = "1.0"
+LOAD_WEBSOCKET_CONNECT_BATCH_SIZE = "25"
+LOAD_GROUP_COUNT = "4"
+LOAD_TEAMS_PER_GROUP = "4"
+LOAD_PLAYOFF_TEAMS = "8"
 
 PRODUCTION_TAG = "registry.gitlab.com/turniere/turniere-backend/production/commits:local"
 TEST_TAG = "registry.gitlab.com/turniere/turniere-backend/test/commits:local"
@@ -526,6 +534,75 @@ def _run_blackbox_rspec(base_url, email, password, username, alt_email=E2E_ALT_E
         )
 
 
+def _load_env_value(value, env_name, default):
+    value = str(value or "").strip()
+    if value:
+        return value
+    return os.environ.get(env_name, default)
+
+
+def _run_load_test(
+    c,
+    base_url=TEST_BASE_URL,
+    email=E2E_EMAIL,
+    password=E2E_PASSWORD,
+    username=E2E_USERNAME,
+    tournament_id="",
+    http_clients="",
+    websocket_clients="",
+    http_requests_per_client="",
+    websocket_hold_seconds="",
+    websocket_connect_batch_size="",
+    group_count="",
+    teams_per_group="",
+    playoff_teams_amount="",
+    format="text",
+):
+    env = _env(
+        TURNIERE_E2E_BASE_URL=base_url,
+        TURNIERE_E2E_EMAIL=email,
+        TURNIERE_E2E_PASSWORD=password,
+        TURNIERE_E2E_USERNAME=username,
+        TURNIERE_LOAD_HTTP_CLIENTS=_load_env_value(http_clients, "TURNIERE_LOAD_HTTP_CLIENTS", LOAD_HTTP_CLIENTS),
+        TURNIERE_LOAD_WEBSOCKET_CLIENTS=_load_env_value(
+            websocket_clients,
+            "TURNIERE_LOAD_WEBSOCKET_CLIENTS",
+            LOAD_WEBSOCKET_CLIENTS,
+        ),
+        TURNIERE_LOAD_HTTP_REQUESTS_PER_CLIENT=_load_env_value(
+            http_requests_per_client,
+            "TURNIERE_LOAD_HTTP_REQUESTS_PER_CLIENT",
+            LOAD_HTTP_REQUESTS_PER_CLIENT,
+        ),
+        TURNIERE_LOAD_WEBSOCKET_HOLD_SECONDS=_load_env_value(
+            websocket_hold_seconds,
+            "TURNIERE_LOAD_WEBSOCKET_HOLD_SECONDS",
+            LOAD_WEBSOCKET_HOLD_SECONDS,
+        ),
+        TURNIERE_LOAD_WEBSOCKET_CONNECT_BATCH_SIZE=_load_env_value(
+            websocket_connect_batch_size,
+            "TURNIERE_LOAD_WEBSOCKET_CONNECT_BATCH_SIZE",
+            LOAD_WEBSOCKET_CONNECT_BATCH_SIZE,
+        ),
+        TURNIERE_LOAD_GROUP_COUNT=_load_env_value(group_count, "TURNIERE_LOAD_GROUP_COUNT", LOAD_GROUP_COUNT),
+        TURNIERE_LOAD_TEAMS_PER_GROUP=_load_env_value(
+            teams_per_group,
+            "TURNIERE_LOAD_TEAMS_PER_GROUP",
+            LOAD_TEAMS_PER_GROUP,
+        ),
+        TURNIERE_LOAD_PLAYOFF_TEAMS=_load_env_value(
+            playoff_teams_amount,
+            "TURNIERE_LOAD_PLAYOFF_TEAMS",
+            LOAD_PLAYOFF_TEAMS,
+        ),
+        TURNIERE_LOAD_FORMAT=format,
+    )
+    if tournament_id:
+        env["TURNIERE_LOAD_TOURNAMENT_ID"] = str(tournament_id)
+
+    c.run(_bundle_exec("ruby", "e2e/load_test.rb"), env=env, pty=True)
+
+
 def _start_server(command, env, log_path="/tmp/turniere-e2e-server.log"):
     log_handle = open(log_path, "w")
     process = subprocess.Popen(
@@ -803,6 +880,92 @@ def verify_http(
             alt_password=alt_password,
             alt_username=alt_username,
             spec=spec,
+        )
+    finally:
+        _stop_process(process, log_handle)
+
+
+@task(name="load-test")
+def load_test(
+    c,
+    base_url=TEST_BASE_URL,
+    email=E2E_EMAIL,
+    password=E2E_PASSWORD,
+    username=E2E_USERNAME,
+    tournament_id="",
+    http_clients="",
+    websocket_clients="",
+    http_requests_per_client="",
+    websocket_hold_seconds="",
+    websocket_connect_batch_size="",
+    group_count="",
+    teams_per_group="",
+    playoff_teams_amount="",
+    format="text",
+):
+    """Run HTTP read and ActionCable websocket load smoke tests against a running backend."""
+    _run_load_test(
+        c,
+        base_url=base_url,
+        email=email,
+        password=password,
+        username=username,
+        tournament_id=tournament_id,
+        http_clients=http_clients,
+        websocket_clients=websocket_clients,
+        http_requests_per_client=http_requests_per_client,
+        websocket_hold_seconds=websocket_hold_seconds,
+        websocket_connect_batch_size=websocket_connect_batch_size,
+        group_count=group_count,
+        teams_per_group=teams_per_group,
+        playoff_teams_amount=playoff_teams_amount,
+        format=format,
+    )
+
+
+@task(name="verify-load-test")
+def verify_load_test(
+    c,
+    base_url=TEST_BASE_URL,
+    email=E2E_EMAIL,
+    password=E2E_PASSWORD,
+    username=E2E_USERNAME,
+    reset_db=True,
+    http_clients="",
+    websocket_clients="",
+    http_requests_per_client="",
+    websocket_hold_seconds="",
+    websocket_connect_batch_size="",
+    group_count="",
+    teams_per_group="",
+    playoff_teams_amount="",
+):
+    """Boot a local test server, then run HTTP/websocket load smoke tests against it."""
+    if reset_db:
+        db_reset(c, env="test")
+    db_migrate(c, env="test")
+    bootstrap_e2e_user(c, email=email, password=password, username=username)
+    parsed_base_url = urlparse(base_url)
+    server_host = parsed_base_url.hostname or "127.0.0.1"
+    server_port = parsed_base_url.port or 3000
+
+    process, log_handle = _start_test_server(host=server_host, port=server_port)
+    try:
+        _wait_for_http(base_url=base_url, timeout=60)
+        load_test(
+            c,
+            base_url=base_url,
+            email=email,
+            password=password,
+            username=username,
+            http_clients=http_clients,
+            websocket_clients=websocket_clients,
+            http_requests_per_client=http_requests_per_client,
+            websocket_hold_seconds=websocket_hold_seconds,
+            websocket_connect_batch_size=websocket_connect_batch_size,
+            group_count=group_count,
+            teams_per_group=teams_per_group,
+            playoff_teams_amount=playoff_teams_amount,
         )
     finally:
         _stop_process(process, log_handle)
@@ -1742,6 +1905,59 @@ def blackbox_service(
 
     _print_header("Running HTTP E2E against production image")
     _run_blackbox_rspec(base_url, email, password, username, alt_email, alt_password, alt_username)
+
+
+@task(name="blackbox-load-service")
+def blackbox_load_service(
+    c,
+    base_url=BLACKBOX_INTERNAL_BASE_URL,
+    email=E2E_EMAIL,
+    password=E2E_PASSWORD,
+    username=E2E_USERNAME,
+    http_clients="",
+    websocket_clients="",
+    http_requests_per_client="",
+    websocket_hold_seconds="",
+    websocket_connect_batch_size="",
+    group_count="",
+    teams_per_group="",
+    playoff_teams_amount="",
+):
+    """Run load smoke tests against an already running production app plus Postgres sidecar."""
+    _print_header("Running production database migrations")
+    c.run("bundle exec rails db:migrate", env=_shared_production_env(), pty=True)
+
+    _print_header(f"Waiting for app healthcheck at {base_url}")
+    _wait_for_http(base_url=base_url, timeout=120)
+
+    _print_header("Bootstrapping confirmed E2E user")
+    _bootstrap_blackbox_users(
+        c,
+        _shared_production_env(),
+        email,
+        password,
+        username,
+        E2E_ALT_EMAIL,
+        E2E_ALT_PASSWORD,
+        E2E_ALT_USERNAME,
+    )
+
+    _print_header("Running HTTP/websocket load smoke against production image")
+    _run_load_test(
+        c,
+        base_url=base_url,
+        email=email,
+        password=password,
+        username=username,
+        http_clients=http_clients,
+        websocket_clients=websocket_clients,
+        http_requests_per_client=http_requests_per_client,
+        websocket_hold_seconds=websocket_hold_seconds,
+        websocket_connect_batch_size=websocket_connect_batch_size,
+        group_count=group_count,
+        teams_per_group=teams_per_group,
+        playoff_teams_amount=playoff_teams_amount,
+    )
 
 
 @task(name="blackbox-follow-service")

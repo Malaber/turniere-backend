@@ -206,6 +206,20 @@ module TurniereE2E
       )
     end
 
+    def login_with_existing_credentials!
+      login_response = client.login!(email: @email, password: @password)
+      expect_status!(login_response, 200, "login #{@email}")
+      unless client.authenticated?
+        raise ApiError.new(
+          'login succeeded but no auth headers were returned',
+          status: 200,
+          body: login_response.fetch(:json)
+        )
+      end
+
+      { email: @email, username: @username || @email }
+    end
+
     def create_tournament!(payload)
       response = client.post('/tournaments', body: payload)
       expect_status!(response, 201, 'create tournament')
@@ -560,10 +574,3 @@ module TurniereE2E
     end
   end
 end
-    def login_with_existing_credentials!
-      login_response = client.login!(email: @email, password: @password)
-      expect_status!(login_response, 200, "login #{@email}")
-      raise ApiError.new('login succeeded but no auth headers were returned', status: 200, body: login_response.fetch(:json)) unless client.authenticated?
-
-      { email: @email, username: @username || @email }
-    end
