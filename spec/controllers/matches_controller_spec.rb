@@ -233,6 +233,21 @@ RSpec.describe MatchesController, type: :controller do
             expect(body[:state]).to eq(valid_update[:state])
           end
 
+          it 'stops an in-progress match and resets its scores' do
+            @match.update!(state: :in_progress)
+            @match.match_scores.each do |match_score|
+              match_score.update!(points: 7, hidden_points: 5)
+            end
+
+            expect(TournamentLiveBroadcast).to receive(:call).with(@match.tournament.id)
+            put :update, params: { id: @match.to_param, state: 'not_started' }
+
+            expect(response).to be_successful
+            expect(@match.reload.state).to eq('not_started')
+            expect(@match.match_scores.reload.map(&:points)).to all(eq(0))
+            expect(@match.match_scores.reload.map(&:hidden_points)).to all(eq(0))
+          end
+
           context 'on a running playoff match' do
             let(:finished) do
               {
@@ -385,6 +400,14 @@ RSpec.describe MatchesController, type: :controller do
             expect(response).to have_http_status(:unprocessable_content)
           end
         end
+
+        context 'with stop params on a not-started match' do
+          it 'renders an unprocessable entity response' do
+            put :update, params: { id: @match.to_param, state: 'not_started' }
+            expect(response).to have_http_status(:unprocessable_content)
+            expect(deserialize_response(response)[:error]).to eq("Match can't stop in this state")
+          end
+        end
       end
 
       context 'as another user' do
@@ -398,6 +421,34 @@ RSpec.describe MatchesController, type: :controller do
             expect(response).to have_http_status(:forbidden)
           end
         end
+      end
+    end
+
+    context 'on a running group match' do
+      let(:tournament) { create(:group_stage_tournament, group_count: 1, match_factory: :filled_group_match) }
+      let(:group) { tournament.stages.find_by(level: -1).groups.first }
+      let(:group_match) { group.matches.first }
+
+      before do
+        apply_authentication_headers_for tournament.owner
+        group_match.update!(state: :in_progress)
+        group_match.match_scores.order(:id).each_with_index do |match_score, index|
+          match_score.update!(points: index.zero? ? 9 : 2, hidden_points: index.zero? ? 4 : 1)
+        end
+        UpdateGroupsGroupScoresAndSave.call(group: group)
+      end
+
+      it 'stops the match, clears scores, and recalculates group scores' do
+        put :update, params: { id: group_match.to_param, state: 'not_started' }
+
+        expect(response).to be_successful
+        expect(group_match.reload.state).to eq('not_started')
+        expect(group_match.match_scores.reload.map(&:points)).to all(eq(0))
+        expect(group_match.match_scores.reload.map(&:hidden_points)).to all(eq(0))
+        involved_group_scores = group.group_scores.reload.select { |score| group_match.teams.include?(score.team) }
+        expect(involved_group_scores.map(&:group_points)).to all(eq(0))
+        expect(involved_group_scores.map(&:scored_points)).to all(eq(0))
+        expect(involved_group_scores.map(&:received_points)).to all(eq(0))
       end
     end
 

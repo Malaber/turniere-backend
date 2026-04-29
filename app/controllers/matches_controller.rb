@@ -45,12 +45,8 @@ class MatchesController < ApplicationController
     Match.transaction do
       if @match.update(match_params)
         handle_match_end if new_state == 'finished'
-        if @match.group_match? && new_state == 'in_progress'
-          group = @match.group
-          unless UpdateGroupsGroupScoresAndSave.call(group: group).success?
-            logger.warn "Updating groups group score failed for #{group}"
-          end
-        end
+        handle_match_stop if new_state == 'not_started'
+        update_group_scores if @match.group_match? && %w[in_progress not_started].include?(new_state)
 
         render json: @match
         synced_tournament = @match.tournament
@@ -113,6 +109,19 @@ class MatchesController < ApplicationController
     raise ActiveRecord::Rollback
   end
 
+  def handle_match_stop
+    @match.match_scores.each do |match_score|
+      match_score.update!(points: 0, hidden_points: 0)
+    end
+  end
+
+  def update_group_scores
+    group = @match.group
+    return if UpdateGroupsGroupScoresAndSave.call(group: group).success?
+
+    logger.warn "Updating groups group score failed for #{group}"
+  end
+
   def validate_params
     case match_params['state']
     when 'in_progress'
@@ -120,6 +129,9 @@ class MatchesController < ApplicationController
         unless @match.not_started?
     when 'finished'
       render json: { error: 'Match can\'t finish in this state' }, status: :unprocessable_content \
+        unless @match.in_progress?
+    when 'not_started'
+      render json: { error: 'Match can\'t stop in this state' }, status: :unprocessable_content \
         unless @match.in_progress?
     else
       render json: { error: 'Invalid target state' }, status: :unprocessable_content
