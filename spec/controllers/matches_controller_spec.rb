@@ -120,7 +120,7 @@ RSpec.describe MatchesController, type: :controller do
 
       it 'rejects the request' do
         post :create, params: { group_id: group.to_param, team_ids: [group.teams.first.id] }
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
       end
     end
   end
@@ -167,7 +167,7 @@ RSpec.describe MatchesController, type: :controller do
 
         patch :swap, params: { id: first_match.to_param, other_match_id: foreign_match.to_param }
 
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
         expect(deserialize_response(response)[:error]).to eq('Matches must be different group matches from the same group')
       end
 
@@ -288,7 +288,7 @@ RSpec.describe MatchesController, type: :controller do
                 end
 
                 it 'returns an unprocessable entity response' do
-                  expect(response).to have_http_status(:unprocessable_entity)
+                  expect(response).to have_http_status(:unprocessable_content)
                 end
 
                 it 'doesn\'t change the matches status' do
@@ -321,7 +321,7 @@ RSpec.describe MatchesController, type: :controller do
 
               it 'returns unprocessable entity' do
                 put :update, params: { id: @running_playoff_match.to_param }.merge(finished)
-                expect(response).to have_http_status(:unprocessable_entity)
+                expect(response).to have_http_status(:unprocessable_content)
               end
             end
 
@@ -341,7 +341,7 @@ RSpec.describe MatchesController, type: :controller do
                   allow_any_instance_of(Match).to receive(:winner).and_return(@running_playoff_match.match_scores.first.team)
 
                   put :update, params: { id: @running_playoff_match.to_param }.merge(finished)
-                  expect(response).to have_http_status(:unprocessable_entity)
+                  expect(response).to have_http_status(:unprocessable_content)
                 end
               end
             end
@@ -375,14 +375,14 @@ RSpec.describe MatchesController, type: :controller do
         context 'with invalid params' do
           it 'renders an unprocessable entity response' do
             put :update, params: { id: @match.to_param }.merge(invalid_update)
-            expect(response).to have_http_status(:unprocessable_entity)
+            expect(response).to have_http_status(:unprocessable_content)
           end
         end
 
         context 'with senseless params' do
           it 'renders an unprocessable entity response' do
             put :update, params: { id: @match.to_param }.merge(senseless_update)
-            expect(response).to have_http_status(:unprocessable_entity)
+            expect(response).to have_http_status(:unprocessable_content)
           end
         end
       end
@@ -416,7 +416,7 @@ RSpec.describe MatchesController, type: :controller do
         context 'with invalid params' do
           it 'renders an unprocessable entity response' do
             put :update, params: { id: @not_ready_playoff_match.to_param }.merge(invalid_update)
-            expect(response).to have_http_status(:unprocessable_entity)
+            expect(response).to have_http_status(:unprocessable_content)
           end
         end
       end

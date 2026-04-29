@@ -154,9 +154,9 @@ RSpec.describe 'Backend API surface HTTP E2E' do
                                                 timer_reason: 'ceremony'
                                               })
     timer_custom_without_text = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/timer", body: {
-                                                    timestamp_seconds: 120,
-                                                    timer_reason: 'custom'
-                                                  })
+                                                     timestamp_seconds: 120,
+                                                     timer_reason: 'custom'
+                                                   })
     timer_invalid_seconds = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/timer", body: {
                                                  timestamp_seconds: 'nope'
                                                })

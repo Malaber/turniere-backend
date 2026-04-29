@@ -15,7 +15,7 @@ class StagesController < ApplicationController
   def update
     if stage_params[:state] == 'finished'
       unless @stage.state == 'in_progress'
-        render json: { error: 'Only running group stages can be finished' }, status: :unprocessable_entity
+        render json: { error: 'Only running group stages can be finished' }, status: :unprocessable_content
         return
       end
 
@@ -27,7 +27,7 @@ class StagesController < ApplicationController
           render json: @stage
           synced_tournament = @stage.tournament
         else
-          render json: @stage.errors, status: :unprocessable_entity
+          render json: @stage.errors, status: :unprocessable_content
           raise ActiveRecord::Rollback
         end
       end
@@ -36,7 +36,7 @@ class StagesController < ApplicationController
     else
       render json: {
         error: 'The state attribute may only be changed to finished'
-      }, status: :unprocessable_entity
+      }, status: :unprocessable_content
     end
   end
 
@@ -46,14 +46,14 @@ class StagesController < ApplicationController
     unless @stage.over?
       render json: {
         error: 'Group Stage still has some matches that are not over yet. Finish them to generate playoffs'
-      }, status: :unprocessable_entity
+      }, status: :unprocessable_content
       raise ActiveRecord::Rollback
     end
 
     @stage.groups.each do |group|
       next if UpdateGroupsGroupScoresAndSave.call(group: group).success?
 
-      render json: { error: 'Updating group scores failed' }, status: :unprocessable_entity
+      render json: { error: 'Updating group scores failed' }, status: :unprocessable_content
       raise ActiveRecord::Rollback
     end
 
@@ -62,14 +62,14 @@ class StagesController < ApplicationController
       render json: {
         error: 'Playoffs cannot be generated yet because a decider match is required for an advancing place',
         blocking_ties: blocking_ties
-      }, status: :unprocessable_entity
+      }, status: :unprocessable_content
       raise ActiveRecord::Rollback
     end
 
     return if AddPlayoffsToTournamentAndSave.call(tournament: @stage.tournament,
                                                   teams: GroupStageService.get_advancing_teams(@stage)).success?
 
-    render json: { error: 'Generating group stage failed' }, status: :unprocessable_entity
+    render json: { error: 'Generating group stage failed' }, status: :unprocessable_content
     raise ActiveRecord::Rollback
   end
 

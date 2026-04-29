@@ -47,7 +47,7 @@ RSpec.describe TeamActionListsController, type: :controller do
       it 'returns unprocessable entity for unsupported source' do
         post :create, params: create_params.merge(source: 'unknown_source')
 
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
         expect(deserialize_response(response)[:error]).to eq('Unsupported team action list source: unknown_source')
       end
 
@@ -57,7 +57,7 @@ RSpec.describe TeamActionListsController, type: :controller do
 
         post :create, params: create_params.merge(tournament_id: empty_tournament.to_param)
 
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
         expect(deserialize_response(response)[:error]).to eq('Source all_tournament_teams does not currently contain any teams')
       end
 
@@ -71,7 +71,7 @@ RSpec.describe TeamActionListsController, type: :controller do
 
         post :create, params: create_params
 
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
       end
     end
 

@@ -36,7 +36,7 @@ class BeamersController < ApplicationController
       push_sync_if_needed!
       render json: beamer, status: :created
     else
-      render json: beamer.errors, status: :unprocessable_entity
+      render json: beamer.errors, status: :unprocessable_content
     end
   end
 
@@ -46,7 +46,7 @@ class BeamersController < ApplicationController
       push_sync_if_needed!
       render json: @beamer
     else
-      render json: @beamer.errors, status: :unprocessable_entity
+      render json: @beamer.errors, status: :unprocessable_content
     end
   end
 

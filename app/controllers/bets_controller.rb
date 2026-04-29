@@ -25,6 +25,6 @@ class BetsController < ApplicationController
   end
 
   def handle_user_service_error(exception)
-    render json: { error: exception.message }, status: :unprocessable_entity
+    render json: { error: exception.message }, status: :unprocessable_content
   end
 end

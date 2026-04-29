@@ -95,14 +95,14 @@ RSpec.describe BeamersController, type: :controller do
         post :create, params: {
           tournament_id: @tournament.to_param, name: 'bad', display_state: 'invalid'
         }
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
       end
 
       it 'rejects duplicate name in same tournament' do
         post :create, params: {
           tournament_id: @tournament.to_param, name: @beamer.name, display_state: 'during_game'
         }
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
       end
     end
 
@@ -157,7 +157,7 @@ RSpec.describe BeamersController, type: :controller do
           tournament_id: @tournament.to_param, id: @beamer.to_param,
           display_state: 'bogus'
         }
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
       end
     end
 

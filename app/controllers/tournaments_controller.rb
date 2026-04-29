@@ -67,7 +67,7 @@ class TournamentsController < ApplicationController
       if tournament.save
         render json: tournament, status: :created, location: tournament
       else
-        render json: tournament.errors, status: :unprocessable_entity
+        render json: tournament.errors, status: :unprocessable_content
       end
       return
     end
@@ -90,14 +90,14 @@ class TournamentsController < ApplicationController
     end
     # validate tournament
     unless tournament.valid?
-      render json: tournament.errors, status: :unprocessable_entity
+      render json: tournament.errors, status: :unprocessable_content
       return
     end
     # return appropriate result
     if result.success?
       render json: result.tournament, status: :created, location: result.tournament
     else
-      render json: { error: 'Tournament generation failed' }, status: :unprocessable_entity
+      render json: { error: 'Tournament generation failed' }, status: :unprocessable_content
     end
   end
 
@@ -116,7 +116,7 @@ class TournamentsController < ApplicationController
         synced_tournament = @tournament
         render json: @tournament
       else
-        render json: @tournament.errors, status: :unprocessable_entity
+        render json: @tournament.errors, status: :unprocessable_content
         raise ActiveRecord::Rollback
       end
     end
@@ -139,7 +139,7 @@ class TournamentsController < ApplicationController
       push_sync_if_needed!(@tournament)
       render json: @tournament
     else
-      render json: @tournament.errors, status: :unprocessable_entity
+      render json: @tournament.errors, status: :unprocessable_content
     end
   end
 
@@ -148,14 +148,14 @@ class TournamentsController < ApplicationController
     TournamentLiveBroadcast.call(@tournament.id)
     render json: @tournament, include: '**'
   rescue KeyError, ArgumentError => e
-    render json: { error: e.message }, status: :unprocessable_entity
+    render json: { error: e.message }, status: :unprocessable_content
   end
 
   def test_sync
     unless @tournament.sync_push_enabled?
       return render json: {
         error: 'Tournament sync test requires writable tournament with sync_target_url and sync_auth_token'
-      }, status: :unprocessable_entity
+      }, status: :unprocessable_content
     end
 
     TournamentSyncPusher.push!(@tournament)
@@ -276,7 +276,7 @@ class TournamentsController < ApplicationController
     teams = params['teams']
     return if teams.is_a?(Array) && teams.reject { |t| t.is_a? ActionController::Parameters }.count.zero?
 
-    render json: { error: 'Invalid teams array' }, status: :unprocessable_entity
+    render json: { error: 'Invalid teams array' }, status: :unprocessable_content
   end
 
   def only_playoff_teams_amount_changed
@@ -307,14 +307,14 @@ class TournamentsController < ApplicationController
 
     render json: {
       error: 'playoff_teams_amount, instant_finalists_amount and intermediate_round_participants_amount don\'t match'
-    }, status: :unprocessable_entity
+    }, status: :unprocessable_content
   end
   def sync_state_params
     params.require(:snapshot).permit!.to_h
   end
 
   def authorize_sync_request!
-    return render json: { error: 'Tournament is not configured to accept sync pushes' }, status: :unprocessable_entity unless @tournament.sync_accepts_push?
+    return render json: { error: 'Tournament is not configured to accept sync pushes' }, status: :unprocessable_content unless @tournament.sync_accepts_push?
 
     token = request.authorization.to_s.delete_prefix('Bearer ').presence || request.headers['X-Tournament-Sync-Token'].to_s
     return render json: { error: 'Missing sync token' }, status: :unauthorized if token.blank?
@@ -448,12 +448,12 @@ class TournamentsController < ApplicationController
       return 'timer_reason_text is required for custom timer_reason'
     end
 
-    if timer_reason != 'custom' && timer_reason_text.present?
-      'timer_reason_text is only allowed when timer_reason is custom'
-    end
+    return unless timer_reason != 'custom' && timer_reason_text.present?
+
+    'timer_reason_text is only allowed when timer_reason is custom'
   end
 
   def render_timer_validation_error(message)
-    render json: { error: message }, status: :unprocessable_entity
+    render json: { error: message }, status: :unprocessable_content
   end
 end

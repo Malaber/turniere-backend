@@ -17,7 +17,7 @@ class TeamsController < ApplicationController
       push_sync_if_needed!(@team.tournament)
       render json: @team
     else
-      render json: @team.errors, status: :unprocessable_entity
+      render json: @team.errors, status: :unprocessable_content
     end
   end
 
