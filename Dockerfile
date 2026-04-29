@@ -7,6 +7,7 @@ ARG base_commit=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 FROM ruby:${RUBY_VERSION}-slim AS runtime-base
 
 ARG BUNDLER_VERSION
+ARG DEBIAN_FRONTEND=noninteractive
 
 ENV LANG=C.UTF-8 \
     BUNDLE_JOBS=4 \
@@ -28,6 +29,8 @@ RUN apt-get update -qq \
 
 FROM runtime-base AS build-base
 
+ARG DEBIAN_FRONTEND=noninteractive
+
 RUN apt-get update -qq \
     && apt-get install -y --no-install-recommends \
         build-essential \
@@ -37,7 +40,6 @@ RUN apt-get update -qq \
         libyaml-dev \
         pkg-config \
         python3 \
-        python3-pip \
     && rm -rf /var/lib/apt/lists/*
 
 COPY Gemfile Gemfile.lock ./
@@ -84,6 +86,7 @@ CMD ["sh", "-lc", "bundle exec rails db:migrate && bundle exec rails s -p 3000 -
 FROM runtime-base AS test
 
 ARG base_commit=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+ARG DEBIAN_FRONTEND=noninteractive
 
 ENV RAILS_ENV=test \
     GIT_COMMIT_SHA=${base_commit}
@@ -92,9 +95,8 @@ RUN apt-get update -qq \
     && apt-get install -y --no-install-recommends \
         libsqlite3-0 \
         python3 \
-        python3-pip \
-    && rm -rf /var/lib/apt/lists/* \
-    && python3 -m pip install --break-system-packages --no-cache-dir invoke
+        python3-invoke \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY --from=bundle-test /usr/local/bundle /usr/local/bundle
 COPY --from=bundle-test /app/vendor/bundle /app/vendor/bundle
