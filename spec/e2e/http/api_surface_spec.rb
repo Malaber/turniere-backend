@@ -424,43 +424,54 @@ RSpec.describe 'Backend API surface HTTP E2E' do
       .to eq([first_match.fetch(:position)])
   end
 
-  it 'starts next group matches at the lowest pending position and returns started matches' do
+  it 'starts only a single lagging group before all groups can advance over HTTP' do
     tournament = create_group_stage_tournament(client: owner_client, public: false, name_prefix: 'Start Next Groups')
-    groups = tournament.fetch(:stages).find { |stage| stage.fetch(:level) == -1 }
-                       .fetch(:groups)
-                       .sort_by { |group| group.fetch(:number) }
-    matches_by_group = groups.to_h do |group|
-      [group.fetch(:id), group.fetch(:matches).sort_by { |match| match.fetch(:position) }]
-    end
+    groups = group_stage_groups(tournament)
+    matches_by_group = indexed_group_matches(groups)
+    start_group_positions!(matches_by_group:, group: groups[0], positions: [0, 1])
+    start_group_positions!(matches_by_group:, group: groups[1], positions: [0])
+    start_group_positions!(matches_by_group:, group: groups[2], positions: [0, 1])
+    start_group_positions!(matches_by_group:, group: groups[3], positions: [0, 1])
 
-    first_start = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/start_next_group_matches")
-    expect(first_start[:status]).to eq(200)
-    expect(first_start[:json].map { |match| match.dig(:group, :id) })
-      .to match_array(groups.map { |group| group.fetch(:id) })
-    expect(first_start[:json].map { |match| match.fetch(:position) }.uniq).to eq([0])
-
-    matches_by_group.fetch(groups.first.fetch(:id))[1..3].each do |match|
-      start_group_match!(match_id: match.fetch(:id))
-    end
-    groups.drop(1).each do |group|
-      matches_by_group.fetch(group.fetch(:id))[1..2].each do |match|
-        start_group_match!(match_id: match.fetch(:id))
-      end
-    end
-
-    expected_match_ids = groups.drop(1).map do |group|
-      matches_by_group.fetch(group.fetch(:id)).fetch(3).fetch(:id)
-    end
+    first_expected_ids = match_ids_for_positions(matches_by_group:, pairs: [[groups[1], 1]])
+    second_expected_ids = match_ids_for_positions(
+      matches_by_group:,
+      pairs: groups.map { |group| [group, 2] }
+    )
     upcoming = owner_client.get("/tournaments/#{tournament.fetch(:id)}/matches", params: { state: 'upcoming' })
-    catch_up_start = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/start_next_group_matches")
+    first_start = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/start_next_group_matches")
+    second_start = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/start_next_group_matches")
 
-    expect(upcoming[:status]).to eq(200)
-    expect(upcoming[:json].map { |match| match.fetch(:id) }).to match_array(expected_match_ids)
+    expect_match_ids(upcoming, first_expected_ids)
+    expect_started_match_ids(first_start, first_expected_ids)
+    expect_started_match_ids(second_start, second_expected_ids)
+  end
 
-    expect(catch_up_start[:status]).to eq(200)
-    expect(catch_up_start[:json].map { |match| match.fetch(:id) }).to match_array(expected_match_ids)
-    expect(catch_up_start[:json].map { |match| match.fetch(:position) }.uniq).to eq([3])
-    expect(catch_up_start[:json].map { |match| match.fetch(:state) }.uniq).to eq(['in_progress'])
+  it 'starts catch-up waves before the next position is started everywhere over HTTP' do
+    tournament = create_group_stage_tournament(client: owner_client, public: false, name_prefix: 'Start Catch Up Waves')
+    groups = group_stage_groups(tournament)
+    matches_by_group = indexed_group_matches(groups)
+    start_group_positions!(matches_by_group:, group: groups[0], positions: [0, 1, 2])
+    start_group_positions!(matches_by_group:, group: groups[1], positions: [0])
+    start_group_positions!(matches_by_group:, group: groups[2], positions: [0, 1, 2])
+    start_group_positions!(matches_by_group:, group: groups[3], positions: [0, 1])
+
+    first_expected_ids = match_ids_for_positions(matches_by_group:, pairs: [[groups[1], 1]])
+    second_expected_ids = match_ids_for_positions(
+      matches_by_group:,
+      pairs: [[groups[1], 2], [groups[3], 2]]
+    )
+    third_expected_ids = match_ids_for_positions(
+      matches_by_group:,
+      pairs: groups.map { |group| [group, 3] }
+    )
+    first_start = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/start_next_group_matches")
+    second_start = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/start_next_group_matches")
+    third_start = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/start_next_group_matches")
+
+    expect_started_match_ids(first_start, first_expected_ids)
+    expect_started_match_ids(second_start, second_expected_ids)
+    expect_started_match_ids(third_start, third_expected_ids)
   end
 
   def login_client(email:, password:)
@@ -515,6 +526,40 @@ RSpec.describe 'Backend API surface HTTP E2E' do
     response = client.post('/tournaments', body: payload)
     expect(response[:status]).to eq(201)
     fetch_tournament(client: client, tournament_id: response.dig(:json, :id))
+  end
+
+  def group_stage_groups(tournament)
+    tournament.fetch(:stages).find { |stage| stage.fetch(:level) == -1 }
+              .fetch(:groups)
+              .sort_by { |group| group.fetch(:number) }
+  end
+
+  def indexed_group_matches(groups)
+    groups.to_h do |group|
+      [group.fetch(:id), group.fetch(:matches).sort_by { |match| match.fetch(:position) }]
+    end
+  end
+
+  def start_group_positions!(matches_by_group:, group:, positions:)
+    positions.each do |position|
+      start_group_match!(match_id: matches_by_group.fetch(group.fetch(:id)).fetch(position).fetch(:id))
+    end
+  end
+
+  def match_ids_for_positions(matches_by_group:, pairs:)
+    pairs.map do |group, position|
+      matches_by_group.fetch(group.fetch(:id)).fetch(position).fetch(:id)
+    end
+  end
+
+  def expect_match_ids(response, expected_ids)
+    expect(response[:status]).to eq(200)
+    expect(response[:json].map { |match| match.fetch(:id) }).to match_array(expected_ids)
+  end
+
+  def expect_started_match_ids(response, expected_ids)
+    expect_match_ids(response, expected_ids)
+    expect(response[:json].map { |match| match.fetch(:state) }.uniq).to eq(['in_progress'])
   end
 
   def create_playoff_tournament(client:, public:, name_prefix:)
