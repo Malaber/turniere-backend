@@ -39,5 +39,6 @@ Rails.application.routes.draw do
   end
   resources :match_scores, only: %i[show update]
   get 'healthz', to: 'health#index'
+  get 'metrics', to: 'metrics#index'
   get 'version', to: 'version#show'
 end
