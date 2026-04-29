@@ -376,7 +376,6 @@ RSpec.describe 'Backend API surface HTTP E2E' do
     group = group_stage.fetch(:groups).min_by { |item| item.fetch(:number) }
     ordered_matches = group.fetch(:matches).sort_by { |item| item.fetch(:position) }
     first_match = ordered_matches.fetch(0)
-    second_match = ordered_matches.fetch(1)
     fourth_match = ordered_matches.fetch(3)
 
     upcoming_before = owner_client.get("/tournaments/#{tournament.fetch(:id)}/matches", params: { state: 'upcoming' })
@@ -408,7 +407,48 @@ RSpec.describe 'Backend API surface HTTP E2E' do
     expect(upcoming_match_for_group(upcoming_after_swap, group_id: group.fetch(:id)).fetch(:id)).to eq(fourth_match.fetch(:id))
 
     expect(upcoming_after_finish[:status]).to eq(200)
-    expect(upcoming_match_for_group(upcoming_after_finish, group_id: group.fetch(:id)).fetch(:id)).to eq(second_match.fetch(:id))
+    expect(upcoming_match_for_group(upcoming_after_finish, group_id: group.fetch(:id))).to be_nil
+    expect(upcoming_after_finish[:json].map { |match| match.fetch(:position) }.uniq)
+      .to eq([first_match.fetch(:position)])
+  end
+
+  it 'starts next group matches at the lowest pending position and returns started matches' do
+    tournament = create_group_stage_tournament(client: owner_client, public: false, name_prefix: 'Start Next Groups')
+    groups = tournament.fetch(:stages).find { |stage| stage.fetch(:level) == -1 }
+                       .fetch(:groups)
+                       .sort_by { |group| group.fetch(:number) }
+    matches_by_group = groups.to_h do |group|
+      [group.fetch(:id), group.fetch(:matches).sort_by { |match| match.fetch(:position) }]
+    end
+
+    first_start = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/start_next_group_matches")
+    expect(first_start[:status]).to eq(200)
+    expect(first_start[:json].map { |match| match.dig(:group, :id) })
+      .to match_array(groups.map { |group| group.fetch(:id) })
+    expect(first_start[:json].map { |match| match.fetch(:position) }.uniq).to eq([0])
+
+    matches_by_group.fetch(groups.first.fetch(:id))[1..3].each do |match|
+      start_group_match!(match_id: match.fetch(:id))
+    end
+    groups.drop(1).each do |group|
+      matches_by_group.fetch(group.fetch(:id))[1..2].each do |match|
+        start_group_match!(match_id: match.fetch(:id))
+      end
+    end
+
+    expected_match_ids = groups.drop(1).map do |group|
+      matches_by_group.fetch(group.fetch(:id)).fetch(3).fetch(:id)
+    end
+    upcoming = owner_client.get("/tournaments/#{tournament.fetch(:id)}/matches", params: { state: 'upcoming' })
+    catch_up_start = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/start_next_group_matches")
+
+    expect(upcoming[:status]).to eq(200)
+    expect(upcoming[:json].map { |match| match.fetch(:id) }).to match_array(expected_match_ids)
+
+    expect(catch_up_start[:status]).to eq(200)
+    expect(catch_up_start[:json].map { |match| match.fetch(:id) }).to match_array(expected_match_ids)
+    expect(catch_up_start[:json].map { |match| match.fetch(:position) }.uniq).to eq([3])
+    expect(catch_up_start[:json].map { |match| match.fetch(:state) }.uniq).to eq(['in_progress'])
   end
 
   def login_client(email:, password:)
@@ -504,6 +544,11 @@ RSpec.describe 'Backend API surface HTTP E2E' do
 
     finish_response = owner_client.patch("/matches/#{match_id}", body: { state: 'finished' })
     expect(finish_response[:status]).to eq(200)
+  end
+
+  def start_group_match!(match_id:)
+    start_response = owner_client.patch("/matches/#{match_id}", body: { state: 'in_progress' })
+    expect(start_response[:status]).to eq(200)
   end
 
   def tournament_match_count(tournament)

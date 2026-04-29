@@ -49,6 +49,21 @@ RSpec.describe 'Tournament live payloads' do
       expect(matches.map(&:group_id)).to match_array(tournament.group_stage.groups.map(&:id))
     end
 
+    it 'returns only catch-up group matches for upcoming state' do
+      tournament = create(:group_stage_tournament, group_count: 4, match_factory: :filled_group_match)
+      groups = tournament.group_stage.groups.sort_by(&:number)
+
+      set_group_match_states(groups[0], %i[finished finished finished in_progress])
+      groups.drop(1).each do |group|
+        set_group_match_states(group, %i[finished finished in_progress not_started])
+      end
+
+      matches = described_class.matches_for(tournament, state: 'upcoming')
+
+      expect(matches.map(&:group_id)).to match_array(groups.drop(1).map(&:id))
+      expect(matches.map(&:position).uniq).to eq([3])
+    end
+
     it 'filters all matches belonging to a stage level' do
       tournament = create(:stage_tournament, stage_count: 2)
       stage = tournament.stages.find_by!(level: 1)
@@ -104,6 +119,12 @@ RSpec.describe 'Tournament live payloads' do
         timer_reason: 'custom',
         timer_reason_text: 'Opening ceremony'
       )
+    end
+  end
+
+  def set_group_match_states(group, states)
+    group.matches.order(:id).each_with_index do |match, index|
+      match.update!(position: index, state: states.fetch(index))
     end
   end
 end

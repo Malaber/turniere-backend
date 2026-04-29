@@ -3,6 +3,7 @@
 class ApplicationController < ActionController::API
   include DeviseTokenAuth::Concerns::SetUserByToken
 
+  around_action :record_request_metrics
   before_action :configure_permitted_parameters, if: :devise_controller?
 
   rescue_from ActionController::ParameterMissing do |e|
@@ -18,6 +19,23 @@ class ApplicationController < ActionController::API
   end
 
   private
+
+  def record_request_metrics
+    start_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    metrics_status = nil
+    yield
+  rescue StandardError => e
+    metrics_status = ActionDispatch::ExceptionWrapper.status_code_for_exception(e.class.name)
+    raise
+  ensure
+    MetricsRegistry.record_http_request(
+      method: request.request_method,
+      controller: controller_path,
+      action: action_name,
+      status: metrics_status || response.status,
+      duration: Process.clock_gettime(Process::CLOCK_MONOTONIC) - start_time
+    )
+  end
 
   def require_owner!(owner)
     render_forbidden_error if owner != current_user

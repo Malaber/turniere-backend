@@ -34,10 +34,12 @@ Rails.application.routes.draw do
       get :timer
       patch :timer, action: :set_timer
       patch :sync_state
+      patch :start_next_group_matches
       post :test_sync
     end
   end
   resources :match_scores, only: %i[show update]
   get 'healthz', to: 'health#index'
+  get 'metrics', to: 'metrics#index'
   get 'version', to: 'version#show'
 end

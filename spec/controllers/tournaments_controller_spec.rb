@@ -888,4 +888,54 @@ RSpec.describe TournamentsController, type: :controller do
       expect(json.dig(:tournament, :sync_last_push_error)).to eq('connection refused')
     end
   end
+
+  describe 'PATCH #start_next_group_matches' do
+    let(:tournament) { create(:group_stage_tournament, group_count: 4, match_factory: :filled_group_match) }
+    let(:groups) { tournament.group_stage.groups.sort_by(&:number) }
+
+    before do
+      set_group_match_states(groups[0], %i[finished finished finished in_progress])
+      groups.drop(1).each do |group|
+        set_group_match_states(group, %i[finished finished in_progress not_started])
+      end
+    end
+
+    context 'as owner' do
+      before do
+        apply_authentication_headers_for tournament.owner
+      end
+
+      it 'starts only lowest pending catch-up matches and returns them' do
+        expect(TournamentLiveBroadcast).to receive(:call).with(tournament.id)
+
+        patch :start_next_group_matches, params: { id: tournament.to_param }
+
+        expect(response).to have_http_status(:ok)
+        body = deserialize_response(response)
+        expect(body.map { |match| match.dig(:group, :id) }).to match_array(groups.drop(1).map(&:id))
+        expect(body.map { |match| match[:position] }.uniq).to eq([3])
+        expect(body.map { |match| match[:state] }.uniq).to eq(['in_progress'])
+        expect(groups.drop(1).map { |group| group.matches.find_by!(position: 3).reload.state }.uniq)
+          .to eq(['in_progress'])
+      end
+    end
+
+    context 'as another user' do
+      before do
+        apply_authentication_headers_for create(:user)
+      end
+
+      it 'renders a forbidden error response' do
+        patch :start_next_group_matches, params: { id: tournament.to_param }
+
+        expect(response).to have_http_status(:forbidden)
+      end
+    end
+
+    def set_group_match_states(group, states)
+      group.matches.order(:id).each_with_index do |match, index|
+        match.update!(position: index, state: states.fetch(index))
+      end
+    end
+  end
 end
