@@ -3,12 +3,12 @@
 source 'https://rubygems.org'
 git_source(:github) { |repo| "https://github.com/#{repo}.git" }
 
-ruby '3.1.2'
+ruby '4.0.3'
 
 # Bundle edge Rails instead: gem 'rails', github: 'rails/rails'
-gem 'rails', '~> 7.0.3'
+gem 'rails', '~> 8.1'
 # Use Puma as the app server
-gem 'puma', '~> 5.0'
+gem 'puma', '~> 8.0'
 # Build JSON APIs with ease. Read more: https://github.com/rails/jbuilder
 # gem 'jbuilder', '~> 2.5'
 # Use ActiveModel has_secure_password
@@ -28,7 +28,7 @@ gem 'bootsnap', require: false
 
 # Authentication
 gem 'devise'
-gem 'devise_token_auth', git: 'https://github.com/Thor77/devise_token_auth', branch: 'fix-api-only-mode'
+gem 'devise_token_auth'
 
 gem 'rack-cors'
 
@@ -59,7 +59,7 @@ group :development, optional: true do
   gem 'rubocop-rails'
   gem 'solargraph'
   gem 'spring'
-  gem 'spring-watcher-listen', '~> 2.0.0'
+  gem 'spring-watcher-listen', '~> 2.1'
 end
 
 group :production do
@@ -67,4 +67,4 @@ group :production do
 end
 
 # Windows does not include zoneinfo files, so bundle the tzinfo-data gem
-gem 'tzinfo-data', platforms: %i[mingw mswin x64_mingw jruby]
+gem 'tzinfo-data', platforms: %i[windows jruby]

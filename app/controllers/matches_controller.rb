@@ -26,14 +26,14 @@ class MatchesController < ApplicationController
     match = build_decider_match
 
     if match.errors.any?
-      render json: match.errors, status: :unprocessable_entity
+      render json: match.errors, status: :unprocessable_content
     elsif match.save
       UpdateGroupsGroupScoresAndSave.call(group: @group)
       push_sync_if_needed!(@group.tournament)
       TournamentLiveBroadcast.call(@group.tournament.id)
       render json: match, include: %w[match_scores.team group], status: :created
     else
-      render json: match.errors, status: :unprocessable_entity
+      render json: match.errors, status: :unprocessable_content
     end
   end
 
@@ -55,7 +55,7 @@ class MatchesController < ApplicationController
         render json: @match
         synced_tournament = @match.tournament
       else
-        render json: @match.errors, status: :unprocessable_entity
+        render json: @match.errors, status: :unprocessable_content
         raise ActiveRecord::Rollback
       end
     end
@@ -66,7 +66,7 @@ class MatchesController < ApplicationController
   # PATCH /matches/1/swap
   def swap
     unless @match.swappable_with?(@swap_target)
-      render json: { error: 'Matches must be different group matches from the same group' }, status: :unprocessable_entity
+      render json: { error: 'Matches must be different group matches from the same group' }, status: :unprocessable_content
       return
     end
 
@@ -102,27 +102,27 @@ class MatchesController < ApplicationController
 
     if @match.winner.nil?
       render json: { error: 'Stopping undecided Matches isn\'t allowed in playoff stage' },
-             status: :unprocessable_entity
+             status: :unprocessable_content
       raise ActiveRecord::Rollback
     end
 
     return if PopulateMatchBelowAndSave.call(match: @match).success?
 
     render json: { error: 'Moving Team one stage down failed' },
-           status: :unprocessable_entity
+           status: :unprocessable_content
     raise ActiveRecord::Rollback
   end
 
   def validate_params
     case match_params['state']
     when 'in_progress'
-      render json: { error: 'Match can\'t start in this state' }, status: :unprocessable_entity \
+      render json: { error: 'Match can\'t start in this state' }, status: :unprocessable_content \
         unless @match.not_started?
     when 'finished'
-      render json: { error: 'Match can\'t finish in this state' }, status: :unprocessable_entity \
+      render json: { error: 'Match can\'t finish in this state' }, status: :unprocessable_content \
         unless @match.in_progress?
     else
-      render json: { error: 'Invalid target state' }, status: :unprocessable_entity
+      render json: { error: 'Invalid target state' }, status: :unprocessable_content
     end
   end
 

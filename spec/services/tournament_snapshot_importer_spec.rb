@@ -80,6 +80,7 @@ RSpec.describe TournamentSnapshotImporter do
     end
   end
 
+  # rubocop:disable Metrics/MethodLength
   def create_large_source_tournament!
     tournament = create(
       :tournament,
@@ -142,6 +143,7 @@ RSpec.describe TournamentSnapshotImporter do
     )
     tournament.reload
   end
+  # rubocop:enable Metrics/MethodLength
 
   def create_group_round_robin!(group:, teams:)
     pairings = [
@@ -190,6 +192,7 @@ RSpec.describe TournamentSnapshotImporter do
     end
   end
 
+  # rubocop:disable Metrics/MethodLength
   def sync_signature(tournament)
     {
       name: tournament.name,
@@ -244,6 +247,7 @@ RSpec.describe TournamentSnapshotImporter do
       end
     }
   end
+  # rubocop:enable Metrics/MethodLength
 
   def match_signature(match)
     {

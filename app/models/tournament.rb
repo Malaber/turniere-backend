@@ -7,6 +7,7 @@ class Tournament < ApplicationRecord
   TIMER_REASONS = %w[tournament_start playoff_start match_end custom].freeze
 
   belongs_to :user
+  belongs_to :owner, class_name: 'User', foreign_key: :user_id
   has_many :teams, dependent: :destroy
   has_many :stages, dependent: :destroy
   has_many :beamers, dependent: :destroy
@@ -21,8 +22,6 @@ class Tournament < ApplicationRecord
 
   validate :playoff_teams_amount_is_positive_power_of_two
   validate :timer_reason_text_matches_reason
-
-  alias_attribute :owner, :user
 
   after_initialize :generate_code
   after_create_commit :ensure_default_beamer!

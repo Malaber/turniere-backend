@@ -122,7 +122,7 @@ RSpec.describe StagesController, type: :controller do
       end
 
       it 'it returns unprocessable entity' do
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
       end
 
       it 'returns the correct error' do
@@ -145,7 +145,7 @@ RSpec.describe StagesController, type: :controller do
       end
 
       it 'it returns unprocessable entity' do
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
       end
 
       it 'returns the correct error' do
@@ -164,7 +164,7 @@ RSpec.describe StagesController, type: :controller do
       end
 
       it 'it returns unprocessable entity' do
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
       end
 
       it 'returns the correct error' do
@@ -197,7 +197,7 @@ RSpec.describe StagesController, type: :controller do
       end
 
       it 'returns unprocessable entity' do
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
       end
 
       it 'returns a helpful decider error' do
@@ -233,7 +233,7 @@ RSpec.describe StagesController, type: :controller do
       end
 
       it 'returns unprocessable entity' do
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
       end
 
       it 'returns a helpful decider error' do

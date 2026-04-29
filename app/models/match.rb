@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
 class Match < ApplicationRecord
-  enum state: { single_team: 0, not_ready: 1, not_started: 2, in_progress: 3, finished: 4,
-                undecided: 5 }
+  enum :state, { single_team: 0, not_ready: 1, not_started: 2, in_progress: 3, finished: 4,
+                 undecided: 5 }
 
   belongs_to :stage, optional: true
   belongs_to :group, optional: true

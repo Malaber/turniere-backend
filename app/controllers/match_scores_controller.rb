@@ -19,7 +19,7 @@ class MatchScoresController < ApplicationController
       TournamentLiveBroadcast.call(@match_score.tournament.id)
       render json: @match_score
     else
-      render json: @match_score.errors, status: :unprocessable_entity
+      render json: @match_score.errors, status: :unprocessable_content
     end
   end
 

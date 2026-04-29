@@ -20,9 +20,9 @@ class TeamActionListsController < ApplicationController
 
     render json: team_action_list, status: :created
   rescue TeamActionListService::InvalidSourceError, TeamActionListService::EmptySourceError => e
-    render json: { error: e.message }, status: :unprocessable_entity
+    render json: { error: e.message }, status: :unprocessable_content
   rescue ActiveRecord::RecordInvalid => e
-    render json: e.record.errors, status: :unprocessable_entity
+    render json: e.record.errors, status: :unprocessable_content
   end
 
   # PATCH /tournaments/:tournament_id/team_action_lists/:key/teams/:team_id
@@ -33,7 +33,7 @@ class TeamActionListsController < ApplicationController
     )
       render json: @team_action_item
     else
-      render json: @team_action_item.errors, status: :unprocessable_entity
+      render json: @team_action_item.errors, status: :unprocessable_content
     end
   end
 

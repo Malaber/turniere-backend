@@ -189,6 +189,7 @@ def _compose_env(
         TURNIERE_BLACKBOX_SECRET_KEY_BASE=BLACKBOX_SECRET_KEY_BASE,
         TURNIERE_BLACKBOX_MAILGUN_API_KEY=BLACKBOX_MAILGUN_API_KEY,
         TURNIERE_BLACKBOX_MAILGUN_DOMAIN=BLACKBOX_MAILGUN_DOMAIN,
+        TURNIERE_BLACKBOX_DISABLE_EMAIL_DELIVERY="1",
         TURNIERE_E2E_BASE_URL=BLACKBOX_INTERNAL_BASE_URL,
         TURNIERE_E2E_EXPECT_PROFILING=expect_profiling,
         TURNIERE_E2E_EMAIL=E2E_EMAIL,
@@ -220,6 +221,7 @@ def _follow_compose_env(
         TURNIERE_BLACKBOX_SECRET_KEY_BASE=BLACKBOX_SECRET_KEY_BASE,
         TURNIERE_BLACKBOX_MAILGUN_API_KEY=BLACKBOX_MAILGUN_API_KEY,
         TURNIERE_BLACKBOX_MAILGUN_DOMAIN=BLACKBOX_MAILGUN_DOMAIN,
+        TURNIERE_BLACKBOX_DISABLE_EMAIL_DELIVERY="1",
         TURNIERE_SOURCE_E2E_BASE_URL=BLACKBOX_SOURCE_INTERNAL_BASE_URL,
         TURNIERE_FOLLOWER_E2E_BASE_URL=BLACKBOX_FOLLOWER_INTERNAL_BASE_URL,
         TURNIERE_E2E_EMAIL=E2E_EMAIL,
@@ -254,7 +256,7 @@ def _docker_build_command(tag, target, platforms=None, push=False):
             "--target",
             target,
             "--build-arg",
-            f"GIT_COMMIT_SHA={_git_commit_sha()}",
+            f"base_commit={_git_commit_sha()}",
             "-t",
             tag,
             "-f",
@@ -272,7 +274,7 @@ def _docker_build_command(tag, target, platforms=None, push=False):
         "--target",
         target,
         "--build-arg",
-        f"GIT_COMMIT_SHA={_git_commit_sha()}",
+        f"base_commit={_git_commit_sha()}",
         "-t",
         tag,
         "-f",
@@ -471,6 +473,7 @@ def _shared_production_env():
         SECRET_KEY_BASE=os.environ.get("SECRET_KEY_BASE", BLACKBOX_SECRET_KEY_BASE),
         MAILGUN_API_KEY=os.environ.get("MAILGUN_API_KEY", BLACKBOX_MAILGUN_API_KEY),
         MAILGUN_DOMAIN=os.environ.get("MAILGUN_DOMAIN", BLACKBOX_MAILGUN_DOMAIN),
+        TURNIERE_DISABLE_EMAIL_DELIVERY=os.environ.get("TURNIERE_DISABLE_EMAIL_DELIVERY", "1"),
         RAILS_LOG_TO_STDOUT=os.environ.get("RAILS_LOG_TO_STDOUT", "1"),
         RAILS_SERVE_STATIC_FILES=os.environ.get("RAILS_SERVE_STATIC_FILES", "1"),
     )
@@ -485,6 +488,7 @@ def _production_env_for(db_host, db_name):
         SECRET_KEY_BASE=BLACKBOX_SECRET_KEY_BASE,
         MAILGUN_API_KEY=BLACKBOX_MAILGUN_API_KEY,
         MAILGUN_DOMAIN=BLACKBOX_MAILGUN_DOMAIN,
+        TURNIERE_DISABLE_EMAIL_DELIVERY="1",
         RAILS_LOG_TO_STDOUT="1",
         RAILS_SERVE_STATIC_FILES="1",
     )
@@ -603,7 +607,11 @@ def db_reset(c, env="test"):
 @task
 def server(c, host=SERVER_HOST, port=SERVER_PORT, env=None):
     """Start the backend locally in development."""
-    c.run(f"RAILS_ENV={_rails_env(env)} {_bundle_exec('rails', 's')} -b {host} -p {port}", pty=True)
+    c.run(
+        f"RAILS_ENV={_rails_env(env)} {_bundle_exec('rails', 's')} -b {host} -p {port}",
+        env=_env(GIT_COMMIT_SHA=_git_commit_sha()),
+        pty=True,
+    )
 
 
 @task(name="start-local")

@@ -308,21 +308,21 @@ RSpec.describe TournamentsController, type: :controller do
     it 'rejects timestamp_seconds for countup mode' do
       patch :set_timer, params: { id: @tournament.to_param, timer_mode: 'countup', timestamp_seconds: 120 }
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(deserialize_response(response)[:error]).to eq('timestamp_seconds is only allowed for countdown mode')
     end
 
     it 'rejects invalid timer reason values' do
       patch :set_timer, params: { id: @tournament.to_param, timestamp_seconds: 120, timer_reason: 'ceremony' }
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(deserialize_response(response)[:error]).to eq('Invalid timer_reason')
     end
 
     it 'requires timer_reason_text for custom timer reason' do
       patch :set_timer, params: { id: @tournament.to_param, timestamp_seconds: 120, timer_reason: 'custom' }
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(deserialize_response(response)[:error]).to eq('timer_reason_text is required for custom timer_reason')
     end
 
@@ -334,7 +334,7 @@ RSpec.describe TournamentsController, type: :controller do
         timer_reason_text: 'Extra info'
       }
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(deserialize_response(response)[:error]).to eq(
         'timer_reason_text is only allowed when timer_reason is custom'
       )
@@ -466,7 +466,7 @@ RSpec.describe TournamentsController, type: :controller do
           context 'playoff_teams_amount unacceptable' do
             shared_examples_for 'wrong playoff_teams_amount' do
               it 'fails' do
-                expect(response).to have_http_status(:unprocessable_entity)
+                expect(response).to have_http_status(:unprocessable_content)
               end
               it 'returns the correct error message' do
                 expect(deserialize_response(response)[:playoff_teams_amount].first)
@@ -522,7 +522,7 @@ RSpec.describe TournamentsController, type: :controller do
           data = create_group_tournament_data
           data[:teams].pop
           post :create, params: data
-          expect(response).to have_http_status(:unprocessable_entity)
+          expect(response).to have_http_status(:unprocessable_content)
         end
       end
 
@@ -540,7 +540,7 @@ RSpec.describe TournamentsController, type: :controller do
       context 'with invalid parameters' do
         it 'renders an unprocessable entity response' do
           put :create, params: { teams: [1, 2, 3] }
-          expect(response).to have_http_status(:unprocessable_entity)
+          expect(response).to have_http_status(:unprocessable_content)
         end
       end
 
@@ -549,7 +549,7 @@ RSpec.describe TournamentsController, type: :controller do
           data = create_group_tournament_data
           data[:teams] = [{ group: 1 }, { group: 1 }, { group: 2 }, { group: 2 }]
           post :create, params: data
-          expect(response).to have_http_status(:unprocessable_entity)
+          expect(response).to have_http_status(:unprocessable_content)
         end
       end
     end
@@ -637,18 +637,18 @@ RSpec.describe TournamentsController, type: :controller do
 
           it 'fails when only instant_finalists_amount is changed' do
             put :update, params: { id: @filled_tournament.to_param }.merge(instant_finalists_amount: 29)
-            expect(response).to have_http_status(:unprocessable_entity)
+            expect(response).to have_http_status(:unprocessable_content)
           end
 
           it 'fails when only intermediate_round_participants_amount is changed' do
             put :update, params: { id: @filled_tournament.to_param }.merge(intermediate_round_participants_amount: 29)
-            expect(response).to have_http_status(:unprocessable_entity)
+            expect(response).to have_http_status(:unprocessable_content)
           end
 
           it 'fails when parameters don\'t match' do
             put :update, params: { id: @filled_tournament.to_param }.merge(intermediate_round_participants_amount: 29,
                                                                            instant_finalists_amount: 32)
-            expect(response).to have_http_status(:unprocessable_entity)
+            expect(response).to have_http_status(:unprocessable_content)
           end
 
           it 'succeeds when all three are changed correctly' do
@@ -667,7 +667,7 @@ RSpec.describe TournamentsController, type: :controller do
 
             it 'returns unprocessable entity' do
               put :update, params: { id: @filled_tournament.to_param }.merge(playoff_teams_amount: 8)
-              expect(response).to have_http_status(:unprocessable_entity)
+              expect(response).to have_http_status(:unprocessable_content)
             end
 
             it 'doesn\'t change playoff_teams_amount' do
@@ -720,7 +720,7 @@ RSpec.describe TournamentsController, type: :controller do
 
           it 'fails when playoff_teams_amount is higher than the amount of teams participating' do
             put :update, params: { id: @filled_tournament.to_param }.merge(playoff_teams_amount: 783)
-            expect(response).to have_http_status(:unprocessable_entity)
+            expect(response).to have_http_status(:unprocessable_content)
           end
         end
       end
@@ -863,7 +863,7 @@ RSpec.describe TournamentsController, type: :controller do
     it 'rejects sync test without complete leader configuration' do
       post :test_sync, params: { id: @tournament.to_param }
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(deserialize_response(response)[:error])
         .to eq('Tournament sync test requires writable tournament with sync_target_url and sync_auth_token')
     end

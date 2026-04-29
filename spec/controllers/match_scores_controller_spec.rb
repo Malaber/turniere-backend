@@ -62,7 +62,7 @@ RSpec.describe MatchScoresController, type: :controller do
 
           it 'returns unprocessable entity' do
             put :update, params: { id: @match_score.to_param }.merge(valid_update)
-            expect(response).to have_http_status(:unprocessable_entity)
+            expect(response).to have_http_status(:unprocessable_content)
           end
         end
       end
