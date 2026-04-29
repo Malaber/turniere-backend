@@ -7,6 +7,7 @@ ARG base_commit=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 FROM ruby:${RUBY_VERSION}-slim AS runtime-base
 
 ARG BUNDLER_VERSION
+ARG DEBIAN_FRONTEND=noninteractive
 
 ENV LANG=C.UTF-8 \
     BUNDLE_JOBS=4 \
@@ -27,6 +28,8 @@ RUN apt-get update -qq \
     && gem install tzinfo-data
 
 FROM runtime-base AS build-base
+
+ARG DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update -qq \
     && apt-get install -y --no-install-recommends \
@@ -83,6 +86,7 @@ CMD ["sh", "-lc", "bundle exec rails db:migrate && bundle exec rails s -p 3000 -
 FROM runtime-base AS test
 
 ARG base_commit=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+ARG DEBIAN_FRONTEND=noninteractive
 
 ENV RAILS_ENV=test \
     GIT_COMMIT_SHA=${base_commit}
