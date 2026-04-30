@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'securerandom'
+require 'openssl'
 
 class Tournament < ApplicationRecord
   TIMER_MODES = %w[countdown countup].freeze
@@ -26,6 +27,7 @@ class Tournament < ApplicationRecord
   after_initialize :generate_code
   after_create_commit :ensure_default_beamer!
   before_validation :normalize_timer_reason
+  before_validation :protect_follower_sync_token
   before_validation :clear_follower_sync_token_when_disabling_read_only_mode
   after_commit :broadcast_timer_state_change, if: :saved_change_to_timer_state?
 
@@ -50,7 +52,27 @@ class Tournament < ApplicationRecord
   end
 
   def sync_accepts_push?
-    read_only_mode? && sync_auth_token.present?
+    read_only_mode? && sync_auth_configured?
+  end
+
+  def sync_auth_configured?
+    sync_auth_token.present? || sync_auth_token_digest.present?
+  end
+
+  def sync_token_matches?(token)
+    return false if token.blank?
+
+    if sync_auth_token_digest.present?
+      expected_digest = self.class.sync_auth_token_digest(token)
+      return ActiveSupport::SecurityUtils.secure_compare(expected_digest, sync_auth_token_digest)
+    end
+
+    token.bytesize == sync_auth_token.to_s.bytesize &&
+      ActiveSupport::SecurityUtils.secure_compare(token, sync_auth_token.to_s)
+  end
+
+  def self.sync_auth_token_digest(token)
+    OpenSSL::HMAC.hexdigest('SHA256', Rails.application.secret_key_base, token.to_s)
   end
 
   private
@@ -80,15 +102,15 @@ class Tournament < ApplicationRecord
   end
 
   def sync_configuration_blank?
-    sync_target_url.blank? && sync_auth_token.blank?
+    sync_target_url.blank? && !sync_auth_configured?
   end
 
   def sync_configuration_complete?
-    sync_target_url.present? && sync_auth_token.present?
+    sync_target_url.present? && sync_auth_configured?
   end
 
   def follower_sync_token_only?
-    read_only_mode? && sync_auth_token.present? && sync_target_url.blank?
+    read_only_mode? && sync_auth_configured? && sync_target_url.blank?
   end
 
   def ensure_default_beamer!
@@ -100,9 +122,22 @@ class Tournament < ApplicationRecord
 
   def clear_follower_sync_token_when_disabling_read_only_mode
     return if read_only_mode?
+
+    self.sync_auth_token_digest = nil
     return if sync_target_url.present?
 
     self.sync_auth_token = nil
+  end
+
+  def protect_follower_sync_token
+    return unless read_only_mode?
+
+    if sync_auth_token.present?
+      self.sync_auth_token_digest = self.class.sync_auth_token_digest(sync_auth_token)
+      self.sync_auth_token = nil
+    elsif will_save_change_to_sync_auth_token? && sync_auth_token.blank?
+      self.sync_auth_token_digest = nil
+    end
   end
 
   def normalize_timer_reason

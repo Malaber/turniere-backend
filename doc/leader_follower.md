@@ -24,6 +24,7 @@ Create empty tournament with:
 - `sync_auth_token: <shared secret>`
 
 Do not send `teams` payload for follower. Backend allows empty read only follower tournament creation.
+The token is write-only. Backend responses never return it; owner responses only expose `sync_auth_configured`.
 
 ### 2. Create normal leader tournament on local backend
 
@@ -178,9 +179,9 @@ Owner-facing frontend can expose:
 
 Recommended owner UX:
 
-1. create remote follower first
-2. copy remote `sync_auth_token`
-3. paste remote `sync_state` URL into leader
+1. generate a shared token outside the backend
+2. create remote follower with that `sync_auth_token`
+3. paste same token and remote `sync_state` URL into leader
 4. save leader sync config
 5. show last push time / error state
 6. allow explicit follower takeover by disabling `read_only_mode`
