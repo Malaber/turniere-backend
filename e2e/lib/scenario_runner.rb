@@ -148,6 +148,58 @@ module TurniereE2E
       result(session: session, tournament: tournament, checkpoints: checkpoints, stop_at: stop_at)
     end
 
+    def run_transaction_log_history(stop_at: :transaction_log)
+      session = register_session!
+      tournament = create_tournament!(
+        create_group_stage_payload(group_count: 1, teams_per_group: 2, playoff_teams_amount: 1)
+      )
+
+      checkpoints = {
+        created: summarize_tournament(tournament)
+      }
+
+      group_stage = group_stage_of!(tournament)
+      group = group_stage.fetch(:groups).first
+      match = group.fetch(:matches).first
+      team_ids = match.fetch(:match_scores).map { |score| score.dig(:team, :id) }
+
+      play_match_with_points!(
+        match,
+        points_by_team_name: {
+          'G1-S1' => 1,
+          'G1-S2' => 1
+        }
+      )
+      checkpoints[:drawn_group_match] = fetch_match!(match.fetch(:id))
+
+      failed_playoff_start = client.patch("/stages/#{group_stage.fetch(:id)}", body: { state: 'finished' })
+      expect_status!(failed_playoff_start, 422, 'finish group stage without decider')
+      checkpoints[:failed_playoff_start] = failed_playoff_start.fetch(:json)
+
+      decider = create_decider_match!(group.fetch(:id), team_ids)
+      play_match_with_hidden_points!(
+        decider,
+        hidden_points_by_team_name: {
+          'G1-S1' => 2,
+          'G1-S2' => 1
+        }
+      )
+      checkpoints[:decider_finished] = fetch_match!(decider.fetch(:id))
+
+      finish_stage!(group_stage.fetch(:id))
+      tournament = fetch_tournament!(tournament.fetch(:id))
+      checkpoints[:playoffs_created] = summarize_tournament(tournament)
+
+      transaction_log = get!("/tournaments/#{tournament.fetch(:id)}/transaction_log")
+      checkpoints[:transaction_log] = {
+        actions: transaction_log.map { |entry| entry.fetch(:action) },
+        sequences: transaction_log.map { |entry| entry.fetch(:sequence) },
+        messages: transaction_log.map { |entry| entry.fetch(:message) }
+      }
+
+      result(session: session, tournament: tournament, checkpoints: checkpoints, stop_at: stop_at)
+    end
+
     def run_group_stage_render_profile(group_count:, teams_per_group:, playoff_teams_amount:, stop_at: :profiled_show)
       session = register_session!
       tournament = create_tournament!(
@@ -337,6 +389,36 @@ module TurniereE2E
         status: finished.fetch(:status),
         body: finished.fetch(:json)
       }
+    end
+
+    def play_match_with_hidden_points!(match, hidden_points_by_team_name:, expected_finish_status: 200)
+      started = client.patch("/matches/#{match.fetch(:id)}", body: { state: 'in_progress' })
+      expect_status!(started, 200, "start match #{match.fetch(:id)}")
+
+      refreshed_match = fetch_match!(match.fetch(:id))
+      refreshed_match.fetch(:match_scores).each do |score|
+        team_name = score.dig(:team, :name)
+        hidden_points = hidden_points_by_team_name.fetch(team_name) do
+          raise "missing hidden score for #{team_name.inspect} in match #{match.fetch(:id)}"
+        end
+        updated_score = client.patch("/match_scores/#{score.fetch(:id)}", body: { hidden_points: hidden_points })
+        expect_status!(updated_score, 200, "update hidden match_score #{score.fetch(:id)}")
+      end
+
+      finished = client.patch("/matches/#{match.fetch(:id)}", body: { state: 'finished' })
+      expect_status!(finished, expected_finish_status, "finish match #{match.fetch(:id)}")
+
+      {
+        match_id: match.fetch(:id),
+        status: finished.fetch(:status),
+        body: finished.fetch(:json)
+      }
+    end
+
+    def create_decider_match!(group_id, team_ids)
+      response = client.post("/groups/#{group_id}/matches", body: { team_ids: team_ids })
+      expect_status!(response, 201, "create decider match for group #{group_id}")
+      response.fetch(:json)
     end
 
     def fetch_match!(match_id)

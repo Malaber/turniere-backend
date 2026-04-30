@@ -32,6 +32,7 @@ Rails.application.routes.draw do
     end
     member do
       get :timer
+      get :transaction_log, to: 'tournament_transaction_log_entries#index'
       patch :timer, action: :set_timer
       patch :sync_state
       patch :start_next_group_matches

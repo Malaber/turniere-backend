@@ -101,6 +101,8 @@ RSpec.describe MatchesController, type: :controller do
       end
 
       it 'creates a decider match at the end of the group' do
+        log_count = group_stage_tournament.transaction_log_entries.count
+
         expect do
           post :create, params: { group_id: group.to_param, team_ids: team_ids }
         end.to change { group.matches.reload.count }.by(1)
@@ -110,6 +112,8 @@ RSpec.describe MatchesController, type: :controller do
         expect(created_match.decider?).to eq(true)
         expect(created_match.state).to eq('not_started')
         expect(created_match.teams.map(&:id)).to match_array(team_ids)
+        expect(group_stage_tournament.transaction_log_entries.count).to eq(log_count + 1)
+        expect(group_stage_tournament.transaction_log_entries.last.action).to eq('decider_match.created')
       end
     end
 
@@ -231,6 +235,21 @@ RSpec.describe MatchesController, type: :controller do
             expect(response).to be_successful
             body = deserialize_response response
             expect(body[:state]).to eq(valid_update[:state])
+          end
+
+          it 'writes a transaction log entry for the state change' do
+            expect(TournamentLiveBroadcast).to receive(:call).with(@match.tournament.id)
+
+            expect do
+              put :update, params: { id: @match.to_param }.merge(valid_update)
+            end.to change { @match.tournament.transaction_log_entries.count }.by(1)
+
+            entry = @match.tournament.transaction_log_entries.last
+            expect(entry.action).to eq('match.state_changed')
+            expect(entry.sequence).to eq(1)
+            expect(entry.message).to include("changed match #{@match.id}")
+            expect(entry.message).to include('running')
+            expect(entry.metadata['new_state']).to eq('in_progress')
           end
 
           it 'stops an in-progress match and resets its scores' do
