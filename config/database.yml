@@ -6,7 +6,7 @@
 #
 default: &default
   adapter: sqlite3
-  pool: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
+  pool: <%= ENV.fetch("RAILS_DB_POOL", ENV.fetch("RAILS_MAX_THREADS", 5)) %>
   timeout: 5000
 
 development:
@@ -21,10 +21,12 @@ test:
   database: db/test.sqlite3
 
 production: &production
-  url: <%= ENV.fetch("POSTGRES_URL", nil) %>
+  adapter: postgresql
+  encoding: unicode
+  url: <%= ENV["DATABASE_URL"] || ENV["POSTGRES_URL"] %>
   username: <%= ENV.fetch("POSTGRES_USERNAME", nil) %>
   password: <%= ENV.fetch("POSTGRES_PASSWORD", nil) %>
-  pool: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
+  pool: <%= ENV.fetch("RAILS_DB_POOL", ENV.fetch("RAILS_MAX_THREADS", 5)) %>
 
 beta:
   # just use the production settings
