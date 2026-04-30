@@ -470,12 +470,19 @@ def _spec_shards(node_total):
 
 
 def _shared_production_env():
-    return _env(
-        RAILS_ENV="production",
-        POSTGRES_URL=os.environ.get(
+    database_url = os.environ.get(
+        "DATABASE_URL",
+        os.environ.get(
             "POSTGRES_URL",
             f"postgres://{BLACKBOX_DB_USER}:{BLACKBOX_DB_PASSWORD}@postgres:5432/{BLACKBOX_DB_NAME}",
         ),
+    )
+    rails_max_threads = os.environ.get("RAILS_MAX_THREADS", "5")
+
+    return _env(
+        RAILS_ENV="production",
+        DATABASE_URL=database_url,
+        POSTGRES_URL=database_url,
         POSTGRES_USERNAME=os.environ.get("POSTGRES_USERNAME", BLACKBOX_DB_USER),
         POSTGRES_PASSWORD=os.environ.get("POSTGRES_PASSWORD", BLACKBOX_DB_PASSWORD),
         SECRET_KEY_BASE=os.environ.get("SECRET_KEY_BASE", BLACKBOX_SECRET_KEY_BASE),
@@ -484,13 +491,20 @@ def _shared_production_env():
         TURNIERE_DISABLE_EMAIL_DELIVERY=os.environ.get("TURNIERE_DISABLE_EMAIL_DELIVERY", "1"),
         RAILS_LOG_TO_STDOUT=os.environ.get("RAILS_LOG_TO_STDOUT", "1"),
         RAILS_SERVE_STATIC_FILES=os.environ.get("RAILS_SERVE_STATIC_FILES", "1"),
+        WEB_CONCURRENCY=os.environ.get("WEB_CONCURRENCY", "2"),
+        RAILS_MAX_THREADS=rails_max_threads,
+        RAILS_DB_POOL=os.environ.get("RAILS_DB_POOL", rails_max_threads),
+        SIDEKIQ_CONCURRENCY=os.environ.get("SIDEKIQ_CONCURRENCY", "5"),
     )
 
 
 def _production_env_for(db_host, db_name):
+    database_url = f"postgres://{BLACKBOX_DB_USER}:{BLACKBOX_DB_PASSWORD}@{db_host}:5432/{db_name}"
+
     return _env(
         RAILS_ENV="production",
-        POSTGRES_URL=f"postgres://{BLACKBOX_DB_USER}:{BLACKBOX_DB_PASSWORD}@{db_host}:5432/{db_name}",
+        DATABASE_URL=database_url,
+        POSTGRES_URL=database_url,
         POSTGRES_USERNAME=BLACKBOX_DB_USER,
         POSTGRES_PASSWORD=BLACKBOX_DB_PASSWORD,
         SECRET_KEY_BASE=BLACKBOX_SECRET_KEY_BASE,
@@ -499,6 +513,10 @@ def _production_env_for(db_host, db_name):
         TURNIERE_DISABLE_EMAIL_DELIVERY="1",
         RAILS_LOG_TO_STDOUT="1",
         RAILS_SERVE_STATIC_FILES="1",
+        WEB_CONCURRENCY=os.environ.get("WEB_CONCURRENCY", "2"),
+        RAILS_MAX_THREADS=os.environ.get("RAILS_MAX_THREADS", "5"),
+        RAILS_DB_POOL=os.environ.get("RAILS_DB_POOL", os.environ.get("RAILS_MAX_THREADS", "5")),
+        SIDEKIQ_CONCURRENCY=os.environ.get("SIDEKIQ_CONCURRENCY", "5"),
     )
 
 
@@ -1092,6 +1110,101 @@ def docker_build_all(c):
     """Build the production and test Docker images."""
     docker_build_production(c)
     docker_build_test(c)
+
+
+def _assert_output_match(label, output, pattern):
+    if re.search(pattern, output) is not None:
+        return
+
+    tail = output[-4000:] if output else "<empty output>"
+    raise RuntimeError(f"{label} did not match {pattern!r}.\nLast output:\n{tail}")
+
+
+def _blackbox_app_exec(env, *command):
+    result = _compose_run(["exec", "-T", "app", *command], env=env, capture_output=True)
+    output = "\n".join(part for part in (result.stdout, result.stderr) if part)
+    return output.strip()
+
+
+def _assert_blackbox_scaling_config(env, expected):
+    logs = _compose_run(["logs", "app"], env=env, capture_output=True).stdout
+
+    _assert_output_match("Puma worker count", logs, rf"Workers:\s+{re.escape(expected['web_concurrency'])}\b")
+    _assert_output_match("Puma max threads", logs, rf"Max threads:\s+{re.escape(expected['rails_max_threads'])}\b")
+    _assert_output_match("Puma environment", logs, r"Environment:\s+production\b")
+
+    pool_size = _blackbox_app_exec(env, "bundle", "exec", "rails", "runner", "puts ActiveRecord::Base.connection_pool.size")
+    if pool_size.splitlines()[-1] != expected["rails_db_pool"]:
+        raise RuntimeError(f"Expected DB pool {expected['rails_db_pool']}, got {pool_size!r}")
+
+    sidekiq_config = _blackbox_app_exec(
+        env,
+        "ruby",
+        "-rerb",
+        "-e",
+        "puts ERB.new(File.read('config/sidekiq.yml')).result",
+    )
+    expected_sidekiq = f":concurrency: {expected['sidekiq_concurrency']}"
+    if expected_sidekiq not in sidekiq_config:
+        raise RuntimeError(f"Expected Sidekiq config {expected_sidekiq!r}, got {sidekiq_config!r}")
+
+
+@task(name="docker-blackbox-scaling-config")
+def docker_blackbox_scaling_config(
+    c,
+    host_port="3004",
+    app_image=PRODUCTION_TAG,
+    runner_image=TEST_TAG,
+    postgres_image=BLACKBOX_POSTGRES_IMAGE,
+    build=True,
+):
+    """Build once, boot the production image with two scaling env sets, and assert runtime config."""
+    if build:
+        docker_build_production(c, tag=app_image)
+
+    cases = [
+        {
+            "label": "medium",
+            "web_concurrency": "2",
+            "rails_max_threads": "3",
+            "rails_db_pool": "4",
+            "sidekiq_concurrency": "6",
+        },
+        {
+            "label": "event",
+            "web_concurrency": "3",
+            "rails_max_threads": "4",
+            "rails_db_pool": "5",
+            "sidekiq_concurrency": "7",
+        },
+    ]
+
+    for expected in cases:
+        env = _compose_env(
+            host_port=host_port,
+            app_image=app_image,
+            runner_image=runner_image,
+            postgres_image=postgres_image,
+            expect_profiling="false",
+        )
+        env.update(
+            TURNIERE_BLACKBOX_RAILS_ENV="production",
+            TURNIERE_BLACKBOX_WEB_CONCURRENCY=expected["web_concurrency"],
+            TURNIERE_BLACKBOX_RAILS_MAX_THREADS=expected["rails_max_threads"],
+            TURNIERE_BLACKBOX_RAILS_DB_POOL=expected["rails_db_pool"],
+            TURNIERE_BLACKBOX_SIDEKIQ_CONCURRENCY=expected["sidekiq_concurrency"],
+        )
+
+        _print_header(f"Scaling config case: {expected['label']}")
+        try:
+            _compose_run(["down", "-v", "--remove-orphans"], env=env, check=False)
+            _compose_run(["up", "-d", "postgres", "app"], env=env)
+            _wait_for_http(base_url=f"http://127.0.0.1:{host_port}", timeout=120)
+            _assert_blackbox_scaling_config(env, expected)
+        finally:
+            _compose_run(["down", "-v", "--remove-orphans"], env=env, check=False)
+
+    print("Scaling config changed across boots without rebuilding the production image.")
 
 
 @task(name="docker-blackbox-up")
