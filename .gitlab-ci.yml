@@ -57,7 +57,7 @@ rails e2e spec:
       alias: app
       variables:
         TURNIERE_DISABLE_EMAIL_DELIVERY: "1"
-        WEB_CONCURRENCY: "2"
+        WEB_CONCURRENCY: "1"
         RAILS_MAX_THREADS: "5"
         RAILS_DB_POOL: "5"
         SIDEKIQ_CONCURRENCY: "5"
@@ -115,7 +115,7 @@ rails load smoke:
       alias: app
       variables:
         TURNIERE_DISABLE_EMAIL_DELIVERY: "1"
-        WEB_CONCURRENCY: "2"
+        WEB_CONCURRENCY: "1"
         RAILS_MAX_THREADS: "5"
         RAILS_DB_POOL: "5"
         SIDEKIQ_CONCURRENCY: "5"
@@ -200,7 +200,7 @@ rails follow sync e2e spec:
         no_proxy: source-app,follower-app,source-postgres,follower-postgres,localhost,127.0.0.1
         RAILS_LOG_TO_STDOUT: "1"
         RAILS_SERVE_STATIC_FILES: "1"
-        WEB_CONCURRENCY: "2"
+        WEB_CONCURRENCY: "1"
         RAILS_MAX_THREADS: "5"
         RAILS_DB_POOL: "5"
         SIDEKIQ_CONCURRENCY: "5"
@@ -227,7 +227,7 @@ rails follow sync e2e spec:
         no_proxy: source-app,follower-app,source-postgres,follower-postgres,localhost,127.0.0.1
         RAILS_LOG_TO_STDOUT: "1"
         RAILS_SERVE_STATIC_FILES: "1"
-        WEB_CONCURRENCY: "2"
+        WEB_CONCURRENCY: "1"
         RAILS_MAX_THREADS: "5"
         RAILS_DB_POOL: "5"
         SIDEKIQ_CONCURRENCY: "5"
