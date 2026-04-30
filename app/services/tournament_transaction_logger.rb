@@ -9,7 +9,9 @@ class TournamentTransactionLogger
         raise 'Tournament transaction log writes must happen inside a transaction'
       end
 
-      tournament.lock!
+      # Lock a fresh row instance so callers keep saved_change_to_* state for
+      # after_commit callbacks on the object they just updated.
+      Tournament.lock.find(tournament.id)
     end
 
     def record!(tournament:, user:, action:, message:, metadata: {})
