@@ -172,6 +172,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_30_120000) do
     t.boolean "public", default: true
     t.boolean "read_only_mode", default: false, null: false
     t.string "sync_auth_token"
+    t.string "sync_auth_token_digest"
     t.datetime "sync_last_imported_snapshot_at"
     t.string "sync_last_push_error"
     t.datetime "sync_last_pushed_at"

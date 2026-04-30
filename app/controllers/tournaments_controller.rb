@@ -338,9 +338,7 @@ class TournamentsController < ApplicationController
     token = request.authorization.to_s.delete_prefix('Bearer ').presence || request.headers['X-Tournament-Sync-Token'].to_s
     return render json: { error: 'Missing sync token' }, status: :unauthorized if token.blank?
 
-    matches = token.bytesize == @tournament.sync_auth_token.to_s.bytesize &&
-              ActiveSupport::SecurityUtils.secure_compare(token, @tournament.sync_auth_token.to_s)
-    return if matches
+    return if @tournament.sync_token_matches?(token)
 
     render json: { error: 'Invalid sync token' }, status: :unauthorized
   end

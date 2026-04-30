@@ -44,6 +44,8 @@ RSpec.describe 'Tournament sync test HTTP E2E' do
     expect(test_sync[:status]).to eq(200)
     expect(test_sync.dig(:json, :sync_last_pushed_at)).not_to be_nil
     expect(test_sync.dig(:json, :sync_last_push_error)).to be_nil
+    expect(test_sync.dig(:json, :sync_auth_configured)).to eq(true)
+    expect_no_sync_token_exposed!(test_sync, sync_token)
 
     after_leader = fetch_tournament(leader.fetch(:id))
     after_follower = fetch_tournament(follower.fetch(:id))
@@ -52,6 +54,41 @@ RSpec.describe 'Tournament sync test HTTP E2E' do
     expect(after_follower.fetch(:description)).to eq(after_leader.fetch(:description))
     expect(after_follower.fetch(:teams).map { |team| team.fetch(:name) })
       .to match_array(after_leader.fetch(:teams).map { |team| team.fetch(:name) })
+  end
+
+  it 'never exposes sync auth token after create, update, show, or sync test' do
+    follower_create = client.post('/tournaments', body: {
+                                    name: "Protected Follower #{SecureRandom.hex(3)}",
+                                    description: 'Follower token should stay write only',
+                                    public: true,
+                                    read_only_mode: true,
+                                    sync_auth_token: sync_token
+                                  })
+    expect(follower_create[:status]).to eq(201)
+    expect_no_sync_token_exposed!(follower_create, sync_token)
+
+    follower_id = follower_create.dig(:json, :id)
+    follower_owner_read = client.get("/tournaments/#{follower_id}")
+    expect(follower_owner_read[:status]).to eq(200)
+    expect(follower_owner_read.dig(:json, :sync_auth_configured)).to eq(true)
+    expect_no_sync_token_exposed!(follower_owner_read, sync_token)
+
+    follower_public_read = anonymous_client.get("/tournaments/#{follower_id}")
+    expect(follower_public_read[:status]).to eq(200)
+    expect_no_sync_token_exposed!(follower_public_read, sync_token)
+
+    leader = create_group_stage_tournament(name_prefix: 'Protected Leader')
+    configure_sync = client.patch("/tournaments/#{leader.fetch(:id)}", body: {
+                                    sync_target_url: "#{base_url}/tournaments/#{follower_id}/sync_state",
+                                    sync_auth_token: sync_token
+                                  })
+    expect(configure_sync[:status]).to eq(200)
+    expect(configure_sync.dig(:json, :sync_auth_configured)).to eq(true)
+    expect_no_sync_token_exposed!(configure_sync, sync_token)
+
+    test_sync = client.post("/tournaments/#{leader.fetch(:id)}/test_sync")
+    expect(test_sync[:status]).to eq(200)
+    expect_no_sync_token_exposed!(test_sync, sync_token)
   end
 
   it 'syncs team action list changes made through item id route and business key route' do
@@ -168,6 +205,14 @@ RSpec.describe 'Tournament sync test HTTP E2E' do
     response = anonymous_client.get("/tournaments/#{tournament_id}")
     expect(response[:status]).to eq(200)
     response.fetch(:json)
+  end
+
+  def expect_no_sync_token_exposed!(response, token)
+    serialized_json = response.fetch(:json).inspect
+
+    expect(serialized_json).not_to include('sync_auth_token')
+    expect(serialized_json).not_to include('sync_auth_token_digest')
+    expect(serialized_json).not_to include(token)
   end
 
   def finish_group_stage_and_create_playoffs!(tournament_id)
