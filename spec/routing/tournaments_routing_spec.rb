@@ -41,5 +41,9 @@ RSpec.describe TournamentsController, type: :routing do
     it 'routes to #test_sync' do
       expect(post: '/tournaments/1/test_sync').to route_to('tournaments#test_sync', id: '1')
     end
+
+    it 'routes to transaction log entries' do
+      expect(get: '/tournaments/1/transaction_log').to route_to('tournament_transaction_log_entries#index', id: '1')
+    end
   end
 end

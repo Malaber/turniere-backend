@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_28_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_30_120000) do
   create_table "beamers", force: :cascade do |t|
     t.json "config", default: {}, null: false
     t.datetime "created_at", null: false
@@ -147,6 +147,20 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_28_120000) do
     t.index ["tournament_id"], name: "index_tournament_sync_queue_entries_on_tournament_id", unique: true
   end
 
+  create_table "tournament_transaction_log_entries", force: :cascade do |t|
+    t.string "action", null: false
+    t.datetime "created_at", null: false
+    t.text "message", null: false
+    t.json "metadata", default: {}, null: false
+    t.integer "sequence", null: false
+    t.integer "tournament_id", null: false
+    t.datetime "updated_at", null: false
+    t.integer "user_id"
+    t.index ["tournament_id", "sequence"], name: "index_tournament_log_entries_on_tournament_and_sequence", unique: true
+    t.index ["tournament_id"], name: "index_tournament_transaction_log_entries_on_tournament_id"
+    t.index ["user_id"], name: "index_tournament_transaction_log_entries_on_user_id"
+  end
+
   create_table "tournaments", force: :cascade do |t|
     t.string "code", null: false
     t.datetime "created_at", precision: nil, null: false
@@ -164,9 +178,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_28_120000) do
     t.integer "sync_source_tournament_id"
     t.string "sync_target_url"
     t.string "timer_mode"
-    t.datetime "timestamp"
     t.string "timer_reason"
     t.text "timer_reason_text"
+    t.datetime "timestamp"
     t.datetime "updated_at", precision: nil, null: false
     t.integer "user_id", null: false
     t.index ["code"], name: "index_tournaments_on_code", unique: true
@@ -220,5 +234,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_28_120000) do
   add_foreign_key "team_action_lists", "tournaments", on_delete: :cascade
   add_foreign_key "teams", "tournaments", on_delete: :cascade
   add_foreign_key "tournament_sync_queue_entries", "tournaments", on_delete: :cascade
+  add_foreign_key "tournament_transaction_log_entries", "tournaments", on_delete: :cascade
+  add_foreign_key "tournament_transaction_log_entries", "users", on_delete: :nullify
   add_foreign_key "tournaments", "users", on_delete: :cascade
 end

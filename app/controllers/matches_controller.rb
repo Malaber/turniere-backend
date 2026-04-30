@@ -23,37 +23,41 @@ class MatchesController < ApplicationController
 
   # POST /groups/:group_id/matches
   def create
-    match = build_decider_match
+    match = nil
+    synced_tournament = nil
 
-    if match.errors.any?
-      render json: match.errors, status: :unprocessable_content
-    elsif match.save
-      UpdateGroupsGroupScoresAndSave.call(group: @group)
-      push_sync_if_needed!(@group.tournament)
-      TournamentLiveBroadcast.call(@group.tournament.id)
-      render json: match, include: %w[match_scores.team group], status: :created
-    else
-      render json: match.errors, status: :unprocessable_content
+    Match.transaction do
+      TournamentTransactionLogger.lock_tournament!(@group.tournament)
+      match = build_decider_match
+
+      if match.errors.any?
+        render json: match.errors, status: :unprocessable_content
+        raise ActiveRecord::Rollback
+      elsif match.save
+        UpdateGroupsGroupScoresAndSave.call(group: @group)
+        group_scores = group_scores_for_log(@group)
+        TournamentTransactionLogger.record_decider_match_created!(match: match, user: current_user, group_scores: group_scores)
+        synced_tournament = @group.tournament
+        render json: match, include: %w[match_scores.team group], status: :created
+      else
+        render json: match.errors, status: :unprocessable_content
+        raise ActiveRecord::Rollback
+      end
     end
+
+    push_sync_if_needed!(synced_tournament) unless synced_tournament.nil?
+    TournamentLiveBroadcast.call(synced_tournament.id) unless synced_tournament.nil?
   end
 
   # PATCH/PUT /matches/1
   def update
     new_state = match_params['state']
     synced_tournament = nil
+    @transaction_log_group_scores = []
+    @transaction_log_advanced_match_ids = []
 
     Match.transaction do
-      if @match.update(match_params)
-        handle_match_end if new_state == 'finished'
-        handle_match_stop if new_state == 'not_started'
-        update_group_scores if @match.group_match? && %w[in_progress not_started].include?(new_state)
-
-        render json: @match
-        synced_tournament = @match.tournament
-      else
-        render json: @match.errors, status: :unprocessable_content
-        raise ActiveRecord::Rollback
-      end
+      synced_tournament = update_match_inside_transaction(new_state)
     end
     push_sync_if_needed!(synced_tournament) unless synced_tournament.nil?
     TournamentLiveBroadcast.call(synced_tournament.id) unless synced_tournament.nil?
@@ -92,9 +96,9 @@ class MatchesController < ApplicationController
       unless UpdateGroupsGroupScoresAndSave.call(group: group).success?
         logger.warn "Updating groups group score failed for #{group}"
       end
+      @transaction_log_group_scores = group_scores_for_log(group)
+      return
     end
-
-    return if @match.group_match?
 
     if @match.winner.nil?
       render json: { error: 'Stopping undecided Matches isn\'t allowed in playoff stage' },
@@ -102,7 +106,11 @@ class MatchesController < ApplicationController
       raise ActiveRecord::Rollback
     end
 
-    return if PopulateMatchBelowAndSave.call(match: @match).success?
+    result = PopulateMatchBelowAndSave.call(match: @match)
+    if result.success?
+      @transaction_log_advanced_match_ids = advanced_match_ids_for(result)
+      return
+    end
 
     render json: { error: 'Moving Team one stage down failed' },
            status: :unprocessable_content
@@ -117,25 +125,60 @@ class MatchesController < ApplicationController
 
   def update_group_scores
     group = @match.group
-    return if UpdateGroupsGroupScoresAndSave.call(group: group).success?
+    if UpdateGroupsGroupScoresAndSave.call(group: group).success?
+      @transaction_log_group_scores = group_scores_for_log(group)
+      return
+    end
 
     logger.warn "Updating groups group score failed for #{group}"
   end
 
-  def validate_params
-    case match_params['state']
-    when 'in_progress'
-      render json: { error: 'Match can\'t start in this state' }, status: :unprocessable_content \
-        unless @match.not_started?
-    when 'finished'
-      render json: { error: 'Match can\'t finish in this state' }, status: :unprocessable_content \
-        unless @match.in_progress?
-    when 'not_started'
-      render json: { error: 'Match can\'t stop in this state' }, status: :unprocessable_content \
-        unless @match.in_progress?
+  def update_match_inside_transaction(new_state)
+    tournament = @match.tournament
+    TournamentTransactionLogger.lock_tournament!(tournament)
+    @match.reload
+    validate_transition_inside_transaction(new_state)
+
+    old_state = @match.state
+    if @match.update(match_params)
+      record_successful_match_update(old_state, new_state)
+      render json: @match
+      tournament
     else
-      render json: { error: 'Invalid target state' }, status: :unprocessable_content
+      render json: @match.errors, status: :unprocessable_content
+      raise ActiveRecord::Rollback
     end
+  end
+
+  def validate_transition_inside_transaction(new_state)
+    transition_error = match_transition_error(@match, new_state)
+    return if transition_error.nil?
+
+    render json: { error: transition_error }, status: :unprocessable_content
+    raise ActiveRecord::Rollback
+  end
+
+  def record_successful_match_update(old_state, new_state)
+    handle_match_end if new_state == 'finished'
+    handle_match_stop if new_state == 'not_started'
+    update_group_scores if @match.group_match? && %w[in_progress not_started].include?(new_state)
+    TournamentTransactionLogger.record_match_state_change!(
+      match: @match,
+      user: current_user,
+      old_state: old_state,
+      new_state: new_state,
+      details: {
+        group_scores: @transaction_log_group_scores,
+        advanced_match_ids: @transaction_log_advanced_match_ids
+      }
+    )
+  end
+
+  def validate_params
+    transition_error = match_transition_error(@match, match_params['state'])
+    return if transition_error.nil?
+
+    render json: { error: transition_error }, status: :unprocessable_content
   end
 
   def set_match
@@ -184,6 +227,27 @@ class MatchesController < ApplicationController
         match.errors.add(:team_ids, 'must contain exactly two teams from this group')
       end
     end
+  end
+
+  def match_transition_error(match, new_state)
+    case new_state
+    when 'in_progress'
+      'Match can\'t start in this state' unless match.not_started?
+    when 'finished'
+      'Match can\'t finish in this state' unless match.in_progress?
+    when 'not_started'
+      'Match can\'t stop in this state' unless match.in_progress?
+    else
+      'Invalid target state'
+    end
+  end
+
+  def group_scores_for_log(group)
+    group.group_scores.includes(:team).reload
+  end
+
+  def advanced_match_ids_for(result)
+    Array(result.object_to_save).flatten.grep(Match).reject { |match| match.id == @match.id }.map(&:id)
   end
 
   def push_sync_if_needed!(tournament)

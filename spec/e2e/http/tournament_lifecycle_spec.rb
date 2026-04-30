@@ -129,4 +129,21 @@ RSpec.describe 'Tournament lifecycle HTTP E2E' do
       expect(final_stage[:match_states]).to eq(team_count > 3 ? %w[finished finished] : ['finished'])
     end
   end
+
+  it 'records ordered owner-readable transaction history over HTTP' do
+    result = runner.run_transaction_log_history
+    log = result.dig(:checkpoints, :transaction_log)
+
+    expect(log.fetch(:sequences)).to eq((1..log.fetch(:sequences).count).to_a)
+    expect(log.fetch(:actions)).to include(
+      'tournament.created',
+      'match.state_changed',
+      'match_score.updated',
+      'playoffs.start_failed',
+      'decider_match.created',
+      'playoffs.started'
+    )
+    expect(log.fetch(:messages).join("\n")).to include('failed because decider missing')
+    expect(log.fetch(:messages).join("\n")).to include('started playoffs, advancing teams:')
+  end
 end

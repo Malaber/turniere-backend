@@ -97,6 +97,13 @@ RSpec.describe StagesController, type: :controller do
           tournament = running_group_stage.tournament.reload
           expect(tournament.team_action_lists).to be_empty
         end
+
+        it 'writes a transaction log entry for starting playoffs' do
+          entry = running_group_stage.tournament.transaction_log_entries.last
+          expect(entry.action).to eq('playoffs.started')
+          expect(entry.message).to include('started playoffs')
+          expect(entry.metadata['advancing_team_ids']).to match_array(GroupStageService.get_advancing_teams(running_group_stage).map(&:id))
+        end
       end
 
       context 'as another user' do
@@ -205,6 +212,13 @@ RSpec.describe StagesController, type: :controller do
         expect(body[:error]).to eq('Playoffs cannot be generated yet because a decider match is required for an advancing place')
         expect(body[:blocking_ties].size).to eq(1)
         expect(body[:blocking_ties].first[:team_names]).to eq(%w[A B])
+      end
+
+      it 'writes a failed playoff start transaction log entry' do
+        entry = group_stage.tournament.transaction_log_entries.last
+        expect(entry.action).to eq('playoffs.start_failed')
+        expect(entry.message).to include('failed because decider missing')
+        expect(entry.metadata['reason']).to eq('decider_missing')
       end
     end
 

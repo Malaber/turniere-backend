@@ -65,6 +65,7 @@ class TournamentsController < ApplicationController
 
     if tournament.read_only_mode?
       if tournament.save
+        TournamentTransactionLogger.record_tournament_created!(tournament: tournament, user: current_user)
         render json: tournament, status: :created, location: tournament
       else
         render json: tournament.errors, status: :unprocessable_content
@@ -95,6 +96,7 @@ class TournamentsController < ApplicationController
     end
     # return appropriate result
     if result.success?
+      TournamentTransactionLogger.record_tournament_created!(tournament: result.tournament, user: current_user)
       render json: result.tournament, status: :created, location: result.tournament
     else
       render json: { error: 'Tournament generation failed' }, status: :unprocessable_content
@@ -135,12 +137,29 @@ class TournamentsController < ApplicationController
 
   # PATCH /tournaments/:id/timer
   def set_timer
-    if @tournament.update(timer_params)
-      push_sync_if_needed!(@tournament)
-      render json: @tournament
-    else
-      render json: @tournament.errors, status: :unprocessable_content
+    synced_tournament = nil
+
+    Tournament.transaction do
+      TournamentTransactionLogger.lock_tournament!(@tournament)
+      @tournament.reload
+      old_timer = serialize_timer_state(@tournament)
+
+      if @tournament.update(timer_params)
+        TournamentTransactionLogger.record_timer_changed!(
+          tournament: @tournament,
+          user: current_user,
+          old_timer: old_timer,
+          new_timer: serialize_timer_state(@tournament)
+        )
+        synced_tournament = @tournament
+        render json: @tournament
+      else
+        render json: @tournament.errors, status: :unprocessable_content
+        raise ActiveRecord::Rollback
+      end
     end
+
+    push_sync_if_needed!(synced_tournament) unless synced_tournament.nil?
   end
 
   def sync_state
@@ -170,7 +189,7 @@ class TournamentsController < ApplicationController
 
   # PATCH /tournaments/:id/start_next_group_matches
   def start_next_group_matches
-    started_matches = TournamentGroupMatchStarter.start_next!(@tournament, logger:)
+    started_matches = TournamentGroupMatchStarter.start_next!(@tournament, logger:, user: current_user)
     if started_matches.any?
       push_sync_if_needed!(@tournament)
       TournamentLiveBroadcast.call(@tournament.id)

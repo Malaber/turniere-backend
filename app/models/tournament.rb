@@ -12,6 +12,7 @@ class Tournament < ApplicationRecord
   has_many :stages, dependent: :destroy
   has_many :beamers, dependent: :destroy
   has_many :team_action_lists, dependent: :destroy
+  has_many :transaction_log_entries, class_name: 'TournamentTransactionLogEntry', dependent: :destroy
 
   validates :name, presence: true
   validates :code, presence: true, uniqueness: true

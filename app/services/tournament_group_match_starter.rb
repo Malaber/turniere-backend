@@ -10,13 +10,19 @@ class TournamentGroupMatchStarter
       selected_lowest_matches(group_matches, lowest_position)
     end
 
-    def start_next!(tournament, logger: Rails.logger)
+    def start_next!(tournament, logger: Rails.logger, user: nil)
       started_matches = []
 
       Match.transaction do
+        TournamentTransactionLogger.lock_tournament!(tournament)
         started_matches = upcoming_matches(tournament)
         started_matches.each { |match| match.update!(state: :in_progress) }
         recalculate_group_scores!(started_matches, logger:)
+        TournamentTransactionLogger.record_group_matches_started!(
+          tournament: tournament,
+          user: user,
+          matches: started_matches
+        )
       end
 
       started_matches
