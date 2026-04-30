@@ -81,7 +81,7 @@ COPY config/environments/production.rb /app/config/environments/beta.rb
 
 EXPOSE 3000
 
-CMD ["sh", "-lc", "bundle exec rails db:migrate && bundle exec rails s -p 3000 -b 0.0.0.0"]
+CMD ["sh", "-lc", "bundle exec rails db:migrate && bundle exec rails s -b 0.0.0.0"]
 
 FROM runtime-base AS test
 

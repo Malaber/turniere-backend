@@ -57,13 +57,15 @@ rails e2e spec:
       alias: app
       variables:
         TURNIERE_DISABLE_EMAIL_DELIVERY: "1"
+        WEB_CONCURRENCY: "2"
+        RAILS_MAX_THREADS: "5"
+        RAILS_DB_POOL: "5"
+        SIDEKIQ_CONCURRENCY: "5"
       command:
         - bundle
         - exec
         - rails
         - s
-        - -p
-        - "3000"
         - -b
         - 0.0.0.0
   variables:
@@ -71,6 +73,7 @@ rails e2e spec:
     POSTGRES_DB: turniere_blackbox
     POSTGRES_USER: turniere
     POSTGRES_PASSWORD: turniere
+    DATABASE_URL: postgres://turniere:turniere@postgres:5432/turniere_blackbox
     POSTGRES_URL: postgres://turniere:turniere@postgres:5432/turniere_blackbox
     POSTGRES_USERNAME: turniere
     SECRET_KEY_BASE: turniere-blackbox-secret-key-base-please-change-in-real-prod
@@ -112,13 +115,15 @@ rails load smoke:
       alias: app
       variables:
         TURNIERE_DISABLE_EMAIL_DELIVERY: "1"
+        WEB_CONCURRENCY: "2"
+        RAILS_MAX_THREADS: "5"
+        RAILS_DB_POOL: "5"
+        SIDEKIQ_CONCURRENCY: "5"
       command:
         - bundle
         - exec
         - rails
         - s
-        - -p
-        - "3000"
         - -b
         - 0.0.0.0
   variables:
@@ -126,6 +131,7 @@ rails load smoke:
     POSTGRES_DB: turniere_blackbox
     POSTGRES_USER: turniere
     POSTGRES_PASSWORD: turniere
+    DATABASE_URL: postgres://turniere:turniere@postgres:5432/turniere_blackbox
     POSTGRES_URL: postgres://turniere:turniere@postgres:5432/turniere_blackbox
     POSTGRES_USERNAME: turniere
     SECRET_KEY_BASE: turniere-blackbox-secret-key-base-please-change-in-real-prod
@@ -181,6 +187,7 @@ rails follow sync e2e spec:
     - name: $CI_REGISTRY_IMAGE/production/commits:$CI_COMMIT_SHA
       alias: source-app
       variables:
+        DATABASE_URL: postgres://turniere:turniere@source-postgres:5432/turniere_source_blackbox
         POSTGRES_URL: postgres://turniere:turniere@source-postgres:5432/turniere_source_blackbox
         POSTGRES_USERNAME: turniere
         POSTGRES_PASSWORD: turniere
@@ -193,18 +200,21 @@ rails follow sync e2e spec:
         no_proxy: source-app,follower-app,source-postgres,follower-postgres,localhost,127.0.0.1
         RAILS_LOG_TO_STDOUT: "1"
         RAILS_SERVE_STATIC_FILES: "1"
+        WEB_CONCURRENCY: "2"
+        RAILS_MAX_THREADS: "5"
+        RAILS_DB_POOL: "5"
+        SIDEKIQ_CONCURRENCY: "5"
       command:
         - bundle
         - exec
         - rails
         - s
-        - -p
-        - "3000"
         - -b
         - 0.0.0.0
     - name: $CI_REGISTRY_IMAGE/production/commits:$CI_COMMIT_SHA
       alias: follower-app
       variables:
+        DATABASE_URL: postgres://turniere:turniere@follower-postgres:5432/turniere_follower_blackbox
         POSTGRES_URL: postgres://turniere:turniere@follower-postgres:5432/turniere_follower_blackbox
         POSTGRES_USERNAME: turniere
         POSTGRES_PASSWORD: turniere
@@ -217,13 +227,15 @@ rails follow sync e2e spec:
         no_proxy: source-app,follower-app,source-postgres,follower-postgres,localhost,127.0.0.1
         RAILS_LOG_TO_STDOUT: "1"
         RAILS_SERVE_STATIC_FILES: "1"
+        WEB_CONCURRENCY: "2"
+        RAILS_MAX_THREADS: "5"
+        RAILS_DB_POOL: "5"
+        SIDEKIQ_CONCURRENCY: "5"
       command:
         - bundle
         - exec
         - rails
         - s
-        - -p
-        - "3000"
         - -b
         - 0.0.0.0
   variables:
