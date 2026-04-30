@@ -43,6 +43,40 @@ RSpec.describe Tournament, type: :model do
     end
   end
 
+  describe 'sync auth token protection' do
+    it 'stores follower receiver tokens only as a digest' do
+      tournament = create(:tournament, read_only_mode: true, sync_auth_token: 'shared-secret')
+
+      expect(tournament.sync_auth_token).to be_nil
+      expect(tournament.sync_auth_token_digest).to be_present
+      expect(tournament.sync_token_matches?('shared-secret')).to eq(true)
+      expect(tournament.sync_token_matches?('wrong-secret')).to eq(false)
+      expect(tournament.sync_accepts_push?).to eq(true)
+    end
+
+    it 'keeps leader push token available for outbound sync' do
+      tournament = create(
+        :tournament,
+        sync_target_url: 'https://remote.example.com/tournaments/1/sync_state',
+        sync_auth_token: 'shared-secret'
+      )
+
+      expect(tournament.sync_auth_token).to eq('shared-secret')
+      expect(tournament.sync_auth_token_digest).to be_nil
+      expect(tournament.sync_push_enabled?).to eq(true)
+    end
+
+    it 'clears follower token digest on takeover' do
+      tournament = create(:tournament, read_only_mode: true, sync_auth_token: 'shared-secret')
+
+      tournament.update!(read_only_mode: false)
+
+      expect(tournament.sync_auth_token).to be_nil
+      expect(tournament.sync_auth_token_digest).to be_nil
+      expect(tournament.sync_auth_configured?).to eq(false)
+    end
+  end
+
   describe '#matches' do
     context 'group stage tournament' do
       before do

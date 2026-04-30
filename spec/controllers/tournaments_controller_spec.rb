@@ -150,9 +150,11 @@ RSpec.describe TournamentsController, type: :controller do
       json = deserialize_response(response)
       expect(json[:read_only_mode]).to eq(true)
       expect(json[:sync_target_url]).to eq('https://remote.example.com/tournaments/1/sync_state')
+      expect(json[:sync_auth_configured]).to eq(true)
       expect(json[:sync_last_pushed_at]).to eq(pushed_at.iso8601)
       expect(json[:sync_last_push_error]).to eq('push failed')
       expect(json).not_to have_key(:sync_auth_token)
+      expect(json).not_to have_key(:sync_auth_token_digest)
       expect(json).to eq(TournamentSerializer.new(@tournament, scope: @tournament.owner).as_json)
     end
 
@@ -389,8 +391,12 @@ RSpec.describe TournamentsController, type: :controller do
           expect(response).to have_http_status(:created)
           tournament = Tournament.find(deserialize_response(response)[:id])
           expect(tournament.read_only_mode?).to eq(true)
+          expect(tournament.sync_auth_token).to be_nil
+          expect(tournament.sync_auth_token_digest).to be_present
           expect(tournament.teams).to be_empty
           expect(tournament.stages).to be_empty
+          expect(deserialize_response(response)).not_to have_key(:sync_auth_token)
+          expect(deserialize_response(response)).not_to have_key(:sync_auth_token_digest)
         end
       end
 
@@ -602,6 +608,9 @@ RSpec.describe TournamentsController, type: :controller do
           expect(@tournament.read_only_mode?).to eq(false)
           expect(@tournament.sync_target_url).to include('/sync_state')
           expect(@tournament.sync_auth_token).to eq('new-token')
+          expect(@tournament.sync_auth_token_digest).to be_nil
+          expect(deserialize_response(response)).not_to have_key(:sync_auth_token)
+          expect(deserialize_response(response)).not_to have_key(:sync_auth_token_digest)
         end
 
         it 'allows follower takeover when only read_only_mode is disabled' do
@@ -618,6 +627,7 @@ RSpec.describe TournamentsController, type: :controller do
           expect(@tournament.read_only_mode?).to eq(false)
           expect(@tournament.sync_target_url).to be_blank
           expect(@tournament.sync_auth_token).to be_blank
+          expect(@tournament.sync_auth_token_digest).to be_blank
         end
 
         it 'blocks normal updates while tournament is read only' do
@@ -818,6 +828,8 @@ RSpec.describe TournamentsController, type: :controller do
       expect(@tournament.sync_source_tournament_id).to eq(123)
       expect(@tournament.name).to eq('Synced Tournament')
       expect(@tournament.teams.pluck(:name)).to eq(['Alpha'])
+      expect(deserialize_response(response)).not_to have_key(:sync_auth_token)
+      expect(deserialize_response(response)).not_to have_key(:sync_auth_token_digest)
     end
 
     it 'rejects invalid tokens' do
@@ -857,6 +869,9 @@ RSpec.describe TournamentsController, type: :controller do
       expect(json[:id]).to eq(@tournament.id)
       expect(json[:sync_last_pushed_at]).to eq(pushed_at.iso8601)
       expect(json[:sync_last_push_error]).to be_nil
+      expect(json[:sync_auth_configured]).to eq(true)
+      expect(json).not_to have_key(:sync_auth_token)
+      expect(json).not_to have_key(:sync_auth_token_digest)
       expect(TournamentSyncPusher).to have_received(:push!).with(@tournament)
     end
 

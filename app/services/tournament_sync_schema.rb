@@ -24,6 +24,7 @@ class TournamentSyncSchema
         read_only_mode
         sync_target_url
         sync_auth_token
+        sync_auth_token_digest
         sync_source_tournament_id
         sync_last_pushed_at
         sync_last_push_error

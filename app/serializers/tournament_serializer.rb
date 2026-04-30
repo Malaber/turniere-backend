@@ -5,6 +5,7 @@ class TournamentSerializer < SimpleTournamentSerializer
              :instant_finalists_amount, :intermediate_round_participants_amount
   attribute :read_only_mode, if: :sync_metadata_visible?
   attribute :sync_target_url, if: :sync_metadata_visible?
+  attribute :sync_auth_configured, if: :sync_metadata_visible?
   attribute :sync_last_push_error, if: :sync_metadata_visible?
              # NEVER expose sync_auth_token anywhere - it should only ever be written to or checked against
 
@@ -40,5 +41,9 @@ class TournamentSerializer < SimpleTournamentSerializer
 
   def sync_metadata_visible?
     scope.present? && scope == object.owner
+  end
+
+  def sync_auth_configured
+    object.sync_auth_configured?
   end
 end
