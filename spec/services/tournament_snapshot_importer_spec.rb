@@ -7,6 +7,10 @@ RSpec.describe TournamentSnapshotImporter do
     it 'replaces follower tournament graph using source ids as stable mapping keys' do
       source = create(:group_stage_tournament, group_count: 2, match_factory: :filled_group_match)
       source.update!(
+        location: 'Court 4',
+        starts_at: Time.utc(2026, 4, 24, 9, 0, 0),
+        ends_at: Time.utc(2026, 4, 24, 18, 30, 0),
+        website_url: 'https://example.com/sync-cup',
         timestamp: Time.utc(2026, 4, 24, 10, 15, 0),
         timer_mode: 'countdown',
         timer_reason: 'custom',
@@ -33,6 +37,10 @@ RSpec.describe TournamentSnapshotImporter do
       follower.reload
       expect(follower.sync_source_tournament_id).to eq(source.id)
       expect(follower.name).to eq(source.name)
+      expect(follower.location).to eq(source.location)
+      expect(follower.starts_at).to eq(source.starts_at)
+      expect(follower.ends_at).to eq(source.ends_at)
+      expect(follower.website_url).to eq(source.website_url)
       expect(follower.timer_mode).to eq(source.timer_mode)
       expect(follower.timer_reason).to eq(source.timer_reason)
       expect(follower.timer_reason_text).to eq(source.timer_reason_text)
@@ -212,6 +220,10 @@ RSpec.describe TournamentSnapshotImporter do
     {
       name: tournament.name,
       public: tournament.public,
+      location: tournament.location,
+      starts_at: tournament.starts_at&.iso8601,
+      ends_at: tournament.ends_at&.iso8601,
+      website_url: tournament.website_url,
       playoff_teams_amount: tournament.playoff_teams_amount,
       instant_finalists_amount: tournament.instant_finalists_amount,
       intermediate_round_participants_amount: tournament.intermediate_round_participants_amount,
