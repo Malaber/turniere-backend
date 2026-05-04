@@ -15,5 +15,9 @@ RSpec.describe MatchesController, type: :routing do
     it 'routes to #swap' do
       expect(patch: '/matches/1/swap').to route_to('matches#swap', id: '1')
     end
+
+    it 'routes nested tournament match metadata updates' do
+      expect(patch: '/tournaments/1/matches/metadata').to route_to('matches#metadata', tournament_id: '1')
+    end
   end
 end

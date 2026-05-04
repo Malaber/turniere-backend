@@ -25,7 +25,11 @@ Rails.application.routes.draw do
     resources :team_action_lists, only: %i[create]
     patch 'team_action_lists/:key/teams/:team_id', to: 'team_action_lists#update_item'
     resources :statistics, only: %i[index]
-    resources :matches, only: %i[index]
+    resources :matches, only: %i[index] do
+      collection do
+        patch :metadata
+      end
+    end
     resources :beamers, only: %i[index show create update destroy] do
       collection do
         get :by_name
@@ -38,6 +42,7 @@ Rails.application.routes.draw do
       patch :sync_state
       patch :start_next_group_matches
       post :test_sync
+      delete :playoffs, action: :destroy_playoffs
     end
   end
   resources :match_scores, only: %i[show update]

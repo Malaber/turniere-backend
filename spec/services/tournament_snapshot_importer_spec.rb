@@ -7,10 +7,19 @@ RSpec.describe TournamentSnapshotImporter do
     it 'replaces follower tournament graph using source ids as stable mapping keys' do
       source = create(:group_stage_tournament, group_count: 2, match_factory: :filled_group_match)
       source.update!(
+        location: 'Court 4',
+        starts_at: Time.utc(2026, 4, 24, 9, 0, 0),
+        ends_at: Time.utc(2026, 4, 24, 18, 30, 0),
+        website_url: 'https://example.com/sync-cup',
         timestamp: Time.utc(2026, 4, 24, 10, 15, 0),
         timer_mode: 'countdown',
         timer_reason: 'custom',
         timer_reason_text: 'Opening ceremony'
+      )
+      source.matches.first.update!(
+        location: 'Main Hall',
+        start_time: '17:00',
+        notes: 'Opening match'
       )
       source.beamers.create!(
         name: 'stream-a',
@@ -28,6 +37,10 @@ RSpec.describe TournamentSnapshotImporter do
       follower.reload
       expect(follower.sync_source_tournament_id).to eq(source.id)
       expect(follower.name).to eq(source.name)
+      expect(follower.location).to eq(source.location)
+      expect(follower.starts_at).to eq(source.starts_at)
+      expect(follower.ends_at).to eq(source.ends_at)
+      expect(follower.website_url).to eq(source.website_url)
       expect(follower.timer_mode).to eq(source.timer_mode)
       expect(follower.timer_reason).to eq(source.timer_reason)
       expect(follower.timer_reason_text).to eq(source.timer_reason_text)
@@ -37,6 +50,11 @@ RSpec.describe TournamentSnapshotImporter do
       expect(follower.team_action_lists.first.team_action_items.count).to eq(snapshot.fetch(:team_action_items).count)
       expect(follower.stages.count).to eq(source.stages.count)
       expect(follower.matches.count).to eq(source.matches.count)
+      expect(follower.matches.find { |match| match.sync_source_id == source.matches.first.id }).to have_attributes(
+        location: 'Main Hall',
+        start_time: '17:00',
+        notes: 'Opening match'
+      )
       expect(follower.teams.pluck(:sync_source_id)).to match_array(snapshot.fetch(:teams).map { |team| team.fetch(:id) })
       expect(follower.beamers.pluck(:sync_source_id)).to match_array(snapshot.fetch(:beamers).map { |beamer| beamer.fetch(:id) })
     end
@@ -136,6 +154,11 @@ RSpec.describe TournamentSnapshotImporter do
 
     tournament.reload
     play_some_playoff_matches!(tournament)
+    tournament.matches.min_by(&:id).update!(
+      location: 'Feature Court',
+      start_time: '18:30',
+      notes: 'Follower sync metadata fixture'
+    )
     tournament.update!(
       timestamp: Time.utc(2026, 4, 24, 10, 15, 0),
       timer_mode: 'countdown',
@@ -197,6 +220,10 @@ RSpec.describe TournamentSnapshotImporter do
     {
       name: tournament.name,
       public: tournament.public,
+      location: tournament.location,
+      starts_at: tournament.starts_at&.iso8601,
+      ends_at: tournament.ends_at&.iso8601,
+      website_url: tournament.website_url,
       playoff_teams_amount: tournament.playoff_teams_amount,
       instant_finalists_amount: tournament.instant_finalists_amount,
       intermediate_round_participants_amount: tournament.intermediate_round_participants_amount,
@@ -254,6 +281,9 @@ RSpec.describe TournamentSnapshotImporter do
       state: match.state,
       position: match.position,
       decider: match.decider,
+      location: match.location,
+      start_time: match.start_time,
+      notes: match.notes,
       scores: match.match_scores.includes(:team).sort_by { |score| score.team.name }.map do |score|
         {
           team_name: score.team.name,

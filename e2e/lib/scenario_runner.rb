@@ -109,6 +109,43 @@ module TurniereE2E
       result(session: session, tournament: tournament, checkpoints: checkpoints, stop_at: stop_at)
     end
 
+    def run_group_stage_playoff_recreation(stop_at: :third_playoffs_created)
+      session = register_session!
+      tournament = create_tournament!(
+        create_group_stage_payload(group_count: 2, teams_per_group: 2, playoff_teams_amount: 2)
+      )
+
+      checkpoints = {
+        created: summarize_tournament(tournament)
+      }
+      rounds = playoff_recreation_rounds
+      created_keys = %i[first_playoffs_created second_playoffs_created third_playoffs_created]
+      deleted_keys = %i[first_playoffs_deleted second_playoffs_deleted]
+
+      rounds.each_with_index do |round, index|
+        tournament = fetch_tournament!(tournament.fetch(:id))
+        apply_group_score_round!(tournament, round.fetch(:scores_by_team_name))
+        finish_stage!(group_stage_of!(fetch_tournament!(tournament.fetch(:id))).fetch(:id))
+        tournament = fetch_tournament!(tournament.fetch(:id))
+
+        created_key = created_keys.fetch(index)
+        checkpoints[created_key] = summarize_tournament(tournament).merge(
+          playoff_matchups: playoff_matchups(tournament)
+        )
+        return result(session: session, tournament: tournament, checkpoints: checkpoints, stop_at: stop_at) if stop_at == created_key
+
+        next if index == rounds.size - 1
+
+        delete_playoffs!(tournament.fetch(:id))
+        tournament = fetch_tournament!(tournament.fetch(:id))
+        deleted_key = deleted_keys.fetch(index)
+        checkpoints[deleted_key] = summarize_tournament(tournament)
+        return result(session: session, tournament: tournament, checkpoints: checkpoints, stop_at: stop_at) if stop_at == deleted_key
+      end
+
+      result(session: session, tournament: tournament, checkpoints: checkpoints, stop_at: stop_at)
+    end
+
     def run_playoff_only(team_count:, stop_at: :completed)
       session = register_session!
       tournament = create_tournament!(create_playoff_only_payload(team_count: team_count))
@@ -433,6 +470,12 @@ module TurniereE2E
       response.fetch(:json)
     end
 
+    def delete_playoffs!(tournament_id)
+      response = client.delete("/tournaments/#{tournament_id}/playoffs")
+      expect_status!(response, 200, "delete playoffs for tournament #{tournament_id}")
+      response.fetch(:json)
+    end
+
     def group_stage_of!(tournament)
       tournament.fetch(:stages).find { |stage| stage.fetch(:level) == -1 } || raise('group stage not found')
     end
@@ -487,6 +530,34 @@ module TurniereE2E
       end
     end
 
+    def apply_group_score_round!(tournament, scores_by_team_name)
+      group_stage_of!(tournament).fetch(:groups).each do |group|
+        group.fetch(:matches).each do |match|
+          points_by_team_name = match.fetch(:match_scores).to_h do |score|
+            team_name = score.dig(:team, :name)
+            [team_name, scores_by_team_name.fetch(team_name)]
+          end
+
+          if match.fetch(:state) == 'not_started'
+            play_match_with_points!(match, points_by_team_name: points_by_team_name)
+          else
+            update_match_scores!(match, points_by_team_name: points_by_team_name)
+          end
+        end
+      end
+    end
+
+    def update_match_scores!(match, points_by_team_name:)
+      refreshed_match = fetch_match!(match.fetch(:id))
+      refreshed_match.fetch(:match_scores).each do |score|
+        team_name = score.dig(:team, :name)
+        updated_score = client.patch("/match_scores/#{score.fetch(:id)}", body: {
+                                       points: points_by_team_name.fetch(team_name)
+                                     })
+        expect_status!(updated_score, 200, "update match_score #{score.fetch(:id)}")
+      end
+    end
+
     def preferred_playoff_winner_name(match)
       match.fetch(:match_scores)
            .map { |score| score.dig(:team, :name) }
@@ -519,6 +590,35 @@ module TurniereE2E
         playoff_teams_amount: playoff_teams_amount,
         teams: teams
       }
+    end
+
+    def playoff_recreation_rounds
+      [
+        {
+          scores_by_team_name: {
+            'G1-S1' => 3,
+            'G1-S2' => 1,
+            'G2-S1' => 3,
+            'G2-S2' => 1
+          }
+        },
+        {
+          scores_by_team_name: {
+            'G1-S1' => 0,
+            'G1-S2' => 4,
+            'G2-S1' => 0,
+            'G2-S2' => 4
+          }
+        },
+        {
+          scores_by_team_name: {
+            'G1-S1' => 5,
+            'G1-S2' => 2,
+            'G2-S1' => 2,
+            'G2-S2' => 5
+          }
+        }
+      ]
     end
 
     def create_playoff_only_payload(team_count:)
@@ -609,6 +709,19 @@ module TurniereE2E
           }
         end
       }
+    end
+
+    def playoff_matchups(tournament)
+      entry_stage = tournament.fetch(:stages)
+                              .reject { |stage| stage.fetch(:level) == -1 }
+                              .max_by { |stage| stage.fetch(:level) }
+      entry_stage.fetch(:matches)
+                 .sort_by { |match| match.fetch(:position) }
+                 .map do |match|
+        match.fetch(:match_scores)
+             .map { |score| score.dig(:team, :name) }
+             .sort
+      end
     end
 
     def fetch_tournament_profile!(tournament_id)

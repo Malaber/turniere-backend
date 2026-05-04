@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class LiveMatchSerializer < ApplicationSerializer
-  attributes :position, :state, :teams, :group, :stage
+  attributes :position, :state, :location, :start_time, :notes, :teams, :group, :stage
 
   has_many :match_scores
 

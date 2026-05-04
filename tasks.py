@@ -758,9 +758,10 @@ def start_test_local(
 
 
 @task
-def test(c):
-    """Run the normal RSpec suite."""
-    _stream_subprocess(_rspec_command(), env=_env())
+def test(c, spec=""):
+    """Run the normal RSpec suite, or one or more spec files via --spec."""
+    spec_paths = shlex.split(spec) if spec else []
+    _stream_subprocess(_rspec_command(*spec_paths), env=_env())
 
 
 @task(name="test-shard")
@@ -1038,6 +1039,28 @@ def scenario_intermediate(
     """Materialize the 3-group intermediate-round scenario over HTTP."""
     c.run(
         f"ruby script/e2e_scenarios.rb group_stage_intermediate_round --stop-at {stop_at}",
+        env=_env(
+            TURNIERE_E2E_BASE_URL=base_url,
+            TURNIERE_E2E_EMAIL=email,
+            TURNIERE_E2E_PASSWORD=password,
+            TURNIERE_E2E_USERNAME=username,
+        ),
+        pty=True,
+    )
+
+
+@task(name="scenario-playoff-recreation")
+def scenario_playoff_recreation(
+    c,
+    base_url=TEST_BASE_URL,
+    email=E2E_EMAIL,
+    password=E2E_PASSWORD,
+    username=E2E_USERNAME,
+    stop_at="third_playoffs_created",
+):
+    """Materialize a group-stage playoff delete/recreate scenario over HTTP."""
+    c.run(
+        f"ruby script/e2e_scenarios.rb group_stage_playoff_recreation --stop-at {stop_at}",
         env=_env(
             TURNIERE_E2E_BASE_URL=base_url,
             TURNIERE_E2E_EMAIL=email,
