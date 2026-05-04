@@ -47,7 +47,7 @@ RSpec.describe MatchesController, type: :controller do
         get :index, params: { tournament_id: @tournament.to_param }
         match = deserialize_response(response).first
 
-        expect(match.keys).to match_array(%i[id position state teams match_scores group stage])
+        expect(match.keys).to match_array(%i[id position state location start_time notes teams match_scores group stage])
         expect(match[:teams]).to all(include(:id, :name))
       end
 
@@ -196,6 +196,102 @@ RSpec.describe MatchesController, type: :controller do
     end
   end
 
+  describe 'PATCH #metadata' do
+    let(:group_stage_tournament) { create(:group_stage_tournament, group_count: 2, match_factory: :filled_group_match) }
+
+    context 'as owner' do
+      before do
+        apply_authentication_headers_for group_stage_tournament.owner
+        allow(TournamentSyncEnqueue).to receive(:call)
+        allow(TournamentLiveBroadcast).to receive(:call)
+      end
+
+      it 'updates selected matches by explicit ids' do
+        selected_matches = group_stage_tournament.matches.first(2)
+
+        patch :metadata, params: {
+          tournament_id: group_stage_tournament.to_param,
+          match_ids: selected_matches.map(&:id),
+          location: 'Court A',
+          start_time: '17:00',
+          notes: 'Bring player cards'
+        }
+
+        expect(response).to be_successful
+        expect(selected_matches.map { |match| match.reload.location }).to all(eq('Court A'))
+        expect(selected_matches.map { |match| match.reload.start_time }).to all(eq('17:00'))
+        expect(selected_matches.map { |match| match.reload.notes }).to all(eq('Bring player cards'))
+        expect(deserialize_response(response).map { |match| match[:id] }).to eq(selected_matches.map(&:id))
+        expect(TournamentSyncEnqueue).to have_received(:call).with(group_stage_tournament)
+        expect(TournamentLiveBroadcast).to have_received(:call).with(group_stage_tournament.id)
+      end
+
+      it 'updates group stage matches by position filter' do
+        patch :metadata, params: {
+          tournament_id: group_stage_tournament.to_param,
+          group_stage_position: 1,
+          start_time: '18:00'
+        }
+
+        expect(response).to be_successful
+        group_stage_tournament.matches.each do |match|
+          expected_start_time = match.group_match? && match.position == 1 ? '18:00' : nil
+          expect(match.reload.start_time).to eq(expected_start_time)
+        end
+      end
+
+      it 'updates playoff matches by stage level filter' do
+        playoff_tournament = create(:stage_tournament, stage_count: 3, user: group_stage_tournament.owner)
+        target_stage = playoff_tournament.stages.find_by!(level: 3)
+
+        patch :metadata, params: {
+          tournament_id: playoff_tournament.to_param,
+          stage_level: target_stage.level,
+          start_time: '21:00'
+        }
+
+        expect(response).to be_successful
+        playoff_tournament.matches.each do |match|
+          expected_start_time = match.stage == target_stage ? '21:00' : nil
+          expect(match.reload.start_time).to eq(expected_start_time)
+        end
+      end
+
+      it 'requires a selector' do
+        patch :metadata, params: { tournament_id: group_stage_tournament.to_param, start_time: '17:00' }
+
+        expect(response).to have_http_status(:bad_request)
+        expect(deserialize_response(response)[:error]).to eq('Select matches with match_ids, filters, or all=true')
+      end
+
+      it 'rejects matches outside the tournament' do
+        other_match = create(:match)
+
+        patch :metadata, params: {
+          tournament_id: group_stage_tournament.to_param,
+          match_ids: [other_match.id],
+          start_time: '17:00'
+        }
+
+        expect(response).to have_http_status(:not_found)
+        expect(deserialize_response(response)[:error]).to eq("Matches not found in tournament: #{other_match.id}")
+      end
+
+      it 'rejects read only follower tournaments' do
+        group_stage_tournament.update!(read_only_mode: true, sync_auth_token: 'shared-secret')
+
+        patch :metadata, params: {
+          tournament_id: group_stage_tournament.to_param,
+          match_ids: [group_stage_tournament.matches.first.id],
+          start_time: '17:00'
+        }
+
+        expect(response).to have_http_status(:locked)
+        expect(deserialize_response(response)[:error]).to eq('Tournament is in read only follower mode')
+      end
+    end
+  end
+
   describe 'POST #update' do
     context 'on a running playoff match' do
       let(:valid_update) do
@@ -235,6 +331,29 @@ RSpec.describe MatchesController, type: :controller do
             expect(response).to be_successful
             body = deserialize_response response
             expect(body[:state]).to eq(valid_update[:state])
+          end
+
+          it 'updates metadata without changing match state' do
+            expect(TournamentLiveBroadcast).to receive(:call).with(@match.tournament.id)
+
+            put :update, params: {
+              id: @match.to_param,
+              location: 'Main Hall',
+              start_time: '17:00',
+              notes: 'Stream setup needed'
+            }
+
+            expect(response).to be_successful
+            @match.reload
+            expect(@match.state).to eq('not_started')
+            expect(@match.location).to eq('Main Hall')
+            expect(@match.start_time).to eq('17:00')
+            expect(@match.notes).to eq('Stream setup needed')
+            expect(deserialize_response(response)).to include(
+              location: 'Main Hall',
+              start_time: '17:00',
+              notes: 'Stream setup needed'
+            )
           end
 
           it 'writes a transaction log entry for the state change' do

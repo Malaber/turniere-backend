@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_05_04_100000) do
+ActiveRecord::Schema[8.1].define(version: 2026_05_04_101000) do
   create_table "beamers", force: :cascade do |t|
     t.json "config", default: {}, null: false
     t.datetime "created_at", null: false
@@ -74,8 +74,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_04_100000) do
     t.datetime "created_at", precision: nil, null: false
     t.boolean "decider", default: false, null: false
     t.integer "group_id"
+    t.string "location"
+    t.text "notes"
     t.integer "position"
     t.integer "stage_id"
+    t.string "start_time"
     t.integer "state", default: 0
     t.integer "sync_source_id"
     t.datetime "updated_at", precision: nil, null: false

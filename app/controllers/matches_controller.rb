@@ -7,9 +7,11 @@ class MatchesController < ApplicationController
   before_action :set_swap_target, only: %i[swap]
   before_action -> { require_owner! @match.owner }, only: %i[update swap]
   before_action -> { require_owner! @group.owner }, only: %i[create]
-  before_action :set_tournament, only: %i[index]
+  before_action :set_tournament, only: %i[index metadata]
+  before_action -> { require_owner! @tournament.owner }, only: %i[metadata]
   before_action -> { require_writable_tournament!(@match.tournament) }, only: %i[update swap]
   before_action -> { require_writable_tournament!(@group.tournament) }, only: %i[create]
+  before_action -> { require_writable_tournament!(@tournament) }, only: %i[metadata]
 
   # GET/tournaments/1/matches
   def index
@@ -61,6 +63,28 @@ class MatchesController < ApplicationController
     end
     push_sync_if_needed!(synced_tournament) unless synced_tournament.nil?
     TournamentLiveBroadcast.call(synced_tournament.id) unless synced_tournament.nil?
+  end
+
+  # PATCH /tournaments/1/matches/metadata
+  def metadata
+    attrs = match_metadata_params
+    if attrs.empty?
+      render json: { error: 'At least one metadata field is required' }, status: :bad_request
+      return
+    end
+
+    matches = bulk_metadata_matches
+    return if performed?
+
+    Match.transaction do
+      TournamentTransactionLogger.lock_tournament!(@tournament)
+      @tournament.reload
+      matches.each { |match| match.update!(attrs) }
+    end
+
+    render json: matches.map(&:reload), each_serializer: LiveMatchSerializer, include: %w[match_scores.team]
+    push_sync_if_needed!(@tournament)
+    TournamentLiveBroadcast.call(@tournament.id)
   end
 
   # PATCH /matches/1/swap
@@ -141,7 +165,7 @@ class MatchesController < ApplicationController
 
     old_state = @match.state
     if @match.update(match_params)
-      record_successful_match_update(old_state, new_state)
+      record_successful_match_update(old_state, new_state) unless new_state.nil?
       render json: @match
       tournament
     else
@@ -151,6 +175,8 @@ class MatchesController < ApplicationController
   end
 
   def validate_transition_inside_transaction(new_state)
+    return if new_state.nil?
+
     transition_error = match_transition_error(@match, new_state)
     return if transition_error.nil?
 
@@ -175,6 +201,8 @@ class MatchesController < ApplicationController
   end
 
   def validate_params
+    return unless params.key?(:state)
+
     transition_error = match_transition_error(@match, match_params['state'])
     return if transition_error.nil?
 
@@ -201,11 +229,50 @@ class MatchesController < ApplicationController
   end
 
   def match_params
-    params.slice(:state).permit!
+    params.slice(:state, :location, :start_time, :notes).permit!
   end
 
   def match_index_params
     params.slice(:state, :stage_id, :stage_level, :position, :group_stage_position).permit!
+  end
+
+  def match_metadata_params
+    params.slice(:location, :start_time, :notes).permit!
+  end
+
+  def bulk_metadata_matches
+    return bulk_metadata_matches_by_id if params.key?(:match_ids)
+
+    return @tournament.matches if ActiveModel::Type::Boolean.new.cast(params[:all])
+    return filtered_bulk_metadata_matches if match_index_params.values.any?(&:present?)
+
+    render json: { error: 'Select matches with match_ids, filters, or all=true' }, status: :bad_request
+    []
+  end
+
+  def bulk_metadata_matches_by_id
+    ids = parse_match_ids
+    return [] if performed?
+
+    matches = @tournament.matches.select { |match| ids.include?(match.id) }
+    missing_ids = ids - matches.map(&:id)
+    if missing_ids.any?
+      render json: { error: "Matches not found in tournament: #{missing_ids.join(', ')}" }, status: :not_found
+      return []
+    end
+
+    ids.map { |id| matches.find { |match| match.id == id } }
+  end
+
+  def filtered_bulk_metadata_matches
+    TournamentMatchesPayload.matches_for(@tournament, match_index_params)
+  end
+
+  def parse_match_ids
+    Array(params[:match_ids]).map { |id| Integer(id.to_s, 10) }.uniq
+  rescue ArgumentError, TypeError
+    render json: { error: 'match_ids must contain only integer ids' }, status: :bad_request
+    []
   end
 
   def create_match_params
