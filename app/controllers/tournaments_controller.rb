@@ -13,17 +13,17 @@ class TournamentsController < ApplicationController
 
   before_action :set_tournament_for_show, only: %i[show]
   before_action :set_tournament,
-                only: %i[update destroy set_timer timer sync_state test_sync start_next_group_matches]
-  before_action :authenticate_user!, only: %i[create update destroy set_timer test_sync start_next_group_matches]
+                only: %i[update destroy destroy_playoffs set_timer timer sync_state test_sync start_next_group_matches]
+  before_action :authenticate_user!, only: %i[create update destroy destroy_playoffs set_timer test_sync start_next_group_matches]
   before_action -> { require_owner! @tournament.owner },
-                only: %i[update destroy set_timer test_sync start_next_group_matches]
+                only: %i[update destroy destroy_playoffs set_timer test_sync start_next_group_matches]
   before_action :validate_create_params, only: %i[create]
   before_action :validate_update_params, only: %i[update]
   before_action :validate_set_timer_params, only: %i[set_timer]
   before_action :ensure_update_allowed!, only: %i[update]
   before_action :ensure_destroy_allowed!, only: %i[destroy]
   before_action :ensure_timer_update_allowed!, only: %i[set_timer]
-  before_action -> { require_writable_tournament!(@tournament) }, only: %i[start_next_group_matches]
+  before_action -> { require_writable_tournament!(@tournament) }, only: %i[destroy_playoffs start_next_group_matches]
   before_action :authorize_sync_request!, only: %i[sync_state]
   rescue_from ActiveRecord::RecordNotFound, with: :render_not_found_error
 
@@ -130,6 +130,30 @@ class TournamentsController < ApplicationController
     @tournament.destroy
   end
 
+  # DELETE /tournaments/:id/playoffs
+  def destroy_playoffs
+    synced_tournament = nil
+
+    Tournament.transaction do
+      TournamentTransactionLogger.lock_tournament!(@tournament)
+      @tournament.reload
+
+      result = TournamentPlayoffDeletion.call(tournament: @tournament)
+      unless result.success?
+        render json: { error: result.error }, status: :unprocessable_content
+        raise ActiveRecord::Rollback
+      end
+
+      synced_tournament = @tournament.reload
+      render json: playoff_deletion_payload(synced_tournament)
+    end
+
+    return if synced_tournament.nil?
+
+    push_sync_if_needed!(synced_tournament)
+    TournamentLiveBroadcast.call(synced_tournament.id)
+  end
+
   # GET /tournaments/:id/timer
   def timer
     render json: serialize_timer_state(@tournament)
@@ -220,6 +244,19 @@ class TournamentsController < ApplicationController
       timer_mode: tournament.timer_mode,
       timer_reason: tournament.timer_reason,
       timer_reason_text: tournament.timer_reason_text
+    }
+  end
+
+  def playoff_deletion_payload(tournament)
+    {
+      id: tournament.id,
+      stages: tournament.stages.sort_by(&:level).map do |stage|
+        {
+          id: stage.id,
+          level: stage.level,
+          state: stage.state
+        }
+      end
     }
   end
 

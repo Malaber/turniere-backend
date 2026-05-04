@@ -46,6 +46,8 @@ result = case scenario
            runner.run_group_stage_main_usecase(stop_at: options[:stop_at] || :final_finish_attempted)
          when 'group_stage_intermediate_round'
            runner.run_group_stage_intermediate_round(stop_at: options[:stop_at] || :final_finish_attempted)
+         when 'group_stage_playoff_recreation'
+           runner.run_group_stage_playoff_recreation(stop_at: options[:stop_at] || :third_playoffs_created)
          when 'playoff_only'
            runner.run_playoff_only(team_count: options[:team_count], stop_at: options[:stop_at] || :completed)
          when 'group_stage_render_profile'
