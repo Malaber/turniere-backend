@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_30_121000) do
+ActiveRecord::Schema[8.1].define(version: 2026_05_04_120000) do
   create_table "beamers", force: :cascade do |t|
     t.json "config", default: {}, null: false
     t.datetime "created_at", null: false
@@ -124,9 +124,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_30_121000) do
   create_table "teams", force: :cascade do |t|
     t.datetime "created_at", precision: nil, null: false
     t.string "name"
+    t.integer "player_id"
     t.integer "sync_source_id"
     t.integer "tournament_id"
     t.datetime "updated_at", precision: nil, null: false
+    t.index ["player_id"], name: "index_teams_on_player_id"
     t.index ["tournament_id"], name: "index_teams_on_tournament_id"
   end
 
@@ -234,6 +236,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_30_121000) do
   add_foreign_key "team_action_items", "teams", on_delete: :cascade
   add_foreign_key "team_action_lists", "tournaments", on_delete: :cascade
   add_foreign_key "teams", "tournaments", on_delete: :cascade
+  add_foreign_key "teams", "users", column: "player_id"
   add_foreign_key "tournament_sync_queue_entries", "tournaments", on_delete: :cascade
   add_foreign_key "tournament_transaction_log_entries", "tournaments", on_delete: :cascade
   add_foreign_key "tournament_transaction_log_entries", "users", on_delete: :nullify

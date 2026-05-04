@@ -34,6 +34,7 @@ class TournamentSerializer < SimpleTournamentSerializer
       {
         id: team.id,
         name: team.name,
+        player: team.player && AccountSummarySerializer.new(team.player).as_json,
         advancing_from_group_stage: adv_teams.include?(team)
       }
     end

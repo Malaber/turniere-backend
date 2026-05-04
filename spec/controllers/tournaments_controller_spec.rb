@@ -541,6 +541,25 @@ RSpec.describe TournamentsController, type: :controller do
             post :create, params: data
           end.to change(Team, :count).by(data[:teams].count)
         end
+
+        it 'creates player accounts from team email values' do
+          data = create_playoff_tournament_data
+          data.delete :teams
+          data[:teams] = [
+            { name: 'Alpha', player_email: 'alpha-player@example.com' },
+            { name: 'Beta' },
+            { name: 'Gamma' },
+            { name: 'Delta' }
+          ]
+
+          expect do
+            post :create, params: data
+          end.to change(User, :count).by(1)
+
+          tournament = Tournament.find(deserialize_response(response)[:id])
+          expect(tournament.teams.find_by(name: 'Alpha').player.email).to eq('alpha-player@example.com')
+          expect(tournament.teams.find_by(name: 'Beta').player).to be_nil
+        end
       end
 
       context 'with invalid parameters' do
