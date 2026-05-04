@@ -248,8 +248,8 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
 
       source = fetch_tournament(client: source_anonymous_client, tournament_id: source.fetch(:id))
       follower = wait_for_tournament_sync!(source_tournament_id: source.fetch(:id), follower_tournament_id: follower.fetch(:id))
-      expect(playoff_team_names(source)).to eq(round.fetch(:expected_playoff_team_names))
-      expect(playoff_team_names(follower)).to eq(round.fetch(:expected_playoff_team_names))
+      expect(playoff_matchups(source)).to eq(round.fetch(:expected_playoff_matchups))
+      expect(playoff_matchups(follower)).to eq(round.fetch(:expected_playoff_matchups))
       expect(tournament_signature(follower)).to eq(tournament_signature(source))
 
       next if index == rounds.size - 1
@@ -534,7 +534,10 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
           'G2-S1' => 3,
           'G2-S2' => 1
         },
-        expected_playoff_team_names: %w[G1-S1 G2-S1]
+        expected_playoff_matchups: [
+          %w[G1-S1 G2-S2],
+          %w[G1-S2 G2-S1]
+        ]
       },
       {
         scores_by_team_name: {
@@ -543,7 +546,10 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
           'G2-S1' => 0,
           'G2-S2' => 4
         },
-        expected_playoff_team_names: %w[G1-S2 G2-S2]
+        expected_playoff_matchups: [
+          %w[G1-S2 G2-S1],
+          %w[G1-S1 G2-S2]
+        ]
       },
       {
         scores_by_team_name: {
@@ -552,7 +558,10 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
           'G2-S1' => 2,
           'G2-S2' => 5
         },
-        expected_playoff_team_names: %w[G1-S1 G2-S2]
+        expected_playoff_matchups: [
+          %w[G1-S1 G2-S1],
+          %w[G1-S2 G2-S2]
+        ]
       }
     ]
   end
@@ -590,13 +599,17 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
     end
   end
 
-  def playoff_team_names(tournament)
-    tournament.fetch(:stages)
-              .select { |stage| stage.fetch(:level) >= 0 }
-              .flat_map { |stage| stage.fetch(:matches) }
-              .flat_map { |match| match.fetch(:match_scores).map { |score| seed_label(score.dig(:team, :name)) } }
-              .uniq
-              .sort
+  def playoff_matchups(tournament)
+    entry_stage = tournament.fetch(:stages)
+                            .select { |stage| stage.fetch(:level) >= 0 }
+                            .max_by { |stage| stage.fetch(:level) }
+    entry_stage.fetch(:matches)
+               .sort_by { |match| match.fetch(:position) }
+               .map do |match|
+      match.fetch(:match_scores)
+           .map { |score| seed_label(score.dig(:team, :name)) }
+           .sort
+    end
   end
 
   def seed_label(team_name)

@@ -130,7 +130,7 @@ module TurniereE2E
 
         created_key = created_keys.fetch(index)
         checkpoints[created_key] = summarize_tournament(tournament).merge(
-          playoff_team_names: playoff_team_names(tournament)
+          playoff_matchups: playoff_matchups(tournament)
         )
         return result(session: session, tournament: tournament, checkpoints: checkpoints, stop_at: stop_at) if stop_at == created_key
 
@@ -711,11 +711,17 @@ module TurniereE2E
       }
     end
 
-    def playoff_team_names(tournament)
-      playoff_matches(tournament)
-        .flat_map { |match| match.fetch(:match_scores).map { |score| score.dig(:team, :name) } }
-        .uniq
-        .sort
+    def playoff_matchups(tournament)
+      entry_stage = tournament.fetch(:stages)
+                              .reject { |stage| stage.fetch(:level) == -1 }
+                              .max_by { |stage| stage.fetch(:level) }
+      entry_stage.fetch(:matches)
+                 .sort_by { |match| match.fetch(:position) }
+                 .map do |match|
+        match.fetch(:match_scores)
+             .map { |score| score.dig(:team, :name) }
+             .sort
+      end
     end
 
     def fetch_tournament_profile!(tournament_id)
