@@ -205,12 +205,13 @@ class TournamentsController < ApplicationController
   private
 
   def timer_params
-    {
-      timestamp: params[:timestamp],
-      timer_mode: params[:timer_mode],
+    timer_params = {
       timer_reason: params[:timer_reason],
       timer_reason_text: params[:timer_reason_text]
     }
+    timer_params[:timestamp] = params[:timestamp] if params.key?(:timestamp)
+    timer_params[:timer_mode] = params[:timer_mode] if params.key?(:timer_mode)
+    timer_params
   end
 
   def serialize_timer_state(tournament)
@@ -378,6 +379,9 @@ class TournamentsController < ApplicationController
     timestamp = params[:timestamp]
     timestamp_seconds = params[:timestamp_seconds]
     timer_mode = params[:timer_mode]
+    timer_reason_param_present = params.key?(:timer_reason)
+    timer_reason_text_param_present = params.key?(:timer_reason_text)
+    timer_reason_update_requested = timer_reason_param_present || timer_reason_text_param_present
     normalize_timer_reason_params
     timer_reason = params[:timer_reason]
     timer_reason_text = params[:timer_reason_text]
@@ -391,7 +395,12 @@ class TournamentsController < ApplicationController
       return render_timer_validation_error('Invalid timer_mode')
     end
 
-    timer_reason_error = validate_timer_reason_params(timer_reason, timer_reason_text)
+    timer_reason_error = validate_timer_reason_params(
+      timer_reason,
+      timer_reason_text,
+      timer_reason_param_present,
+      timer_reason_text_param_present
+    )
     return render_timer_validation_error(timer_reason_error) if timer_reason_error
 
     # throw error if both timestamp and timestamp_seconds are present
@@ -435,6 +444,8 @@ class TournamentsController < ApplicationController
       params[:timestamp] = Time.zone.now
     elsif timer_mode.present?
       return render_timer_validation_error('timer_mode requires timestamp, timestamp_seconds, or clear_timer')
+    elsif timer_reason_update_requested
+      return render_timer_validation_error('timer_reason requires active timer') unless timer_active?
     else
       return render_timer_validation_error('timestamp, timestamp_seconds, or clear_timer is required')
     end
@@ -463,8 +474,17 @@ class TournamentsController < ApplicationController
     params[:timer_reason_text] = nil
   end
 
-  def validate_timer_reason_params(timer_reason, timer_reason_text)
+  def validate_timer_reason_params(
+    timer_reason,
+    timer_reason_text,
+    timer_reason_param_present,
+    timer_reason_text_param_present
+  )
+    if timer_reason_text_param_present && !timer_reason_param_present
+      return 'timer_reason is required when timer_reason_text is provided'
+    end
     return if timer_reason.blank? && timer_reason_text.blank?
+
     return 'timer_reason_text is only allowed when timer_reason is custom' if timer_reason.blank?
     return 'Invalid timer_reason' unless Tournament::TIMER_REASONS.include?(timer_reason)
 
@@ -475,6 +495,10 @@ class TournamentsController < ApplicationController
     return unless timer_reason != 'custom' && timer_reason_text.present?
 
     'timer_reason_text is only allowed when timer_reason is custom'
+  end
+
+  def timer_active?
+    @tournament.timestamp.present? && @tournament.timer_mode.present?
   end
 
   def render_timer_validation_error(message)

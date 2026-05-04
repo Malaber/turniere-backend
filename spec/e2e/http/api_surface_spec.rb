@@ -203,6 +203,13 @@ RSpec.describe 'Backend API surface HTTP E2E' do
                                          timer_reason: 'tournament_start'
                                        })
     timer_show = anonymous_client.get("/tournaments/#{tournament.fetch(:id)}/timer")
+    timer_reason_custom = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/timer", body: {
+                                               timer_reason: 'custom',
+                                               timer_reason_text: 'Pause ran long'
+                                             })
+    timer_reason_remove = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/timer", body: {
+                                               timer_reason: nil
+                                             })
     timer_countup = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/timer", body: {
                                          timer_mode: 'countup',
                                          timer_reason: 'custom',
@@ -258,6 +265,16 @@ RSpec.describe 'Backend API surface HTTP E2E' do
     expect(timer_show.dig(:json, :timestamp)).to eq(timer_seconds.dig(:json, :timestamp))
     expect(timer_show.dig(:json, :timer_mode)).to eq('countdown')
     expect(timer_show.dig(:json, :timer_reason)).to eq('tournament_start')
+    expect(timer_reason_custom[:status]).to eq(200)
+    expect(timer_reason_custom.dig(:json, :timestamp)).to eq(timer_seconds.dig(:json, :timestamp))
+    expect(timer_reason_custom.dig(:json, :timer_mode)).to eq('countdown')
+    expect(timer_reason_custom.dig(:json, :timer_reason)).to eq('custom')
+    expect(timer_reason_custom.dig(:json, :timer_reason_text)).to eq('Pause ran long')
+    expect(timer_reason_remove[:status]).to eq(200)
+    expect(timer_reason_remove.dig(:json, :timestamp)).to eq(timer_seconds.dig(:json, :timestamp))
+    expect(timer_reason_remove.dig(:json, :timer_mode)).to eq('countdown')
+    expect(timer_reason_remove.dig(:json, :timer_reason)).to be_nil
+    expect(timer_reason_remove.dig(:json, :timer_reason_text)).to be_nil
     expect(timer_countup[:status]).to eq(200)
     expect(timer_countup.dig(:json, :timestamp)).to be_a(String)
     expect(timer_countup.dig(:json, :timer_mode)).to eq('countup')
