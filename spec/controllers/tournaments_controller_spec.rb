@@ -105,6 +105,7 @@ RSpec.describe TournamentsController, type: :controller do
       expected_keys = %i[
         id name code public description playoff_teams_amount
         instant_finalists_amount intermediate_round_participants_amount
+        location starts_at ends_at website_url
         timestamp timer_mode timer_reason timer_reason_text owner_username stages teams team_action_lists
       ]
       expect(json.keys).to match_array(expected_keys)
@@ -454,6 +455,25 @@ RSpec.describe TournamentsController, type: :controller do
           end.to change(Tournament, :count).by(1)
         end
 
+        it 'stores tournament metadata' do
+          starts_at = '2030-06-01T10:00:00+02:00'
+          ends_at = '2030-06-01T18:00:00+02:00'
+
+          post :create, params: create_playoff_tournament_data.merge(
+            location: 'Stadtpark Halle',
+            starts_at: starts_at,
+            ends_at: ends_at,
+            website_url: 'https://example.com/tournaments/summer-cup'
+          )
+
+          expect(response).to have_http_status(:created)
+          tournament = Tournament.find(deserialize_response(response)[:id])
+          expect(tournament.location).to eq('Stadtpark Halle')
+          expect(tournament.starts_at.iso8601).to eq(Time.iso8601(starts_at).utc.iso8601)
+          expect(tournament.ends_at.iso8601).to eq(Time.iso8601(ends_at).utc.iso8601)
+          expect(tournament.website_url).to eq('https://example.com/tournaments/summer-cup')
+        end
+
         it 'associates the new tournament with the authenticated user' do
           expect do
             post :create, params: create_playoff_tournament_data
@@ -632,6 +652,43 @@ RSpec.describe TournamentsController, type: :controller do
           put :update, params: { id: @tournament.to_param }.merge(valid_update)
           @tournament.reload
           expect(@tournament.name).to eq(valid_update[:name])
+        end
+
+        it 'updates tournament metadata' do
+          starts_at = '2030-06-01T10:00:00+02:00'
+          ends_at = '2030-06-01T18:00:00+02:00'
+
+          put :update, params: {
+            id: @tournament.to_param,
+            location: 'Arena Nord',
+            starts_at: starts_at,
+            ends_at: ends_at,
+            website_url: 'https://example.com/events/arena-nord'
+          }
+
+          expect(response).to have_http_status(:ok)
+          @tournament.reload
+          json = deserialize_response(response)
+          expect(@tournament.location).to eq('Arena Nord')
+          expect(@tournament.starts_at.iso8601).to eq(Time.iso8601(starts_at).utc.iso8601)
+          expect(@tournament.ends_at.iso8601).to eq(Time.iso8601(ends_at).utc.iso8601)
+          expect(@tournament.website_url).to eq('https://example.com/events/arena-nord')
+          expect(json[:starts_at]).to eq(@tournament.starts_at.iso8601)
+          expect(json[:ends_at]).to eq(@tournament.ends_at.iso8601)
+        end
+
+        it 'rejects invalid tournament metadata' do
+          put :update, params: {
+            id: @tournament.to_param,
+            starts_at: '2030-06-01T18:00:00+02:00',
+            ends_at: '2030-06-01T10:00:00+02:00',
+            website_url: 'notaurl'
+          }
+
+          expect(response).to have_http_status(:unprocessable_content)
+          json = deserialize_response(response)
+          expect(json[:ends_at]).to include('must be after starts_at')
+          expect(json[:website_url]).to include('is invalid')
         end
 
         it 'renders a JSON response with the tournament' do
@@ -857,6 +914,10 @@ RSpec.describe TournamentsController, type: :controller do
           code: 'abc123',
           description: 'Synced description',
           public: true,
+          location: 'Synced Arena',
+          starts_at: '2030-06-01T10:00:00+02:00',
+          ends_at: '2030-06-01T18:00:00+02:00',
+          website_url: 'https://example.com/synced',
           playoff_teams_amount: 4,
           instant_finalists_amount: 4,
           intermediate_round_participants_amount: 0,
@@ -874,6 +935,10 @@ RSpec.describe TournamentsController, type: :controller do
       @tournament.reload
       expect(@tournament.sync_source_tournament_id).to eq(123)
       expect(@tournament.name).to eq('Synced Tournament')
+      expect(@tournament.location).to eq('Synced Arena')
+      expect(@tournament.starts_at.iso8601).to eq(Time.iso8601('2030-06-01T10:00:00+02:00').utc.iso8601)
+      expect(@tournament.ends_at.iso8601).to eq(Time.iso8601('2030-06-01T18:00:00+02:00').utc.iso8601)
+      expect(@tournament.website_url).to eq('https://example.com/synced')
       expect(@tournament.teams.pluck(:name)).to eq(['Alpha'])
       expect(deserialize_response(response)).not_to have_key(:sync_auth_token)
       expect(deserialize_response(response)).not_to have_key(:sync_auth_token_digest)

@@ -9,6 +9,10 @@ class TournamentSyncSchema
         code
         description
         public
+        location
+        starts_at
+        ends_at
+        website_url
         playoff_teams_amount
         instant_finalists_amount
         intermediate_round_participants_amount

@@ -111,6 +111,10 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
 
     log_phase!('tighten playoff cutoff and rename teams')
     update_cutoff = source_owner_client.patch("/tournaments/#{source.fetch(:id)}", body: {
+                                         location: 'Source Updated Arena',
+                                         starts_at: '2030-07-01T10:00:00+02:00',
+                                         ends_at: '2030-07-01T18:00:00+02:00',
+                                         website_url: 'https://example.com/updated-sync-source',
                                          playoff_teams_amount: 4,
                                          instant_finalists_amount: 4,
                                          intermediate_round_participants_amount: 0
@@ -233,6 +237,10 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
       name: "#{name_prefix} #{unique_suffix}",
       description: 'Follower sync source tournament',
       public: public,
+      location: "Source Venue #{name_prefix}",
+      starts_at: '2030-06-01T10:00:00+02:00',
+      ends_at: '2030-06-01T18:00:00+02:00',
+      website_url: 'https://example.com/sync-source',
       group_stage: true,
       playoff_teams_amount: 8,
       teams: 4.times.flat_map do |group_index|
@@ -255,6 +263,10 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
       name: "#{name_prefix} #{unique_suffix}",
       description: 'Unrelated playoff tournament',
       public: public,
+      location: "Noise Venue #{name_prefix}",
+      starts_at: '2030-06-01T10:00:00+02:00',
+      ends_at: '2030-06-01T18:00:00+02:00',
+      website_url: 'https://example.com/noise',
       teams: 4.times.map do |index|
         { name: "#{name_prefix.tr(' ', '')}-S#{index + 1}" }
       end
@@ -270,6 +282,10 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
                              name: "#{name_prefix} #{unique_suffix}",
                              description: 'Follower tournament',
                              public: public,
+                             location: "Follower Venue #{name_prefix}",
+                             starts_at: '2030-05-01T10:00:00+02:00',
+                             ends_at: '2030-05-01T18:00:00+02:00',
+                             website_url: 'https://example.com/follower',
                              read_only_mode: true,
                              sync_auth_token: sync_token
                            })
@@ -500,6 +516,10 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
     {
       name: tournament.fetch(:name),
       public: tournament.fetch(:public),
+      location: tournament[:location],
+      starts_at: tournament[:starts_at],
+      ends_at: tournament[:ends_at],
+      website_url: tournament[:website_url],
       playoff_teams_amount: tournament.fetch(:playoff_teams_amount),
       instant_finalists_amount: tournament.fetch(:instant_finalists_amount),
       intermediate_round_participants_amount: tournament.fetch(:intermediate_round_participants_amount),

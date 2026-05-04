@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_30_121000) do
+ActiveRecord::Schema[8.1].define(version: 2026_05_04_100000) do
   create_table "beamers", force: :cascade do |t|
     t.json "config", default: {}, null: false
     t.datetime "created_at", null: false
@@ -165,12 +165,15 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_30_121000) do
     t.string "code", null: false
     t.datetime "created_at", precision: nil, null: false
     t.string "description"
+    t.datetime "ends_at"
     t.integer "instant_finalists_amount", default: 0
     t.integer "intermediate_round_participants_amount", default: 0
+    t.string "location"
     t.string "name", null: false
     t.integer "playoff_teams_amount", default: 0
     t.boolean "public", default: true
     t.boolean "read_only_mode", default: false, null: false
+    t.datetime "starts_at"
     t.string "sync_auth_token"
     t.string "sync_auth_token_digest"
     t.datetime "sync_last_imported_snapshot_at"
@@ -184,6 +187,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_30_121000) do
     t.datetime "timestamp"
     t.datetime "updated_at", precision: nil, null: false
     t.integer "user_id", null: false
+    t.string "website_url"
     t.index ["code"], name: "index_tournaments_on_code", unique: true
     t.index ["user_id"], name: "index_tournaments_on_user_id"
   end
