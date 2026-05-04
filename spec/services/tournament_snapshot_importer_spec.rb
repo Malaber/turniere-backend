@@ -10,8 +10,6 @@ RSpec.describe TournamentSnapshotImporter do
         location: 'Court 4',
         starts_at: Time.utc(2026, 4, 24, 9, 0, 0),
         ends_at: Time.utc(2026, 4, 24, 18, 30, 0),
-        organizer_name: 'Sync Ops',
-        contact_email: 'sync-ops@example.com',
         website_url: 'https://example.com/sync-cup',
         timestamp: Time.utc(2026, 4, 24, 10, 15, 0),
         timer_mode: 'countdown',
@@ -37,8 +35,6 @@ RSpec.describe TournamentSnapshotImporter do
       expect(follower.location).to eq(source.location)
       expect(follower.starts_at).to eq(source.starts_at)
       expect(follower.ends_at).to eq(source.ends_at)
-      expect(follower.organizer_name).to eq(source.organizer_name)
-      expect(follower.contact_email).to eq(source.contact_email)
       expect(follower.website_url).to eq(source.website_url)
       expect(follower.timer_mode).to eq(source.timer_mode)
       expect(follower.timer_reason).to eq(source.timer_reason)
@@ -212,8 +208,6 @@ RSpec.describe TournamentSnapshotImporter do
       location: tournament.location,
       starts_at: tournament.starts_at&.iso8601,
       ends_at: tournament.ends_at&.iso8601,
-      organizer_name: tournament.organizer_name,
-      contact_email: tournament.contact_email,
       website_url: tournament.website_url,
       playoff_teams_amount: tournament.playoff_teams_amount,
       instant_finalists_amount: tournament.instant_finalists_amount,

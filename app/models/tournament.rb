@@ -6,7 +6,7 @@ require 'openssl'
 class Tournament < ApplicationRecord
   TIMER_MODES = %w[countdown countup].freeze
   TIMER_REASONS = %w[tournament_start playoff_start match_end custom].freeze
-  METADATA_STRING_ATTRIBUTES = %i[location organizer_name contact_email website_url].freeze
+  METADATA_STRING_ATTRIBUTES = %i[location website_url].freeze
 
   belongs_to :user
   belongs_to :owner, class_name: 'User', foreign_key: :user_id
@@ -22,7 +22,6 @@ class Tournament < ApplicationRecord
   validates :timer_reason, inclusion: { in: TIMER_REASONS }, allow_nil: true
   validates :sync_target_url, format: URI::DEFAULT_PARSER.make_regexp(%w[http https]), allow_blank: true
   validates :website_url, format: URI::DEFAULT_PARSER.make_regexp(%w[http https]), allow_blank: true
-  validates :contact_email, format: URI::MailTo::EMAIL_REGEXP, allow_blank: true
   validate :sync_configuration_is_complete
 
   validate :playoff_teams_amount_is_positive_power_of_two

@@ -85,8 +85,6 @@ RSpec.describe 'Backend API surface HTTP E2E' do
     expect(full_show.dig(:json, :location)).to start_with('Venue')
     expect(full_show.dig(:json, :starts_at)).to eq('2030-06-01T08:00:00Z')
     expect(full_show.dig(:json, :ends_at)).to eq('2030-06-01T16:00:00Z')
-    expect(full_show.dig(:json, :organizer_name)).to eq('Turniere E2E')
-    expect(full_show.dig(:json, :contact_email)).to eq('events@example.com')
     expect(full_show.dig(:json, :website_url)).to eq('https://example.com/turniere-e2e')
 
     expect(invalid_index[:status]).to eq(400)
@@ -128,8 +126,6 @@ RSpec.describe 'Backend API surface HTTP E2E' do
                                            location: 'Updated E2E Arena',
                                            starts_at: '2030-07-01T10:00:00+02:00',
                                            ends_at: '2030-07-01T18:00:00+02:00',
-                                           organizer_name: 'Updated E2E Org',
-                                           contact_email: 'updated-events@example.com',
                                            website_url: 'https://example.com/updated-turniere-e2e',
                                            playoff_teams_amount: 8,
                                            instant_finalists_amount: 8,
@@ -187,8 +183,6 @@ RSpec.describe 'Backend API surface HTTP E2E' do
     expect(update_response.dig(:json, :location)).to eq('Updated E2E Arena')
     expect(update_response.dig(:json, :starts_at)).to eq('2030-07-01T08:00:00Z')
     expect(update_response.dig(:json, :ends_at)).to eq('2030-07-01T16:00:00Z')
-    expect(update_response.dig(:json, :organizer_name)).to eq('Updated E2E Org')
-    expect(update_response.dig(:json, :contact_email)).to eq('updated-events@example.com')
     expect(update_response.dig(:json, :website_url)).to eq('https://example.com/updated-turniere-e2e')
 
     expect(auto_recalc_response[:status]).to eq(200)
@@ -532,8 +526,6 @@ RSpec.describe 'Backend API surface HTTP E2E' do
       location: "Venue #{name_prefix}",
       starts_at: '2030-06-01T10:00:00+02:00',
       ends_at: '2030-06-01T18:00:00+02:00',
-      organizer_name: 'Turniere E2E',
-      contact_email: 'events@example.com',
       website_url: 'https://example.com/turniere-e2e',
       group_stage: true,
       playoff_teams_amount: 8,
@@ -594,8 +586,6 @@ RSpec.describe 'Backend API surface HTTP E2E' do
       location: "Venue #{name_prefix}",
       starts_at: '2030-06-01T10:00:00+02:00',
       ends_at: '2030-06-01T18:00:00+02:00',
-      organizer_name: 'Turniere E2E',
-      contact_email: 'events@example.com',
       website_url: 'https://example.com/turniere-e2e',
       teams: 4.times.map do |index|
         { name: "#{name_prefix.tr(' ', '')}-S#{index + 1}" }

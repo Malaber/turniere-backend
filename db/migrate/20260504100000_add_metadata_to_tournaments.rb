@@ -6,8 +6,6 @@ class AddMetadataToTournaments < ActiveRecord::Migration[7.0]
       t.string :location
       t.datetime :starts_at
       t.datetime :ends_at
-      t.string :organizer_name
-      t.string :contact_email
       t.string :website_url
     end
   end

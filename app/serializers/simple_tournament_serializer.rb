@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class SimpleTournamentSerializer < ApplicationSerializer
-  attributes :name, :code, :public, :location, :organizer_name, :contact_email, :website_url
+  attributes :name, :code, :public, :location, :website_url
 
   attribute :starts_at do
     object.starts_at&.iso8601
