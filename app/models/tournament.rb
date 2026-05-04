@@ -6,6 +6,7 @@ require 'openssl'
 class Tournament < ApplicationRecord
   TIMER_MODES = %w[countdown countup].freeze
   TIMER_REASONS = %w[tournament_start playoff_start match_end custom].freeze
+  METADATA_STRING_ATTRIBUTES = %i[location organizer_name contact_email website_url].freeze
 
   belongs_to :user
   belongs_to :owner, class_name: 'User', foreign_key: :user_id
@@ -20,14 +21,18 @@ class Tournament < ApplicationRecord
   validates :timer_mode, inclusion: { in: TIMER_MODES }, allow_nil: true
   validates :timer_reason, inclusion: { in: TIMER_REASONS }, allow_nil: true
   validates :sync_target_url, format: URI::DEFAULT_PARSER.make_regexp(%w[http https]), allow_blank: true
+  validates :website_url, format: URI::DEFAULT_PARSER.make_regexp(%w[http https]), allow_blank: true
+  validates :contact_email, format: URI::MailTo::EMAIL_REGEXP, allow_blank: true
   validate :sync_configuration_is_complete
 
   validate :playoff_teams_amount_is_positive_power_of_two
   validate :timer_reason_text_matches_reason
+  validate :ends_at_is_after_starts_at
 
   after_initialize :generate_code
   after_create_commit :ensure_default_beamer!
   before_validation :normalize_timer_reason
+  before_validation :normalize_metadata
   before_validation :protect_follower_sync_token
   before_validation :clear_follower_sync_token_when_disabling_read_only_mode
   after_commit :broadcast_timer_state_change, if: :saved_change_to_timer_state?
@@ -152,6 +157,19 @@ class Tournament < ApplicationRecord
     elsif timer_reason_text.present?
       errors.add(:timer_reason_text, 'is only allowed when timer_reason is custom')
     end
+  end
+
+  def normalize_metadata
+    METADATA_STRING_ATTRIBUTES.each do |attribute|
+      self[attribute] = self[attribute]&.strip&.presence
+    end
+  end
+
+  def ends_at_is_after_starts_at
+    return if starts_at.blank? || ends_at.blank?
+    return if ends_at > starts_at
+
+    errors.add(:ends_at, 'must be after starts_at')
   end
 
   def saved_change_to_timer_state?

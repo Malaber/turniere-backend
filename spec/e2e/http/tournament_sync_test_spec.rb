@@ -33,7 +33,13 @@ RSpec.describe 'Tournament sync test HTTP E2E' do
 
     rename = client.patch("/tournaments/#{leader.fetch(:id)}", body: {
                             name: "Leader Renamed #{SecureRandom.hex(3)}",
-                            description: 'Roundtrip sync test'
+                            description: 'Roundtrip sync test',
+                            location: 'Sync Test Arena',
+                            starts_at: '2030-08-01T10:00:00+02:00',
+                            ends_at: '2030-08-01T18:00:00+02:00',
+                            organizer_name: 'Sync Test Org',
+                            contact_email: 'sync-test@example.com',
+                            website_url: 'https://example.com/sync-test'
                           })
     expect(rename[:status]).to eq(200)
 
@@ -52,6 +58,12 @@ RSpec.describe 'Tournament sync test HTTP E2E' do
 
     expect(after_follower.fetch(:name)).to eq(after_leader.fetch(:name))
     expect(after_follower.fetch(:description)).to eq(after_leader.fetch(:description))
+    expect(after_follower.fetch(:location)).to eq(after_leader.fetch(:location))
+    expect(after_follower.fetch(:starts_at)).to eq(after_leader.fetch(:starts_at))
+    expect(after_follower.fetch(:ends_at)).to eq(after_leader.fetch(:ends_at))
+    expect(after_follower.fetch(:organizer_name)).to eq(after_leader.fetch(:organizer_name))
+    expect(after_follower.fetch(:contact_email)).to eq(after_leader.fetch(:contact_email))
+    expect(after_follower.fetch(:website_url)).to eq(after_leader.fetch(:website_url))
     expect(after_follower.fetch(:teams).map { |team| team.fetch(:name) })
       .to match_array(after_leader.fetch(:teams).map { |team| team.fetch(:name) })
   end

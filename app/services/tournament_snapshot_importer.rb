@@ -6,6 +6,10 @@ class TournamentSnapshotImporter
     code
     description
     public
+    location
+    organizer_name
+    contact_email
+    website_url
     playoff_teams_amount
     instant_finalists_amount
     intermediate_round_participants_amount
@@ -67,6 +71,8 @@ class TournamentSnapshotImporter
   def update_tournament!
     root_attrs = snapshot.slice(*ROOT_ATTRIBUTES)
     root_attrs[:code] = tournament.code if code_taken_by_another_tournament?(root_attrs[:code])
+    root_attrs[:starts_at] = parse_time(snapshot[:starts_at])
+    root_attrs[:ends_at] = parse_time(snapshot[:ends_at])
     root_attrs[:timestamp] = parse_time(snapshot[:timestamp])
     root_attrs[:timer_mode] = snapshot[:timer_mode]
     root_attrs[:timer_reason] = snapshot[:timer_reason]

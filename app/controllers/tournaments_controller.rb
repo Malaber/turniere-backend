@@ -285,6 +285,7 @@ class TournamentsController < ApplicationController
     params.slice(
       :name, :description, :public, :teams, :group_stage, :playoff_teams_amount,
       :instant_finalists_amount, :intermediate_round_participants_amount,
+      :location, :starts_at, :ends_at, :organizer_name, :contact_email, :website_url,
       :read_only_mode, :sync_target_url, :sync_auth_token
     ).permit!
   end
