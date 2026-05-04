@@ -55,6 +55,35 @@ RSpec.describe 'Tournament timer follower sync websocket HTTP E2E' do
     expect(countdown_payload.fetch('timer_reason')).to eq('match_end')
     expect(countdown_payload.fetch('timer_reason_text')).to be_nil
 
+    reason_update = source_client.patch("/tournaments/#{source.fetch(:id)}/timer", body: {
+                                          timer_reason: 'custom',
+                                          timer_reason_text: 'Follower reason after start'
+                                        })
+    expect(reason_update[:status]).to eq(200)
+    sync_now_if_requested!(source.fetch(:id))
+
+    reason_payload = wait_for_timer_payload_matching!(cable_client) do |payload|
+      payload.fetch('timestamp') == countdown.dig(:json, :timestamp) &&
+        payload.fetch('timer_mode') == 'countdown' &&
+        payload.fetch('timer_reason') == 'custom' &&
+        payload.fetch('timer_reason_text') == 'Follower reason after start'
+    end
+    expect(reason_payload.fetch('timestamp')).to eq(countdown.dig(:json, :timestamp))
+
+    reason_clear = source_client.patch("/tournaments/#{source.fetch(:id)}/timer", body: {
+                                         timer_reason: nil
+                                       })
+    expect(reason_clear[:status]).to eq(200)
+    sync_now_if_requested!(source.fetch(:id))
+
+    reason_cleared_payload = wait_for_timer_payload_matching!(cable_client) do |payload|
+      payload.fetch('timestamp') == countdown.dig(:json, :timestamp) &&
+        payload.fetch('timer_mode') == 'countdown' &&
+        payload.fetch('timer_reason').nil? &&
+        payload.fetch('timer_reason_text').nil?
+    end
+    expect(reason_cleared_payload.fetch('timestamp')).to eq(countdown.dig(:json, :timestamp))
+
     countup = source_client.patch("/tournaments/#{source.fetch(:id)}/timer", body: {
                                     timer_mode: 'countup',
                                     timer_reason: 'custom',
@@ -121,10 +150,16 @@ RSpec.describe 'Tournament timer follower sync websocket HTTP E2E' do
   end
 
   def wait_for_timer_state!(cable_client, timer_mode:, timeout: 20)
+    wait_for_timer_payload_matching!(cable_client, timeout: timeout) do |payload|
+      payload.fetch('timer_mode') == timer_mode
+    end
+  end
+
+  def wait_for_timer_payload_matching!(cable_client, timeout: 20)
     deadline = Time.now + timeout
     loop do
       payload = cable_client.wait_for_timer_payload!(timeout: [deadline - Time.now, 0.1].max)
-      return payload if payload.fetch('timer_mode') == timer_mode
+      return payload if yield(payload)
 
       raise "follower timer websocket payload not received within #{timeout}s" if Time.now >= deadline
     end
