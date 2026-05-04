@@ -2,6 +2,8 @@
 
 class Team < ApplicationRecord
   belongs_to :tournament, optional: true
+  has_many :team_players, dependent: :destroy
+  has_many :players, through: :team_players
   has_many :group_scores, dependent: :destroy
   has_many :match_scores, dependent: :destroy
   has_many :bets, dependent: :destroy
@@ -9,5 +11,5 @@ class Team < ApplicationRecord
 
   validates :name, presence: true
 
-  delegate :owner, to: :tournament
+  delegate :owner, to: :tournament, allow_nil: true
 end

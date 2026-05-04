@@ -9,6 +9,7 @@ class ApplicationController < ActionController::API
   rescue_from ActionController::ParameterMissing do |e|
     render json: { error: e.message }, status: :bad_request
   end
+  rescue_from ActiveRecord::RecordInvalid, with: :render_record_invalid_error
   rescue_from ActiveRecord::RecordNotFound, with: :render_not_found_error
 
   protected
@@ -56,7 +57,7 @@ class ApplicationController < ActionController::API
   end
 
   def require_writable_tournament!(tournament)
-    render_read_only_error if tournament.read_only_mode?
+    render_read_only_error if tournament&.read_only_mode?
   end
 
   def render_not_found_error(exception)
@@ -66,5 +67,9 @@ class ApplicationController < ActionController::API
               'Record not found'
             end
     render json: { error: error }, status: :not_found
+  end
+
+  def render_record_invalid_error(exception)
+    render json: exception.record.errors, status: :unprocessable_content
   end
 end
