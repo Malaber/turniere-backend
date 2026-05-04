@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
 class TeamSerializer < ApplicationSerializer
-  attributes :name, :player
+  attributes :name, :players
 
-  def player
-    AccountSummarySerializer.new(object.player).as_json if object.player
+  def players
+    object.players.map { |player| AccountSummarySerializer.new(player).as_json }
   end
 end

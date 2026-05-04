@@ -5,8 +5,8 @@ require 'rails_helper'
 RSpec.describe AccountsController, type: :controller do
   describe 'GET #show' do
     let(:account) { create(:user, username: 'player-one') }
-    let(:public_team) { create(:team, name: 'Public Team', player: account) }
-    let(:private_team) { create(:team, name: 'Private Team', player: account) }
+    let(:public_team) { create(:team, name: 'Public Team', players: [account]) }
+    let(:private_team) { create(:team, name: 'Private Team', players: [account]) }
     let(:public_tournament) { create(:tournament, public: true, teams: [public_team]) }
     let(:private_tournament) { create(:tournament, public: false, teams: [private_team]) }
     let(:created_public_tournament) { create(:tournament, user: account, public: true) }

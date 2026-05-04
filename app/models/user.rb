@@ -11,7 +11,8 @@ class User < ApplicationRecord
   validates :username, presence: true, uniqueness: { case_sensitive: false }
 
   has_many :tournaments, dependent: :destroy
-  has_many :player_teams, class_name: 'Team', foreign_key: :player_id, inverse_of: :player, dependent: :nullify
+  has_many :team_players, foreign_key: :player_id, inverse_of: :player, dependent: :destroy
+  has_many :player_teams, through: :team_players, source: :team
   has_many :played_tournaments, -> { distinct }, through: :player_teams, source: :tournament
   has_many :bets, dependent: :destroy
 

@@ -236,15 +236,15 @@ class TournamentsController < ApplicationController
     if team[:id]
       Team.find team[:id]
     elsif team[:name]
-      Team.create name: team[:name], player: player_from_team_params(team)
+      Team.create(name: team[:name], players: players_from_team_params(team))
     end
   end
 
-  def player_from_team_params(team)
-    player_email = team[:player_email].to_s.strip
-    return nil if player_email.blank?
-
-    User.find_or_create_player_by_email!(player_email)
+  def players_from_team_params(team)
+    player_emails = team[:player_emails].presence || team[:player_email]
+    Array.wrap(player_emails).map(&:to_s).map(&:strip).reject(&:blank?).map do |player_email|
+      User.find_or_create_player_by_email!(player_email)
+    end
   end
 
   def set_tournament
@@ -256,7 +256,7 @@ class TournamentsController < ApplicationController
     @tournament = profiling.measure('load_tournament') do
       Tournament.includes(
         :user,
-        { teams: :player },
+        { teams: :players },
         stages: [
           { matches: { match_scores: :team } },
           { groups: [

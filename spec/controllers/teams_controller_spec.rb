@@ -20,15 +20,15 @@ RSpec.describe TeamsController, type: :controller do
       expect(body[:name]).to eq(@team.name)
     end
 
-    it 'returns player account summary when linked' do
+    it 'returns player account summaries when linked' do
       player = create(:user, username: 'linked-player')
-      @team.update!(player: player)
+      @team.players << player
 
       get :show, params: { id: @team.to_param }
 
       body = deserialize_response response
-      expect(body.dig(:player, :id)).to eq(player.id)
-      expect(body.dig(:player, :name)).to eq('linked-player')
+      expect(body[:players].first[:id]).to eq(player.id)
+      expect(body[:players].first[:name]).to eq('linked-player')
     end
   end
 
@@ -64,8 +64,8 @@ RSpec.describe TeamsController, type: :controller do
         put :update, params: { id: @team.to_param, player_email: player.email }
 
         expect(response).to be_successful
-        expect(@team.reload.player).to eq(player)
-        expect(deserialize_response(response).dig(:player, :id)).to eq(player.id)
+        expect(@team.reload.players).to contain_exactly(player)
+        expect(deserialize_response(response)[:players].first[:id]).to eq(player.id)
       end
 
       it 'creates a player account by email when none exists' do
@@ -74,17 +74,31 @@ RSpec.describe TeamsController, type: :controller do
         end.to change(User, :count).by(1)
 
         expect(response).to be_successful
-        expect(@team.reload.player.email).to eq('new-player@example.com')
-        expect(@team.player.username).to eq('new-player')
+        expect(@team.reload.players.first.email).to eq('new-player@example.com')
+        expect(@team.players.first.username).to eq('new-player')
       end
 
-      it 'clears player association with blank player_id' do
-        @team.update!(player: create(:user))
+      it 'associates multiple player accounts by email' do
+        first_player = create(:user, email: 'first-player@example.com')
+
+        put :update, params: {
+          id: @team.to_param,
+          player_emails: [first_player.email, 'second-player@example.com']
+        }
+
+        expect(response).to be_successful
+        expect(@team.reload.players.map(&:email)).to match_array(
+          ['first-player@example.com', 'second-player@example.com']
+        )
+      end
+
+      it 'clears player associations with blank player_id' do
+        @team.players << create(:user)
 
         put :update, params: { id: @team.to_param, player_id: '' }
 
         expect(response).to be_successful
-        expect(@team.reload.player).to be_nil
+        expect(@team.reload.players).to be_empty
       end
     end
 
@@ -102,7 +116,7 @@ RSpec.describe TeamsController, type: :controller do
     context 'with valid params as linked player' do
       before(:each) do
         @player = create(:user)
-        @team.update!(player: @player)
+        @team.players << @player
         apply_authentication_headers_for @player
       end
 
@@ -119,7 +133,7 @@ RSpec.describe TeamsController, type: :controller do
         put :update, params: { id: @team.to_param, player_email: new_player.email }
 
         expect(response).to have_http_status(:forbidden)
-        expect(@team.reload.player).to eq(@player)
+        expect(@team.reload.players).to contain_exactly(@player)
       end
     end
   end

@@ -546,7 +546,10 @@ RSpec.describe TournamentsController, type: :controller do
           data = create_playoff_tournament_data
           data.delete :teams
           data[:teams] = [
-            { name: 'Alpha', player_email: 'alpha-player@example.com' },
+            {
+              name: 'Alpha',
+              player_emails: ['alpha-player@example.com', 'alpha-partner@example.com']
+            },
             { name: 'Beta' },
             { name: 'Gamma' },
             { name: 'Delta' }
@@ -554,11 +557,12 @@ RSpec.describe TournamentsController, type: :controller do
 
           expect do
             post :create, params: data
-          end.to change(User, :count).by(1)
+          end.to change(User, :count).by(2)
 
           tournament = Tournament.find(deserialize_response(response)[:id])
-          expect(tournament.teams.find_by(name: 'Alpha').player.email).to eq('alpha-player@example.com')
-          expect(tournament.teams.find_by(name: 'Beta').player).to be_nil
+          expect(tournament.teams.find_by(name: 'Alpha').players.map(&:email))
+            .to match_array(['alpha-player@example.com', 'alpha-partner@example.com'])
+          expect(tournament.teams.find_by(name: 'Beta').players).to be_empty
         end
       end
 

@@ -121,14 +121,22 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_04_120000) do
     t.index ["tournament_id"], name: "index_team_action_lists_on_tournament_id"
   end
 
+  create_table "team_players", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.integer "player_id", null: false
+    t.integer "team_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["player_id"], name: "index_team_players_on_player_id"
+    t.index ["team_id", "player_id"], name: "index_team_players_on_team_id_and_player_id", unique: true
+    t.index ["team_id"], name: "index_team_players_on_team_id"
+  end
+
   create_table "teams", force: :cascade do |t|
     t.datetime "created_at", precision: nil, null: false
     t.string "name"
-    t.integer "player_id"
     t.integer "sync_source_id"
     t.integer "tournament_id"
     t.datetime "updated_at", precision: nil, null: false
-    t.index ["player_id"], name: "index_teams_on_player_id"
     t.index ["tournament_id"], name: "index_teams_on_tournament_id"
   end
 
@@ -235,8 +243,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_04_120000) do
   add_foreign_key "team_action_items", "team_action_lists", on_delete: :cascade
   add_foreign_key "team_action_items", "teams", on_delete: :cascade
   add_foreign_key "team_action_lists", "tournaments", on_delete: :cascade
+  add_foreign_key "team_players", "teams", on_delete: :cascade
+  add_foreign_key "team_players", "users", column: "player_id", on_delete: :cascade
   add_foreign_key "teams", "tournaments", on_delete: :cascade
-  add_foreign_key "teams", "users", column: "player_id"
   add_foreign_key "tournament_sync_queue_entries", "tournaments", on_delete: :cascade
   add_foreign_key "tournament_transaction_log_entries", "tournaments", on_delete: :cascade
   add_foreign_key "tournament_transaction_log_entries", "users", on_delete: :nullify

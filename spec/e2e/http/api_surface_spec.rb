@@ -139,25 +139,34 @@ RSpec.describe 'Backend API surface HTTP E2E' do
     player_reassign = player_client.patch("/teams/#{linked_team.fetch(:id)}", body: {
                                             player_email: "stolen-#{unique}@example.com"
                                           })
+    co_player_email = "http-e2e-co-player-#{unique}@example.com"
+    link_co_player = owner_client.patch("/teams/#{linked_team.fetch(:id)}", body: {
+                                          player_email: co_player_email
+                                        })
     placeholder_email = "http-e2e-placeholder-#{unique}@example.com"
     link_placeholder = owner_client.patch("/teams/#{unlinked_team.fetch(:id)}", body: {
                                             player_email: placeholder_email
                                           })
-    profile = anonymous_client.get("/accounts/#{link_existing.dig(:json, :player, :id)}")
-    placeholder_profile = anonymous_client.get("/accounts/#{link_placeholder.dig(:json, :player, :id)}")
+    profile = anonymous_client.get("/accounts/#{player_id_by_name(link_existing, player_username)}")
+    placeholder_profile = anonymous_client.get("/accounts/#{player_id_by_name(link_placeholder, placeholder_email)}")
 
     expect(player_client.authenticated?).to eq(true)
-    expect(linked_team[:player]).to be_nil
+    expect(linked_team[:players]).to eq([])
 
     expect(link_existing[:status]).to eq(200)
-    expect(link_existing.dig(:json, :player, :name)).to eq(player_username)
+    expect(link_existing.dig(:json, :players).map { |player| player.fetch(:name) }).to eq([player_username])
 
     expect(player_update[:status]).to eq(200)
     expect(player_update.dig(:json, :name)).to end_with('Player Rename')
     expect(player_reassign[:status]).to eq(403)
 
+    expect(link_co_player[:status]).to eq(200)
+    co_player_names = link_co_player.dig(:json, :players).map { |player| player.fetch(:name) }
+    expect(co_player_names).to include(player_username)
+    expect(co_player_names.any? { |name| name.start_with?('http-e2e-co-player') }).to eq(true)
+
     expect(link_placeholder[:status]).to eq(200)
-    expect(link_placeholder.dig(:json, :player, :name)).to start_with('http-e2e-placeholder')
+    expect(link_placeholder.dig(:json, :players).first[:name]).to start_with('http-e2e-placeholder')
     expect(placeholder_profile[:status]).to eq(200)
     expect(placeholder_profile.dig(:json, :teams).map { |team| team.fetch(:id) }).to include(unlinked_team.fetch(:id))
 
@@ -615,6 +624,12 @@ RSpec.describe 'Backend API surface HTTP E2E' do
   def expect_started_match_ids(response, expected_ids)
     expect_match_ids(response, expected_ids)
     expect(response[:json].map { |match| match.fetch(:state) }.uniq).to eq(['in_progress'])
+  end
+
+  def player_id_by_name(response, name)
+    response.dig(:json, :players).find do |player|
+      player.fetch(:name) == name || player.fetch(:name).start_with?(name.split('@').first)
+    end.fetch(:id)
   end
 
   def create_playoff_tournament(client:, public:, name_prefix:, teams: nil)
