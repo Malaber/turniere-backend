@@ -185,6 +185,39 @@ Useful for:
 - rehydrating synced follower state
 - advanced admin tooling
 
+### Change timer reason without restarting
+
+After a timer is active, owner may change only the reason fields.
+Backend keeps current `timestamp` and `timer_mode` unchanged.
+
+Set a predefined reason:
+
+```json
+{
+  "timer_reason": "playoff_start"
+}
+```
+
+Set a custom reason:
+
+```json
+{
+  "timer_reason": "custom",
+  "timer_reason_text": "Opening ceremony ran long"
+}
+```
+
+Remove reason:
+
+```json
+{
+  "timer_reason": null
+}
+```
+
+Response shape is the normal timer state with the same active `timestamp` and
+`timer_mode`, plus updated reason fields.
+
 ### Clear timer
 
 Request:
@@ -215,6 +248,8 @@ Backend rejects:
 - `timer_mode` by itself unless it is `countup`
 - `clear_timer` mixed with timer values
 - invalid `timer_reason`
+- reason-only updates when no timer is active
+- `timer_reason_text` without `timer_reason`
 - `timer_reason = "custom"` without `timer_reason_text`
 - `timer_reason_text` with any non-custom `timer_reason`
 
@@ -338,6 +373,7 @@ Implemented coverage:
 - API surface timer lifecycle:
   - countdown
   - countup
+  - reason-only set / change / remove
   - clear
   - validation
   - [spec/e2e/http/api_surface_spec.rb](../spec/e2e/http/api_surface_spec.rb)
