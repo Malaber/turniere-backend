@@ -794,6 +794,119 @@ RSpec.describe TournamentsController, type: :controller do
     end
   end
 
+  describe 'DELETE #destroy_playoffs' do
+    context 'without authentication headers' do
+      it 'renders an unauthorized error response' do
+        tournament = create_group_stage_with_unplayed_playoffs
+
+        delete :destroy_playoffs, params: { id: tournament.to_param }
+
+        expect(response).to have_http_status(:unauthorized)
+      end
+    end
+
+    context 'as owner' do
+      before do
+        apply_authentication_headers_for tournament.owner
+        allow(TournamentLiveBroadcast).to receive(:call)
+      end
+
+      let(:tournament) { create_group_stage_with_unplayed_playoffs }
+
+      it 'deletes unplayed playoff stages and reopens the group stage' do
+        expect do
+          delete :destroy_playoffs, params: { id: tournament.to_param }
+        end.to change { tournament.reload.stages.where('level >= 0').count }.from(1).to(0)
+
+        expect(response).to have_http_status(:ok)
+        expect(tournament.group_stage.reload).to be_in_progress
+        expect(deserialize_response(response).fetch(:stages).map { |stage| stage.fetch(:level) }).to eq([-1])
+      end
+
+      it 'pushes sync and live updates after deletion' do
+        expect(TournamentSyncEnqueue).to receive(:call).with(tournament)
+        expect(TournamentLiveBroadcast).to receive(:call).with(tournament.id)
+
+        delete :destroy_playoffs, params: { id: tournament.to_param }
+
+        expect(response).to have_http_status(:ok)
+      end
+
+      it 'rejects deletion after a playoff match has started' do
+        playoff_match = tournament.stages.find { |stage| stage.level >= 0 }.matches.first
+        playoff_match.update!(state: :in_progress)
+
+        expect do
+          delete :destroy_playoffs, params: { id: tournament.to_param }
+        end.not_to(change { tournament.reload.stages.where('level >= 0').count })
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(deserialize_response(response)[:error]).to eq(
+          'Playoffs cannot be deleted after matches have started or scores changed'
+        )
+        expect(tournament.group_stage.reload).to be_finished
+      end
+
+      it 'rejects deletion after a playoff score has changed' do
+        playoff_match = tournament.stages.find { |stage| stage.level >= 0 }.matches.first
+        playoff_match.match_scores.first.update!(points: 1)
+
+        delete :destroy_playoffs, params: { id: tournament.to_param }
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(deserialize_response(response)[:error]).to eq(
+          'Playoffs cannot be deleted after matches have started or scores changed'
+        )
+        expect(tournament.reload.stages.where('level >= 0').count).to eq(1)
+      end
+
+      it 'rejects deletion when no group stage exists' do
+        playoff_only = create(:stage_tournament, stage_count: 1)
+        apply_authentication_headers_for playoff_only.owner
+
+        delete :destroy_playoffs, params: { id: playoff_only.to_param }
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(deserialize_response(response)[:error]).to eq('Only group-stage playoffs can be deleted')
+      end
+
+      it 'blocks deletion while tournament is read only' do
+        tournament.update!(read_only_mode: true, sync_auth_token: 'shared-secret')
+
+        delete :destroy_playoffs, params: { id: tournament.to_param }
+
+        expect(response).to have_http_status(:locked)
+      end
+    end
+
+    context 'as another user' do
+      it 'renders a forbidden error response' do
+        tournament = create_group_stage_with_unplayed_playoffs
+        apply_authentication_headers_for create(:user)
+
+        delete :destroy_playoffs, params: { id: tournament.to_param }
+
+        expect(response).to have_http_status(:forbidden)
+      end
+    end
+
+    def create_group_stage_with_unplayed_playoffs
+      tournament = create(
+        :group_stage_tournament,
+        stage_count: 0,
+        group_count: 2,
+        teams_count: 4,
+        playoff_teams_amount: 2,
+        instant_finalists_amount: 2,
+        intermediate_round_participants_amount: 0
+      )
+      tournament.group_stage.update!(state: :finished)
+      result = AddPlayoffsToTournamentAndSave.call(tournament: tournament, teams: tournament.teams.take(2))
+      expect(result).to be_a_success
+      tournament.reload
+    end
+  end
+
   describe 'PATCH #sync_state' do
     before do
       @tournament.update!(read_only_mode: true, sync_auth_token: 'shared-secret')

@@ -1041,6 +1041,28 @@ def scenario_intermediate(
     )
 
 
+@task(name="scenario-playoff-recreation")
+def scenario_playoff_recreation(
+    c,
+    base_url=TEST_BASE_URL,
+    email=E2E_EMAIL,
+    password=E2E_PASSWORD,
+    username=E2E_USERNAME,
+    stop_at="third_playoffs_created",
+):
+    """Materialize a group-stage playoff delete/recreate scenario over HTTP."""
+    c.run(
+        f"ruby script/e2e_scenarios.rb group_stage_playoff_recreation --stop-at {stop_at}",
+        env=_env(
+            TURNIERE_E2E_BASE_URL=base_url,
+            TURNIERE_E2E_EMAIL=email,
+            TURNIERE_E2E_PASSWORD=password,
+            TURNIERE_E2E_USERNAME=username,
+        ),
+        pty=True,
+    )
+
+
 @task(name="scenario-playoff")
 def scenario_playoff(
     c,

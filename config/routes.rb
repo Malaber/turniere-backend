@@ -37,6 +37,7 @@ Rails.application.routes.draw do
       patch :sync_state
       patch :start_next_group_matches
       post :test_sync
+      delete :playoffs, action: :destroy_playoffs
     end
   end
   resources :match_scores, only: %i[show update]

@@ -61,6 +61,18 @@ RSpec.describe 'Tournament lifecycle HTTP E2E' do
       .find { |stage| stage[:level] == 0 }[:match_states]).to eq(%w[finished finished])
   end
 
+  it 'deletes and recreates group-stage playoffs over HTTP with changed group results' do
+    result = runner.run_group_stage_playoff_recreation
+    checkpoints = result.fetch(:checkpoints)
+
+    expect(checkpoints.fetch(:first_playoffs_created).fetch(:playoff_team_names)).to eq(%w[G1-S1 G2-S1])
+    expect(checkpoints.fetch(:first_playoffs_deleted).fetch(:stage_summaries).map { |stage| stage.fetch(:level) }).to eq([-1])
+    expect(checkpoints.fetch(:first_playoffs_deleted).fetch(:stage_summaries).first.fetch(:state)).to eq('in_progress')
+    expect(checkpoints.fetch(:second_playoffs_created).fetch(:playoff_team_names)).to eq(%w[G1-S2 G2-S2])
+    expect(checkpoints.fetch(:second_playoffs_deleted).fetch(:stage_summaries).map { |stage| stage.fetch(:level) }).to eq([-1])
+    expect(checkpoints.fetch(:third_playoffs_created).fetch(:playoff_team_names)).to eq(%w[G1-S1 G2-S2])
+  end
+
   {
     won: [1, 2],
     lost: [2, 1],
