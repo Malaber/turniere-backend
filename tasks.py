@@ -633,10 +633,17 @@ def _start_server(command, env, log_path="/tmp/turniere-e2e-server.log"):
     return process, log_handle
 
 
+def _server_env(env=None):
+    server_env = _env(GIT_COMMIT_SHA=_git_commit_sha())
+    if _rails_env(env) == "test":
+        server_env["WEB_CONCURRENCY"] = os.environ.get("WEB_CONCURRENCY", "1")
+    return server_env
+
+
 def _start_test_server(host=SERVER_HOST, port=SERVER_PORT):
     return _start_server(
         f"{_bundle_exec('rails', 's')} -e test -b {host} -p {port}",
-        _env(GIT_COMMIT_SHA=_git_commit_sha()),
+        _server_env("test"),
     )
 
 
@@ -704,7 +711,7 @@ def server(c, host=SERVER_HOST, port=SERVER_PORT, env=None):
     """Start the backend locally in development."""
     c.run(
         f"RAILS_ENV={_rails_env(env)} {_bundle_exec('rails', 's')} -b {host} -p {port}",
-        env=_env(GIT_COMMIT_SHA=_git_commit_sha()),
+        env=_server_env(env),
         pty=True,
     )
 
