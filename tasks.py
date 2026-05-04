@@ -751,9 +751,10 @@ def start_test_local(
 
 
 @task
-def test(c):
-    """Run the normal RSpec suite."""
-    _stream_subprocess(_rspec_command(), env=_env())
+def test(c, spec=""):
+    """Run the normal RSpec suite, or one or more spec files via --spec."""
+    spec_paths = shlex.split(spec) if spec else []
+    _stream_subprocess(_rspec_command(*spec_paths), env=_env())
 
 
 @task(name="test-shard")

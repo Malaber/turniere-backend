@@ -139,6 +139,9 @@ class TournamentSnapshotImporter
       match.state = attrs.fetch(:state)
       match.position = attrs[:position]
       match.decider = attrs[:decider]
+      match.location = attrs[:location]
+      match.start_time = attrs[:start_time]
+      match.notes = attrs[:notes]
     end
   end
 

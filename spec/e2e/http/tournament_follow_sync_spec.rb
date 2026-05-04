@@ -50,6 +50,51 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
     expect(tournament_signature(follower)).to eq(tournament_signature(source))
     expect(synced_team_id_pairs(source: source, follower: follower)).not_to be_empty
 
+    log_phase!('update match metadata and verify follower mirrors it')
+    source_group_stage = source.fetch(:stages).find { |stage| stage.fetch(:level) == -1 }
+    first_source_group = source_group_stage.fetch(:groups).sort_by { |group| group.fetch(:number) }.first
+    first_group_matches = first_source_group.fetch(:matches).sort_by { |match| match.fetch(:position) }
+    single_metadata = source_owner_client.patch("/matches/#{first_group_matches.fetch(0).fetch(:id)}", body: {
+                                                  location: 'Main Hall',
+                                                  start_time: '17:00',
+                                                  notes: 'Opening match'
+                                                })
+    explicit_bulk_metadata = source_owner_client.patch("/tournaments/#{source.fetch(:id)}/matches/metadata", body: {
+                                                         match_ids: first_group_matches.values_at(1, 2).map { |match| match.fetch(:id) },
+                                                         location: 'Court B',
+                                                         start_time: '17:30'
+                                                       })
+    group_position_metadata = source_owner_client.patch("/tournaments/#{source.fetch(:id)}/matches/metadata", body: {
+                                                         group_stage_position: 3,
+                                                         start_time: '18:00',
+                                                         notes: 'Group position 3 wave'
+                                                       })
+    expect(single_metadata[:status]).to eq(200)
+    expect(single_metadata.dig(:json, :location)).to eq('Main Hall')
+    expect(explicit_bulk_metadata[:status]).to eq(200)
+    expect(explicit_bulk_metadata[:json].map { |match| match.fetch(:location) }).to all(eq('Court B'))
+    expect(group_position_metadata[:status]).to eq(200)
+    expect(group_position_metadata[:json].map { |match| match.fetch(:start_time) }).to all(eq('18:00'))
+
+    source = fetch_tournament(client: source_anonymous_client, tournament_id: source.fetch(:id))
+    follower = wait_for_tournament_sync!(source_tournament_id: source.fetch(:id), follower_tournament_id: follower.fetch(:id))
+    expect(tournament_signature(follower)).to eq(tournament_signature(source))
+
+    follower_group_stage = follower.fetch(:stages).find { |stage| stage.fetch(:level) == -1 }
+    follower_group = follower_group_stage.fetch(:groups).sort_by { |group| group.fetch(:number) }.first
+    follower_first_match = follower_group.fetch(:matches).sort_by { |match| match.fetch(:position) }.first
+    locked_match_metadata = follower_owner_client.patch("/matches/#{follower_first_match.fetch(:id)}", body: {
+                                                          location: 'Follower edit'
+                                                        })
+    locked_bulk_metadata = follower_owner_client.patch("/tournaments/#{follower.fetch(:id)}/matches/metadata", body: {
+                                                         match_ids: [follower_first_match.fetch(:id)],
+                                                         start_time: '19:00'
+                                                       })
+    expect(locked_match_metadata[:status]).to eq(423)
+    expect(locked_match_metadata.dig(:json, :error)).to eq('Tournament is in read only follower mode')
+    expect(locked_bulk_metadata[:status]).to eq(423)
+    expect(locked_bulk_metadata.dig(:json, :error)).to eq('Tournament is in read only follower mode')
+
     log_phase!('swap matches on leader and verify follower behavior')
     source_group_stage = source.fetch(:stages).find { |stage| stage.fetch(:level) == -1 }
     first_source_group = source_group_stage.fetch(:groups).sort_by { |group| group.fetch(:number) }.first
@@ -143,6 +188,20 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
     expect(synced_team_id_pairs(source: source, follower: follower)).not_to be_empty
     expect(source.fetch(:team_action_lists)).to eq([])
     expect(follower.fetch(:team_action_lists)).to eq([])
+
+    log_phase!('bulk update playoff match metadata and verify follower mirrors it')
+    source_playoff_stage = source.fetch(:stages).select { |stage| stage.fetch(:level) >= 0 }.max_by { |stage| stage.fetch(:level) }
+    playoff_metadata = source_owner_client.patch("/tournaments/#{source.fetch(:id)}/matches/metadata", body: {
+                                                   stage_level: source_playoff_stage.fetch(:level),
+                                                   location: 'Finals Arena',
+                                                   start_time: '21:00',
+                                                   notes: 'Playoff wave'
+                                                 })
+    expect(playoff_metadata[:status]).to eq(200)
+    expect(playoff_metadata[:json].map { |match| match.fetch(:location) }).to all(eq('Finals Arena'))
+    source = fetch_tournament(client: source_anonymous_client, tournament_id: source.fetch(:id))
+    follower = wait_for_tournament_sync!(source_tournament_id: source.fetch(:id), follower_tournament_id: follower.fetch(:id))
+    expect(tournament_signature(follower)).to eq(tournament_signature(source))
 
     log_phase!('create team action list on source and verify follower mirrors it')
     created_list = create_team_action_list!(source.fetch(:id))
@@ -548,6 +607,9 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
       state: match.fetch(:state),
       position: match.fetch(:position),
       decider: match.fetch(:decider),
+      location: match[:location],
+      start_time: match[:start_time],
+      notes: match[:notes],
       scores: match.fetch(:match_scores).map do |score|
         {
           team_name: score.dig(:team, :name),

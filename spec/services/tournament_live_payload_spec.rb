@@ -26,9 +26,14 @@ RSpec.describe 'Tournament live payloads' do
       payload = described_class.build(tournament)
       serialized_match = payload.find { |candidate| candidate[:id] == match.id }
 
-      expect(serialized_match.keys).to match_array(%i[id position state teams match_scores group stage])
+      expect(serialized_match.keys).to match_array(
+        %i[id position state location start_time notes teams match_scores group stage]
+      )
       expect(serialized_match[:state]).to eq(match.state)
       expect(serialized_match[:position]).to eq(match.position)
+      expect(serialized_match[:location]).to eq(match.location)
+      expect(serialized_match[:start_time]).to eq(match.start_time)
+      expect(serialized_match[:notes]).to eq(match.notes)
       expect(serialized_match.dig(:group, :id)).to eq(match.group_id)
       expect(serialized_match.dig(:stage, :id)).to eq(match.group.stage_id)
       expect(serialized_match[:teams].map { |team| team[:id] }).to match_array(match.teams.map(&:id))
