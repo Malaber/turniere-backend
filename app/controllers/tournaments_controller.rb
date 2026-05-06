@@ -12,15 +12,19 @@ class TournamentsController < ApplicationController
   end
 
   before_action :set_tournament_for_show, only: %i[show]
-  before_action :set_tournament, only: %i[update destroy set_timer timer sync_state test_sync]
-  before_action :authenticate_user!, only: %i[create update destroy set_timer test_sync]
-  before_action -> { require_owner! @tournament.owner }, only: %i[update destroy set_timer test_sync]
+  before_action :set_tournament,
+                only: %i[update destroy destroy_playoffs set_timer timer sync_state test_sync start_next_group_matches]
+  before_action :authenticate_user!,
+                only: %i[create update destroy destroy_playoffs set_timer test_sync start_next_group_matches]
+  before_action -> { require_owner! @tournament.owner },
+                only: %i[update destroy destroy_playoffs set_timer test_sync start_next_group_matches]
   before_action :validate_create_params, only: %i[create]
   before_action :validate_update_params, only: %i[update]
   before_action :validate_set_timer_params, only: %i[set_timer]
   before_action :ensure_update_allowed!, only: %i[update]
   before_action :ensure_destroy_allowed!, only: %i[destroy]
   before_action :ensure_timer_update_allowed!, only: %i[set_timer]
+  before_action -> { require_writable_tournament!(@tournament) }, only: %i[destroy_playoffs start_next_group_matches]
   before_action :authorize_sync_request!, only: %i[sync_state]
   rescue_from ActiveRecord::RecordNotFound, with: :render_not_found_error
 
@@ -62,9 +66,10 @@ class TournamentsController < ApplicationController
 
     if tournament.read_only_mode?
       if tournament.save
+        TournamentTransactionLogger.record_tournament_created!(tournament: tournament, user: current_user)
         render json: tournament, status: :created, location: tournament
       else
-        render json: tournament.errors, status: :unprocessable_entity
+        render json: tournament.errors, status: :unprocessable_content
       end
       return
     end
@@ -75,7 +80,7 @@ class TournamentsController < ApplicationController
       params.require(:playoff_teams_amount)
       groups = organize_teams_in_groups(teams)
       # add groups to tournament
-      result = AddGroupStageToTournamentAndSave.call(tournament:, groups:)
+      result = AddGroupStageToTournamentAndSave.call(tournament: tournament, groups: groups)
       # associate provided teams with tournament on success
       tournament.teams = groups.flatten if result.success?
     else
@@ -84,18 +89,19 @@ class TournamentsController < ApplicationController
       # associate provided teams with tournament
       tournament.teams = teams
       # add playoff stage to tournament
-      result = AddPlayoffsToTournamentAndSave.call(tournament:, teams: tournament.teams)
+      result = AddPlayoffsToTournamentAndSave.call(tournament: tournament, teams: tournament.teams)
     end
     # validate tournament
     unless tournament.valid?
-      render json: tournament.errors, status: :unprocessable_entity
+      render json: tournament.errors, status: :unprocessable_content
       return
     end
     # return appropriate result
     if result.success?
+      TournamentTransactionLogger.record_tournament_created!(tournament: result.tournament, user: current_user)
       render json: result.tournament, status: :created, location: result.tournament
     else
-      render json: { error: 'Tournament generation failed' }, status: :unprocessable_entity
+      render json: { error: 'Tournament generation failed' }, status: :unprocessable_content
     end
   end
 
@@ -114,7 +120,7 @@ class TournamentsController < ApplicationController
         synced_tournament = @tournament
         render json: @tournament
       else
-        render json: @tournament.errors, status: :unprocessable_entity
+        render json: @tournament.errors, status: :unprocessable_content
         raise ActiveRecord::Rollback
       end
     end
@@ -126,6 +132,30 @@ class TournamentsController < ApplicationController
     @tournament.destroy
   end
 
+  # DELETE /tournaments/:id/playoffs
+  def destroy_playoffs
+    synced_tournament = nil
+
+    Tournament.transaction do
+      TournamentTransactionLogger.lock_tournament!(@tournament)
+      @tournament.reload
+
+      result = TournamentPlayoffDeletion.call(tournament: @tournament)
+      unless result.success?
+        render json: { error: result.error }, status: :unprocessable_content
+        raise ActiveRecord::Rollback
+      end
+
+      synced_tournament = @tournament.reload
+      render json: playoff_deletion_payload(synced_tournament)
+    end
+
+    return if synced_tournament.nil?
+
+    push_sync_if_needed!(synced_tournament)
+    TournamentLiveBroadcast.call(synced_tournament.id)
+  end
+
   # GET /tournaments/:id/timer
   def timer
     render json: serialize_timer_state(@tournament)
@@ -133,12 +163,29 @@ class TournamentsController < ApplicationController
 
   # PATCH /tournaments/:id/timer
   def set_timer
-    if @tournament.update(timer_params)
-      push_sync_if_needed!(@tournament)
-      render json: @tournament
-    else
-      render json: @tournament.errors, status: :unprocessable_entity
+    synced_tournament = nil
+
+    Tournament.transaction do
+      TournamentTransactionLogger.lock_tournament!(@tournament)
+      @tournament.reload
+      old_timer = serialize_timer_state(@tournament)
+
+      if @tournament.update(timer_params)
+        TournamentTransactionLogger.record_timer_changed!(
+          tournament: @tournament,
+          user: current_user,
+          old_timer: old_timer,
+          new_timer: serialize_timer_state(@tournament)
+        )
+        synced_tournament = @tournament
+        render json: @tournament
+      else
+        render json: @tournament.errors, status: :unprocessable_content
+        raise ActiveRecord::Rollback
+      end
     end
+
+    push_sync_if_needed!(synced_tournament) unless synced_tournament.nil?
   end
 
   def sync_state
@@ -146,14 +193,14 @@ class TournamentsController < ApplicationController
     TournamentLiveBroadcast.call(@tournament.id)
     render json: @tournament, include: '**'
   rescue KeyError, ArgumentError => e
-    render json: { error: e.message }, status: :unprocessable_entity
+    render json: { error: e.message }, status: :unprocessable_content
   end
 
   def test_sync
     unless @tournament.sync_push_enabled?
       return render json: {
         error: 'Tournament sync test requires writable tournament with sync_target_url and sync_auth_token'
-      }, status: :unprocessable_entity
+      }, status: :unprocessable_content
     end
 
     TournamentSyncPusher.push!(@tournament)
@@ -166,19 +213,52 @@ class TournamentsController < ApplicationController
     }, status: :bad_gateway
   end
 
+  # PATCH /tournaments/:id/start_next_group_matches
+  def start_next_group_matches
+    started_matches = TournamentGroupMatchStarter.start_next!(@tournament, logger:, user: current_user)
+    if started_matches.any?
+      push_sync_if_needed!(@tournament)
+      TournamentLiveBroadcast.call(@tournament.id)
+    end
+
+    render json: ActiveModelSerializers::SerializableResource.new(
+      started_matches,
+      each_serializer: LiveMatchSerializer,
+      include: %w[match_scores.team]
+    ).as_json
+  end
+
   private
 
   def timer_params
-    {
-      timestamp: params[:timestamp],
-      timer_mode: params[:timer_mode]
+    timer_params = {
+      timer_reason: params[:timer_reason],
+      timer_reason_text: params[:timer_reason_text]
     }
+    timer_params[:timestamp] = params[:timestamp] if params.key?(:timestamp)
+    timer_params[:timer_mode] = params[:timer_mode] if params.key?(:timer_mode)
+    timer_params
   end
 
   def serialize_timer_state(tournament)
     {
       timestamp: tournament.timestamp&.iso8601,
-      timer_mode: tournament.timer_mode
+      timer_mode: tournament.timer_mode,
+      timer_reason: tournament.timer_reason,
+      timer_reason_text: tournament.timer_reason_text
+    }
+  end
+
+  def playoff_deletion_payload(tournament)
+    {
+      id: tournament.id,
+      stages: tournament.stages.sort_by(&:level).map do |stage|
+        {
+          id: stage.id,
+          level: stage.level,
+          state: stage.state
+        }
+      end
     }
   end
 
@@ -196,7 +276,14 @@ class TournamentsController < ApplicationController
     if team[:id]
       Team.find team[:id]
     elsif team[:name]
-      Team.create name: team[:name]
+      Team.create(name: team[:name], players: players_from_team_params(team))
+    end
+  end
+
+  def players_from_team_params(team)
+    player_emails = team[:player_emails].presence || team[:player_email]
+    Array.wrap(player_emails).map(&:to_s).map(&:strip).reject(&:blank?).map do |player_email|
+      User.find_or_create_player_by_email!(player_email)
     end
   end
 
@@ -209,7 +296,7 @@ class TournamentsController < ApplicationController
     @tournament = profiling.measure('load_tournament') do
       Tournament.includes(
         :user,
-        :teams,
+        { teams: :players },
         stages: [
           { matches: { match_scores: :team } },
           { groups: [
@@ -245,6 +332,7 @@ class TournamentsController < ApplicationController
     params.slice(
       :name, :description, :public, :teams, :group_stage, :playoff_teams_amount,
       :instant_finalists_amount, :intermediate_round_participants_amount,
+      :location, :starts_at, :ends_at, :website_url,
       :read_only_mode, :sync_target_url, :sync_auth_token
     ).permit!
   end
@@ -253,9 +341,9 @@ class TournamentsController < ApplicationController
     return if ActiveModel::Type::Boolean.new.cast(params[:read_only_mode])
 
     teams = params['teams']
-    return if teams.is_a?(Array) && teams.count { |t| !(t.is_a? ActionController::Parameters) }.zero?
+    return if teams.is_a?(Array) && teams.count { |team| !team.is_a?(ActionController::Parameters) }.zero?
 
-    render json: { error: 'Invalid teams array' }, status: :unprocessable_entity
+    render json: { error: 'Invalid teams array' }, status: :unprocessable_content
   end
 
   def only_playoff_teams_amount_changed
@@ -286,7 +374,7 @@ class TournamentsController < ApplicationController
 
     render json: {
       error: 'playoff_teams_amount, instant_finalists_amount and intermediate_round_participants_amount don\'t match'
-    }, status: :unprocessable_entity
+    }, status: :unprocessable_content
   end
 
   def sync_state_params
@@ -296,15 +384,13 @@ class TournamentsController < ApplicationController
   def authorize_sync_request!
     unless @tournament.sync_accepts_push?
       return render json: { error: 'Tournament is not configured to accept sync pushes' },
-                    status: :unprocessable_entity
+                    status: :unprocessable_content
     end
 
     token = request.authorization.to_s.delete_prefix('Bearer ').presence || request.headers['X-Tournament-Sync-Token'].to_s
     return render json: { error: 'Missing sync token' }, status: :unauthorized if token.blank?
 
-    matches = token.bytesize == @tournament.sync_auth_token.to_s.bytesize &&
-              ActiveSupport::SecurityUtils.secure_compare(token, @tournament.sync_auth_token.to_s)
-    return if matches
+    return if @tournament.sync_token_matches?(token)
 
     render json: { error: 'Invalid sync token' }, status: :unauthorized
   end
@@ -337,72 +423,125 @@ class TournamentsController < ApplicationController
     timestamp = params[:timestamp]
     timestamp_seconds = params[:timestamp_seconds]
     timer_mode = params[:timer_mode]
+    timer_reason_param_present = params.key?(:timer_reason)
+    timer_reason_text_param_present = params.key?(:timer_reason_text)
+    timer_reason_update_requested = timer_reason_param_present || timer_reason_text_param_present
+    normalize_timer_reason_params
+    timer_reason = params[:timer_reason]
+    timer_reason_text = params[:timer_reason_text]
     clear_timer = ActiveModel::Type::Boolean.new.cast(params[:clear_timer])
 
-    if clear_timer
-      if timestamp.present? || timestamp_seconds.present? || timer_mode.present?
-        return render json: { error: 'clear_timer cannot be combined with timestamp values or timer_mode' },
-                      status: :unprocessable_entity
-      end
+    return validate_clear_timer_params(timestamp, timestamp_seconds, timer_mode, timer_reason, timer_reason_text) if clear_timer
 
-      params[:timestamp] = nil
-      params[:timer_mode] = nil
-      return
+    return render_timer_validation_error('Invalid timer_mode') if timer_mode.present? && !Tournament::TIMER_MODES.include?(timer_mode)
+
+    timer_reason_error = validate_timer_reason_params(
+      timer_reason,
+      timer_reason_text,
+      timer_reason_param_present,
+      timer_reason_text_param_present
+    )
+    return render_timer_validation_error(timer_reason_error) if timer_reason_error
+
+    return if validate_timer_timestamp_params(timestamp, timestamp_seconds, timer_mode)
+
+    if timer_mode == 'countup'
+      params[:timestamp] = Time.zone.now
+    elsif timer_mode.present?
+      render_timer_validation_error('timer_mode requires timestamp, timestamp_seconds, or clear_timer')
+    elsif timer_reason_update_requested
+      render_timer_validation_error('timer_reason requires active timer') unless timer_active?
+    else
+      render_timer_validation_error('timestamp, timestamp_seconds, or clear_timer is required')
     end
+  end
 
-    if timer_mode.present? && %w[countdown countup].exclude?(timer_mode)
-      return render json: { error: 'Invalid timer_mode' }, status: :unprocessable_entity
-    end
-
-    # throw error if both timestamp and timestamp_seconds are present
+  def validate_timer_timestamp_params(timestamp, timestamp_seconds, timer_mode)
     if timestamp.present? && timestamp_seconds.present?
-      return render json: { error: 'Only one of timestamp or timestamp_seconds is allowed' },
-                    status: :unprocessable_entity
+      return render_timer_validation_error('Only one of timestamp or timestamp_seconds is allowed')
     end
 
     if timer_mode == 'countup' && timestamp_seconds.present?
-      return render json: { error: 'timestamp_seconds is only allowed for countdown mode' },
-                    status: :unprocessable_entity
+      return render_timer_validation_error('timestamp_seconds is only allowed for countdown mode')
     end
 
-    if timestamp_seconds.present?
-      begin
-        timestamp_seconds = Integer(timestamp_seconds)
-      rescue ArgumentError
-        return render json: { error: 'Invalid seconds format' }, status: :unprocessable_entity
-      end
+    return validate_timestamp_seconds_param(timestamp_seconds) if timestamp_seconds.present?
+    return validate_timestamp_param(timestamp, timer_mode) if timestamp.present?
 
-      if timestamp_seconds <= 0
-        return render json: { error: 'Timestamp must be in the future for countdown mode' },
-                      status: :unprocessable_entity
-      end
+    false
+  end
 
-      parsed_time = Time.zone.now + timestamp_seconds
-      params[:timestamp] = parsed_time
-      params[:timer_mode] = 'countdown'
-    elsif timestamp.present?
-      begin
-        parsed_time = Time.zone.parse(timestamp)
-        if parsed_time.nil?
-          return render json: { error: 'Invalid timestamp format' }, status: :unprocessable_entity
-        elsif timer_mode != 'countup' && !parsed_time.future?
-          return render json: { error: 'Timestamp must be in the future for countdown mode' },
-                        status: :unprocessable_entity
-        end
+  def validate_timestamp_seconds_param(timestamp_seconds)
+    seconds = Integer(timestamp_seconds)
+    return render_timer_validation_error('Timestamp must be in the future for countdown mode') if seconds <= 0
 
-        params[:timestamp] = parsed_time
-        params[:timer_mode] = timer_mode.presence || 'countdown'
-      rescue ArgumentError
-        render json: { error: 'Invalid timestamp format' }, status: :unprocessable_entity
-      end
-    elsif timer_mode == 'countup'
-      params[:timestamp] = Time.zone.now
-    elsif timer_mode.present?
-      render json: { error: 'timer_mode requires timestamp, timestamp_seconds, or clear_timer' },
-             status: :unprocessable_entity
-    else
-      render json: { error: 'timestamp, timestamp_seconds, or clear_timer is required' },
-             status: :unprocessable_entity
+    params[:timestamp] = Time.zone.now + seconds
+    params[:timer_mode] = 'countdown'
+  rescue ArgumentError
+    render_timer_validation_error('Invalid seconds format')
+  end
+
+  def validate_timestamp_param(timestamp, timer_mode)
+    parsed_time = Time.zone.parse(timestamp)
+    if parsed_time.nil?
+      return render_timer_validation_error('Invalid timestamp format')
+    elsif timer_mode != 'countup' && !parsed_time.future?
+      return render_timer_validation_error('Timestamp must be in the future for countdown mode')
     end
+
+    params[:timestamp] = parsed_time
+    params[:timer_mode] = timer_mode.presence || 'countdown'
+  rescue ArgumentError
+    render_timer_validation_error('Invalid timestamp format')
+  end
+
+  def normalize_timer_reason_params
+    params[:timer_reason] = params[:timer_reason].presence
+    params[:timer_reason_text] = timer_reason_text_param
+  end
+
+  def timer_reason_text_param
+    return nil unless params.key?(:timer_reason_text)
+
+    params[:timer_reason_text].to_s.strip.presence
+  end
+
+  def validate_clear_timer_params(timestamp, timestamp_seconds, timer_mode, timer_reason, timer_reason_text)
+    if timestamp.present? || timestamp_seconds.present? || timer_mode.present? ||
+       timer_reason.present? || timer_reason_text.present?
+      return render_timer_validation_error('clear_timer cannot be combined with timer values or timer reason')
+    end
+
+    params[:timestamp] = nil
+    params[:timer_mode] = nil
+    params[:timer_reason] = nil
+    params[:timer_reason_text] = nil
+  end
+
+  def validate_timer_reason_params(
+    timer_reason,
+    timer_reason_text,
+    timer_reason_param_present,
+    timer_reason_text_param_present
+  )
+    return 'timer_reason is required when timer_reason_text is provided' if timer_reason_text_param_present && !timer_reason_param_present
+    return if timer_reason.blank? && timer_reason_text.blank?
+
+    return 'timer_reason_text is only allowed when timer_reason is custom' if timer_reason.blank?
+    return 'Invalid timer_reason' unless Tournament::TIMER_REASONS.include?(timer_reason)
+
+    return 'timer_reason_text is required for custom timer_reason' if timer_reason == 'custom' && timer_reason_text.blank?
+
+    return unless timer_reason != 'custom' && timer_reason_text.present?
+
+    'timer_reason_text is only allowed when timer_reason is custom'
+  end
+
+  def timer_active?
+    @tournament.timestamp.present? && @tournament.timer_mode.present?
+  end
+
+  def render_timer_validation_error(message)
+    render json: { error: message }, status: :unprocessable_content
   end
 end

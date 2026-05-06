@@ -21,7 +21,7 @@ RSpec.describe 'Tournament team action lists websocket HTTP E2E' do
   let(:owner_email) { ENV.fetch('TURNIERE_E2E_EMAIL') }
   let(:owner_password) { ENV.fetch('TURNIERE_E2E_PASSWORD') }
   let(:client) { login_client }
-  let(:anonymous_client) { TurniereE2E::ApiClient.new(base_url:) }
+  let(:anonymous_client) { TurniereE2E::ApiClient.new(base_url: base_url) }
 
   it 'broadcasts initial and updated team action list state over websocket' do
     tournament = create_group_stage_tournament(name_prefix: 'Ws Leader')
@@ -30,7 +30,7 @@ RSpec.describe 'Tournament team action lists websocket HTTP E2E' do
     tournament = fetch_tournament(tournament.fetch(:id))
     token_list = find_playoff_token_list!(tournament)
 
-    cable_client = TurniereE2E::ActionCableClient.new(base_url:)
+    cable_client = TurniereE2E::ActionCableClient.new(base_url: base_url)
     cable_client.subscribe_team_action_lists!(tournament_id: tournament.fetch(:id))
 
     initial_payload = cable_client.wait_for_payload!
@@ -50,8 +50,7 @@ RSpec.describe 'Tournament team action lists websocket HTTP E2E' do
     expect(team_action_item_completed?(first_update, team_name: first_item.dig(:team, :name))).to eq(true)
 
     update_by_business_key = client.patch(
-      "/tournaments/#{tournament.fetch(:id)}/team_action_lists/#{playoff_token_list_key}/teams/#{second_item.dig(:team,
-                                                                                                                 :id)}",
+      "/tournaments/#{tournament.fetch(:id)}/team_action_lists/#{playoff_token_list_key}/teams/#{second_item.dig(:team, :id)}",
       body: { completed: true }
     )
     expect(update_by_business_key[:status]).to eq(200)
@@ -68,7 +67,7 @@ RSpec.describe 'Tournament team action lists websocket HTTP E2E' do
   end
 
   def login_client
-    api_client = TurniereE2E::ApiClient.new(base_url:)
+    api_client = TurniereE2E::ApiClient.new(base_url: base_url)
     response = api_client.login!(email: owner_email, password: owner_password)
 
     expect(response[:status]).to eq(200)
@@ -83,7 +82,7 @@ RSpec.describe 'Tournament team action lists websocket HTTP E2E' do
                              group_stage: true,
                              playoff_teams_amount: 4,
                              teams: 2.times.flat_map do |group_index|
-                               Array.new(4) do |seed_index|
+                               4.times.map do |seed_index|
                                  {
                                    name: "#{name_prefix.tr(' ', '')}-G#{group_index + 1}-S#{seed_index + 1}",
                                    group: group_index
@@ -135,7 +134,7 @@ RSpec.describe 'Tournament team action lists websocket HTTP E2E' do
 
     ordered_scores = match_response.fetch(:json).fetch(:match_scores).sort_by { |score| score.fetch(:id) }
     [first_score, second_score].each_with_index do |points, index|
-      score_update = client.patch("/match_scores/#{ordered_scores[index].fetch(:id)}", body: { points: })
+      score_update = client.patch("/match_scores/#{ordered_scores[index].fetch(:id)}", body: { points: points })
       expect(score_update[:status]).to eq(200)
     end
 
@@ -144,12 +143,12 @@ RSpec.describe 'Tournament team action lists websocket HTTP E2E' do
   end
 
   def wait_for_team_action_list_state!(cable_client, team_name:, completed:, timeout: 20)
-    deadline = Time.zone.now + timeout
+    deadline = Time.now + timeout
     loop do
-      payload = cable_client.wait_for_payload!(timeout: [deadline - Time.zone.now, 0.1].max)
-      return payload if team_action_item_completed?(payload, team_name:) == completed
+      payload = cable_client.wait_for_payload!(timeout: [deadline - Time.now, 0.1].max)
+      return payload if team_action_item_completed?(payload, team_name: team_name) == completed
 
-      raise "team action websocket payload not received within #{timeout}s" if Time.zone.now >= deadline
+      raise "team action websocket payload not received within #{timeout}s" if Time.now >= deadline
     end
   end
 

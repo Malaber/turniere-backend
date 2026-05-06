@@ -12,7 +12,7 @@ module TurniereE2E
     attr_reader :client
 
     def initialize(base_url:, email: nil, password: nil, username: nil)
-      @client = ApiClient.new(base_url:)
+      @client = ApiClient.new(base_url: base_url)
       @email = email
       @password = password
       @username = username
@@ -30,31 +30,25 @@ module TurniereE2E
 
       timer_response = patch!(
         "/tournaments/#{tournament.fetch(:id)}/timer",
-        body: { timestamp_seconds: 600 }
+        body: { timestamp_seconds: 600, timer_reason: 'tournament_start' }
       )
-      checkpoints[:timer_set] = { timestamp: timer_response.fetch(:timestamp) }
-      if stop_at == :timer_set
-        return result(session:, tournament:, checkpoints:,
-                      stop_at:)
-      end
+      checkpoints[:timer_set] = {
+        timestamp: timer_response.fetch(:timestamp),
+        timer_reason: timer_response.fetch(:timer_reason)
+      }
+      return checkpoint_result(session, tournament, checkpoints, stop_at) if stop_at == :timer_set
 
       upcoming_matches = get!(
         "/tournaments/#{tournament.fetch(:id)}/matches",
         params: { state: 'upcoming' }
       )
       checkpoints[:upcoming_group_matches] = { match_ids: upcoming_matches.map { |match| match.fetch(:id) } }
-      if stop_at == :upcoming_group_matches
-        return result(session:, tournament:, checkpoints:,
-                      stop_at:)
-      end
+      return checkpoint_result(session, tournament, checkpoints, stop_at) if stop_at == :upcoming_group_matches
 
       finish_group_stage_matches!(tournament)
       tournament = fetch_tournament!(tournament.fetch(:id))
       checkpoints[:groups_finished] = summarize_tournament(tournament)
-      if stop_at == :groups_finished
-        return result(session:, tournament:, checkpoints:,
-                      stop_at:)
-      end
+      return checkpoint_result(session, tournament, checkpoints, stop_at) if stop_at == :groups_finished
 
       statistics = get!("/tournaments/#{tournament.fetch(:id)}/statistics")
       checkpoints[:statistics] = {
@@ -66,27 +60,21 @@ module TurniereE2E
       finish_stage!(group_stage_of!(tournament).fetch(:id))
       tournament = fetch_tournament!(tournament.fetch(:id))
       checkpoints[:playoffs_created] = summarize_tournament(tournament)
-      if stop_at == :playoffs_created
-        return result(session:, tournament:, checkpoints:,
-                      stop_at:)
-      end
+      return checkpoint_result(session, tournament, checkpoints, stop_at) if stop_at == :playoffs_created
 
       run_playoffs_until_before_final!(tournament.fetch(:id))
       tournament = fetch_tournament!(tournament.fetch(:id))
       checkpoints[:before_final_finish_attempt] = summarize_tournament(tournament)
-      if stop_at == :before_final_finish_attempt
-        return result(session:, tournament:, checkpoints:,
-                      stop_at:)
-      end
+      return checkpoint_result(session, tournament, checkpoints, stop_at) if stop_at == :before_final_finish_attempt
 
       finish_attempt = finish_final_stage_matches!(tournament)
       tournament = fetch_tournament!(tournament.fetch(:id))
       checkpoints[:final_finish_attempted] = {
-        finish_attempt:,
+        finish_attempt: finish_attempt,
         tournament: summarize_tournament(tournament)
       }
 
-      result(session:, tournament:, checkpoints:, stop_at:)
+      result(session: session, tournament: tournament, checkpoints: checkpoints, stop_at: stop_at)
     end
 
     def run_group_stage_intermediate_round(stop_at: :final_finish_attempted)
@@ -99,8 +87,8 @@ module TurniereE2E
         created: summarize_tournament(tournament)
       }
       if stop_at == :created
-        return result(session:, tournament:, checkpoints:,
-                      stop_at:)
+        return result(session: session, tournament: tournament, checkpoints: checkpoints,
+                      stop_at: stop_at)
       end
 
       finish_group_stage_matches!(tournament)
@@ -108,44 +96,87 @@ module TurniereE2E
       tournament = fetch_tournament!(tournament.fetch(:id))
       checkpoints[:playoffs_created] = summarize_tournament(tournament)
       if stop_at == :playoffs_created
-        return result(session:, tournament:, checkpoints:,
-                      stop_at:)
+        return result(session: session, tournament: tournament, checkpoints: checkpoints,
+                      stop_at: stop_at)
       end
 
       run_playoffs_until_before_final!(tournament.fetch(:id))
       tournament = fetch_tournament!(tournament.fetch(:id))
       checkpoints[:before_final_finish_attempt] = summarize_tournament(tournament)
       if stop_at == :before_final_finish_attempt
-        return result(session:, tournament:, checkpoints:,
-                      stop_at:)
+        return result(session: session, tournament: tournament, checkpoints: checkpoints,
+                      stop_at: stop_at)
       end
 
       finish_attempt = finish_final_stage_matches!(tournament)
       tournament = fetch_tournament!(tournament.fetch(:id))
       checkpoints[:final_finish_attempted] = {
-        finish_attempt:,
+        finish_attempt: finish_attempt,
         tournament: summarize_tournament(tournament)
       }
 
-      result(session:, tournament:, checkpoints:, stop_at:)
+      result(session: session, tournament: tournament, checkpoints: checkpoints, stop_at: stop_at)
+    end
+
+    def run_group_stage_playoff_recreation(stop_at: :third_playoffs_created)
+      session = register_session!
+      tournament = create_tournament!(
+        create_group_stage_payload(group_count: 2, teams_per_group: 2, playoff_teams_amount: 2)
+      )
+
+      checkpoints = {
+        created: summarize_tournament(tournament)
+      }
+      rounds = playoff_recreation_rounds
+      created_keys = %i[first_playoffs_created second_playoffs_created third_playoffs_created]
+      deleted_keys = %i[first_playoffs_deleted second_playoffs_deleted]
+
+      rounds.each_with_index do |round, index|
+        tournament = fetch_tournament!(tournament.fetch(:id))
+        apply_group_score_round!(tournament, round.fetch(:scores_by_team_name))
+        finish_stage!(group_stage_of!(fetch_tournament!(tournament.fetch(:id))).fetch(:id))
+        tournament = fetch_tournament!(tournament.fetch(:id))
+
+        created_key = created_keys.fetch(index)
+        checkpoints[created_key] = summarize_tournament(tournament).merge(
+          playoff_matchups: playoff_matchups(tournament)
+        )
+        if stop_at == created_key
+          return result(session: session, tournament: tournament, checkpoints: checkpoints,
+                        stop_at: stop_at)
+        end
+
+        next if index == rounds.size - 1
+
+        delete_playoffs!(tournament.fetch(:id))
+        tournament = fetch_tournament!(tournament.fetch(:id))
+        deleted_key = deleted_keys.fetch(index)
+        checkpoints[deleted_key] = summarize_tournament(tournament)
+        if stop_at == deleted_key
+          return result(session: session, tournament: tournament, checkpoints: checkpoints,
+                        stop_at: stop_at)
+        end
+      end
+
+      result(session: session, tournament: tournament, checkpoints: checkpoints, stop_at: stop_at)
     end
 
     def run_playoff_only(team_count:, stop_at: :completed)
       session = register_session!
-      tournament = create_tournament!(create_playoff_only_payload(team_count:))
+      tournament = create_tournament!(create_playoff_only_payload(team_count: team_count))
       checkpoints = {
         created: summarize_tournament(tournament)
       }
       if stop_at == :created
-        return result(session:, tournament:, checkpoints:,
-                      stop_at:)
+        return result(session: session, tournament: tournament, checkpoints: checkpoints,
+                      stop_at: stop_at)
       end
 
       run_playoffs_until_complete!(tournament.fetch(:id))
       tournament = fetch_tournament!(tournament.fetch(:id))
       checkpoints[:completed] = summarize_tournament(tournament)
 
-      result(session:, tournament:, checkpoints:, stop_at:)
+      result(session: session, tournament: tournament, checkpoints: checkpoints, stop_at: stop_at)
     end
 
     def run_group_direct_comparison_tiebreak(case_name:, stop_at: :group_scores)
@@ -158,8 +189,8 @@ module TurniereE2E
         created: summarize_tournament(tournament)
       }
       if stop_at == :created
-        return result(session:, tournament:, checkpoints:,
-                      stop_at:)
+        return result(session: session, tournament: tournament, checkpoints: checkpoints,
+                      stop_at: stop_at)
       end
 
       group = group_stage_of!(tournament).fetch(:groups).first
@@ -172,16 +203,68 @@ module TurniereE2E
       }
 
       tournament = fetch_tournament!(tournament.fetch(:id))
-      result(session:, tournament:, checkpoints:, stop_at:)
+      result(session: session, tournament: tournament, checkpoints: checkpoints, stop_at: stop_at)
+    end
+
+    def run_transaction_log_history(stop_at: :transaction_log)
+      session = register_session!
+      tournament = create_tournament!(
+        create_group_stage_payload(group_count: 1, teams_per_group: 2, playoff_teams_amount: 1)
+      )
+
+      checkpoints = {
+        created: summarize_tournament(tournament)
+      }
+
+      group_stage = group_stage_of!(tournament)
+      group = group_stage.fetch(:groups).first
+      match = group.fetch(:matches).first
+      team_ids = match.fetch(:match_scores).map { |score| score.dig(:team, :id) }
+
+      play_match_with_points!(
+        match,
+        points_by_team_name: {
+          'G1-S1' => 1,
+          'G1-S2' => 1
+        }
+      )
+      checkpoints[:drawn_group_match] = fetch_match!(match.fetch(:id))
+
+      failed_playoff_start = client.patch("/stages/#{group_stage.fetch(:id)}", body: { state: 'finished' })
+      expect_status!(failed_playoff_start, 422, 'finish group stage without decider')
+      checkpoints[:failed_playoff_start] = failed_playoff_start.fetch(:json)
+
+      decider = create_decider_match!(group.fetch(:id), team_ids)
+      play_match_with_hidden_points!(
+        decider,
+        hidden_points_by_team_name: {
+          'G1-S1' => 2,
+          'G1-S2' => 1
+        }
+      )
+      checkpoints[:decider_finished] = fetch_match!(decider.fetch(:id))
+
+      finish_stage!(group_stage.fetch(:id))
+      tournament = fetch_tournament!(tournament.fetch(:id))
+      checkpoints[:playoffs_created] = summarize_tournament(tournament)
+
+      transaction_log = get!("/tournaments/#{tournament.fetch(:id)}/transaction_log")
+      checkpoints[:transaction_log] = {
+        actions: transaction_log.map { |entry| entry.fetch(:action) },
+        sequences: transaction_log.map { |entry| entry.fetch(:sequence) },
+        messages: transaction_log.map { |entry| entry.fetch(:message) }
+      }
+
+      result(session: session, tournament: tournament, checkpoints: checkpoints, stop_at: stop_at)
     end
 
     def run_group_stage_render_profile(group_count:, teams_per_group:, playoff_teams_amount:, stop_at: :profiled_show)
       session = register_session!
       tournament = create_tournament!(
         create_group_stage_payload(
-          group_count:,
-          teams_per_group:,
-          playoff_teams_amount:
+          group_count: group_count,
+          teams_per_group: teams_per_group,
+          playoff_teams_amount: playoff_teams_amount
         )
       )
 
@@ -189,18 +272,18 @@ module TurniereE2E
         created: summarize_tournament(tournament)
       }
       if stop_at == :created
-        return result(session:, tournament:, checkpoints:,
-                      stop_at:)
+        return result(session: session, tournament: tournament, checkpoints: checkpoints,
+                      stop_at: stop_at)
       end
 
       profiled_show = fetch_tournament_profile!(tournament.fetch(:id))
       checkpoints[:profiled_show] = profiled_show
 
-      result(session:, tournament: profiled_show.fetch(:tournament), checkpoints:, stop_at:)
+      result(session: session, tournament: profiled_show.fetch(:tournament), checkpoints: checkpoints, stop_at: stop_at)
     end
 
     def wait_for_healthcheck!(timeout_seconds: 30)
-      started_at = Time.zone.now
+      started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
       loop do
         begin
           response = client.get('/healthz')
@@ -209,7 +292,8 @@ module TurniereE2E
           nil
         end
 
-        raise "healthcheck did not become ready within #{timeout_seconds}s" if Time.zone.now - started_at > timeout_seconds
+        elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started_at
+        raise "healthcheck did not become ready within #{timeout_seconds}s" if elapsed > timeout_seconds
 
         sleep 0.5
       end
@@ -223,17 +307,31 @@ module TurniereE2E
       unique = SecureRandom.hex(6)
       email = "e2e-#{unique}@example.com"
       username = "e2e-#{unique}"
-      client.register!(email:, password: DEFAULT_PASSWORD, username:)
-      return { email:, username: } if client.authenticated?
+      client.register!(email: email, password: DEFAULT_PASSWORD, username: username)
+      return { email: email, username: username } if client.authenticated?
 
-      login_response = client.login!(email:, password: DEFAULT_PASSWORD)
-      return { email:, username: } if login_response.fetch(:status) == 200 && client.authenticated?
+      login_response = client.login!(email: email, password: DEFAULT_PASSWORD)
+      return { email: email, username: username } if login_response.fetch(:status) == 200 && client.authenticated?
 
       raise ApiError.new(
         'authentication bootstrap failed; provide a confirmed E2E user via TURNIERE_E2E_EMAIL and TURNIERE_E2E_PASSWORD',
         status: login_response.fetch(:status),
         body: login_response.fetch(:json)
       )
+    end
+
+    def login_with_existing_credentials!
+      login_response = client.login!(email: @email, password: @password)
+      expect_status!(login_response, 200, "login #{@email}")
+      unless client.authenticated?
+        raise ApiError.new(
+          'login succeeded but no auth headers were returned',
+          status: 200,
+          body: login_response.fetch(:json)
+        )
+      end
+
+      { email: @email, username: @username || @email }
     end
 
     def create_tournament!(payload)
@@ -249,19 +347,19 @@ module TurniereE2E
     end
 
     def get!(path, params: nil)
-      response = get_response!(path, params:)
+      response = get_response!(path, params: params)
       expect_status!(response, 200, "get #{path}")
       response.fetch(:json)
     end
 
     def get_response!(path, params: nil)
-      response = client.get(path, params:)
+      response = client.get(path, params: params)
       expect_status!(response, 200, "get #{path}")
       response
     end
 
     def patch!(path, body:)
-      response = client.patch(path, body:)
+      response = client.patch(path, body: body)
       expect_status!(response, 200, "patch #{path}")
       response.fetch(:json)
     end
@@ -315,7 +413,7 @@ module TurniereE2E
       refreshed_match = fetch_match!(match.fetch(:id))
       refreshed_match.fetch(:match_scores).sort_by { |score| score.fetch(:id) }.each do |score|
         points = score.dig(:team, :name) == winner_name ? 10 : 1
-        updated_score = client.patch("/match_scores/#{score.fetch(:id)}", body: { points: })
+        updated_score = client.patch("/match_scores/#{score.fetch(:id)}", body: { points: points })
         expect_status!(updated_score, 200, "update match_score #{score.fetch(:id)}")
       end
 
@@ -345,7 +443,7 @@ module TurniereE2E
         points = points_by_team_name.fetch(team_name) do
           raise "missing score for #{team_name.inspect} in match #{match.fetch(:id)}"
         end
-        updated_score = client.patch("/match_scores/#{score.fetch(:id)}", body: { points: })
+        updated_score = client.patch("/match_scores/#{score.fetch(:id)}", body: { points: points })
         expect_status!(updated_score, 200, "update match_score #{score.fetch(:id)}")
       end
 
@@ -365,6 +463,36 @@ module TurniereE2E
       }
     end
 
+    def play_match_with_hidden_points!(match, hidden_points_by_team_name:, expected_finish_status: 200)
+      started = client.patch("/matches/#{match.fetch(:id)}", body: { state: 'in_progress' })
+      expect_status!(started, 200, "start match #{match.fetch(:id)}")
+
+      refreshed_match = fetch_match!(match.fetch(:id))
+      refreshed_match.fetch(:match_scores).each do |score|
+        team_name = score.dig(:team, :name)
+        hidden_points = hidden_points_by_team_name.fetch(team_name) do
+          raise "missing hidden score for #{team_name.inspect} in match #{match.fetch(:id)}"
+        end
+        updated_score = client.patch("/match_scores/#{score.fetch(:id)}", body: { hidden_points: hidden_points })
+        expect_status!(updated_score, 200, "update hidden match_score #{score.fetch(:id)}")
+      end
+
+      finished = client.patch("/matches/#{match.fetch(:id)}", body: { state: 'finished' })
+      expect_status!(finished, expected_finish_status, "finish match #{match.fetch(:id)}")
+
+      {
+        match_id: match.fetch(:id),
+        status: finished.fetch(:status),
+        body: finished.fetch(:json)
+      }
+    end
+
+    def create_decider_match!(group_id, team_ids)
+      response = client.post("/groups/#{group_id}/matches", body: { team_ids: team_ids })
+      expect_status!(response, 201, "create decider match for group #{group_id}")
+      response.fetch(:json)
+    end
+
     def fetch_match!(match_id)
       response = client.get("/matches/#{match_id}")
       expect_status!(response, 200, "fetch match #{match_id}")
@@ -374,6 +502,12 @@ module TurniereE2E
     def finish_stage!(stage_id)
       response = client.patch("/stages/#{stage_id}", body: { state: 'finished' })
       expect_status!(response, 200, "finish stage #{stage_id}")
+      response.fetch(:json)
+    end
+
+    def delete_playoffs!(tournament_id)
+      response = client.delete("/tournaments/#{tournament_id}/playoffs")
+      expect_status!(response, 200, "delete playoffs for tournament #{tournament_id}")
       response.fetch(:json)
     end
 
@@ -400,8 +534,8 @@ module TurniereE2E
       {
         status: 200,
         finished_match_ids: final_stage_matches_of!(fetch_tournament!(tournament.fetch(:id))).map do |match|
-                              match.fetch(:id)
-                            end
+          match.fetch(:id)
+        end
       }
     end
 
@@ -431,7 +565,35 @@ module TurniereE2E
         match = matches_by_teams.fetch(team_names.sort) do
           raise "match for #{team_names.inspect} not found"
         end
-        play_match_with_points!(match, points_by_team_name:)
+        play_match_with_points!(match, points_by_team_name: points_by_team_name)
+      end
+    end
+
+    def apply_group_score_round!(tournament, scores_by_team_name)
+      group_stage_of!(tournament).fetch(:groups).each do |group|
+        group.fetch(:matches).each do |match|
+          points_by_team_name = match.fetch(:match_scores).to_h do |score|
+            team_name = score.dig(:team, :name)
+            [team_name, scores_by_team_name.fetch(team_name)]
+          end
+
+          if match.fetch(:state) == 'not_started'
+            play_match_with_points!(match, points_by_team_name: points_by_team_name)
+          else
+            update_match_scores!(match, points_by_team_name: points_by_team_name)
+          end
+        end
+      end
+    end
+
+    def update_match_scores!(match, points_by_team_name:)
+      refreshed_match = fetch_match!(match.fetch(:id))
+      refreshed_match.fetch(:match_scores).each do |score|
+        team_name = score.dig(:team, :name)
+        updated_score = client.patch("/match_scores/#{score.fetch(:id)}", body: {
+                                       points: points_by_team_name.fetch(team_name)
+                                     })
+        expect_status!(updated_score, 200, "update match_score #{score.fetch(:id)}")
       end
     end
 
@@ -464,9 +626,38 @@ module TurniereE2E
         description: 'HTTP lifecycle E2E tournament',
         public: false,
         group_stage: true,
-        playoff_teams_amount:,
-        teams:
+        playoff_teams_amount: playoff_teams_amount,
+        teams: teams
       }
+    end
+
+    def playoff_recreation_rounds
+      [
+        {
+          scores_by_team_name: {
+            'G1-S1' => 3,
+            'G1-S2' => 1,
+            'G2-S1' => 3,
+            'G2-S2' => 1
+          }
+        },
+        {
+          scores_by_team_name: {
+            'G1-S1' => 0,
+            'G1-S2' => 4,
+            'G2-S1' => 0,
+            'G2-S2' => 4
+          }
+        },
+        {
+          scores_by_team_name: {
+            'G1-S1' => 5,
+            'G1-S2' => 2,
+            'G2-S1' => 2,
+            'G2-S2' => 5
+          }
+        }
+      ]
     end
 
     def create_playoff_only_payload(team_count:)
@@ -559,6 +750,19 @@ module TurniereE2E
       }
     end
 
+    def playoff_matchups(tournament)
+      entry_stage = tournament.fetch(:stages)
+                              .reject { |stage| stage.fetch(:level) == -1 }
+                              .max_by { |stage| stage.fetch(:level) }
+      entry_stage.fetch(:matches)
+                 .sort_by { |match| match.fetch(:position) }
+                 .map do |match|
+        match.fetch(:match_scores)
+             .map { |score| score.dig(:team, :name) }
+             .sort
+      end
+    end
+
     def fetch_tournament_profile!(tournament_id)
       started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
       response = get_response!("/tournaments/#{tournament_id}", params: { profile: 'true' })
@@ -574,7 +778,7 @@ module TurniereE2E
     end
 
     def parse_server_timing(header)
-      return {} if header.blank?
+      return {} if header.to_s.empty?
 
       header.split(',').each_with_object({}) do |entry, sections|
         name, duration = entry.strip.match(/\A([^;]+);dur=([0-9.]+)\z/)&.captures
@@ -586,11 +790,15 @@ module TurniereE2E
 
     def result(session:, tournament:, checkpoints:, stop_at:)
       {
-        session:,
+        session: session,
         stop_at: stop_at.to_s,
         tournament: summarize_tournament(tournament),
-        checkpoints:
+        checkpoints: checkpoints
       }
+    end
+
+    def checkpoint_result(session, tournament, checkpoints, stop_at)
+      result(session: session, tournament: tournament, checkpoints: checkpoints, stop_at: stop_at)
     end
 
     def expect_status!(response, expected_status, action)
@@ -603,15 +811,4 @@ module TurniereE2E
       )
     end
   end
-end
-
-def login_with_existing_credentials!
-  login_response = client.login!(email: @email, password: @password)
-  expect_status!(login_response, 200, "login #{@email}")
-  unless client.authenticated?
-    raise ApiError.new('login succeeded but no auth headers were returned', status: 200,
-                                                                            body: login_response.fetch(:json))
-  end
-
-  { email: @email, username: @username || @email }
 end

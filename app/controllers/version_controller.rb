@@ -8,12 +8,6 @@ class VersionController < ApplicationController
   private
 
   def git_commit_sha
-    ENV['GIT_COMMIT_SHA'].presence || local_git_commit_sha || 'unknown'
-  end
-
-  def local_git_commit_sha
-    Rails.root.join('.git').exist? ? `git rev-parse HEAD`.strip.presence : nil
-  rescue StandardError
-    nil
+    ENV['GIT_COMMIT_SHA'].presence || 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
   end
 end

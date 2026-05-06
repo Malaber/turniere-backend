@@ -27,8 +27,7 @@ RSpec.describe 'Tournament follower sync websocket HTTP E2E' do
   let(:follower_anonymous_client) { TurniereE2E::ApiClient.new(base_url: follower_base_url) }
 
   it 'broadcasts follower websocket updates after source sync import' do
-    source = create_group_stage_tournament(client: source_client, base_url: source_base_url,
-                                           name_prefix: 'Ws Sync Source')
+    source = create_group_stage_tournament(client: source_client, base_url: source_base_url, name_prefix: 'Ws Sync Source')
     follower = create_follower_tournament(name_prefix: 'Ws Sync Follower')
 
     configure_sync = source_client.patch("/tournaments/#{source.fetch(:id)}", body: {
@@ -62,7 +61,7 @@ RSpec.describe 'Tournament follower sync websocket HTTP E2E' do
   end
 
   def login_client(base_url:)
-    client = TurniereE2E::ApiClient.new(base_url:)
+    client = TurniereE2E::ApiClient.new(base_url: base_url)
     response = client.login!(email: owner_email, password: owner_password)
     expect(response[:status]).to eq(200)
     client
@@ -76,7 +75,7 @@ RSpec.describe 'Tournament follower sync websocket HTTP E2E' do
                              group_stage: true,
                              playoff_teams_amount: 4,
                              teams: 2.times.flat_map do |group_index|
-                               Array.new(4) do |seed_index|
+                               4.times.map do |seed_index|
                                  {
                                    name: "#{name_prefix.tr(' ', '')}-G#{group_index + 1}-S#{seed_index + 1}",
                                    group: group_index
@@ -85,7 +84,7 @@ RSpec.describe 'Tournament follower sync websocket HTTP E2E' do
                              end
                            })
     expect(response[:status]).to eq(201)
-    fetch_tournament(base_url:, tournament_id: response.dig(:json, :id))
+    fetch_tournament(base_url: base_url, tournament_id: response.dig(:json, :id))
   end
 
   def create_follower_tournament(name_prefix:)
@@ -102,7 +101,7 @@ RSpec.describe 'Tournament follower sync websocket HTTP E2E' do
   end
 
   def fetch_tournament(base_url:, tournament_id:)
-    client = TurniereE2E::ApiClient.new(base_url:)
+    client = TurniereE2E::ApiClient.new(base_url: base_url)
     response = client.get("/tournaments/#{tournament_id}")
     expect(response[:status]).to eq(200)
     response.fetch(:json)
@@ -142,7 +141,7 @@ RSpec.describe 'Tournament follower sync websocket HTTP E2E' do
 
     ordered_scores = match_response.fetch(:json).fetch(:match_scores).sort_by { |score| score.fetch(:id) }
     [first_score, second_score].each_with_index do |points, index|
-      score_update = source_client.patch("/match_scores/#{ordered_scores[index].fetch(:id)}", body: { points: })
+      score_update = source_client.patch("/match_scores/#{ordered_scores[index].fetch(:id)}", body: { points: points })
       expect(score_update[:status]).to eq(200)
     end
 
@@ -151,24 +150,24 @@ RSpec.describe 'Tournament follower sync websocket HTTP E2E' do
   end
 
   def wait_for_list_presence!(tournament_id, timeout: 20)
-    deadline = Time.zone.now + timeout
+    deadline = Time.now + timeout
     loop do
-      follower = fetch_tournament(base_url: follower_base_url, tournament_id:)
+      follower = fetch_tournament(base_url: follower_base_url, tournament_id: tournament_id)
       return follower if follower.fetch(:team_action_lists, []).any?
 
-      raise "follower list not present within #{timeout}s" if Time.zone.now >= deadline
+      raise "follower list not present within #{timeout}s" if Time.now >= deadline
 
       sleep 0.5
     end
   end
 
   def wait_for_team_action_list_state!(cable_client, team_name:, completed:, timeout: 20)
-    deadline = Time.zone.now + timeout
+    deadline = Time.now + timeout
     loop do
-      payload = cable_client.wait_for_payload!(timeout: [deadline - Time.zone.now, 0.1].max)
-      return payload if team_action_item_completed?(payload, team_name:) == completed
+      payload = cable_client.wait_for_payload!(timeout: [deadline - Time.now, 0.1].max)
+      return payload if team_action_item_completed?(payload, team_name: team_name) == completed
 
-      raise "follower websocket payload not received within #{timeout}s" if Time.zone.now >= deadline
+      raise "follower websocket payload not received within #{timeout}s" if Time.now >= deadline
     end
   end
 

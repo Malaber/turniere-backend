@@ -36,6 +36,7 @@ module TurniereBackend
     config.api_only = true
     config.action_cable.disable_request_forgery_protection = true
     config.action_cable.allowed_request_origins = [%r{\Ahttps?://.*\z}]
+    config.active_storage.variant_processor = :disabled
 
     config.middleware.insert_before 0, Rack::Cors do
       allow do
@@ -49,8 +50,5 @@ module TurniereBackend
     config.action_mailer.default_options = {
       from: 'noreply@turnie.re'
     }
-
-    # Active Record
-    config.active_record.legacy_connection_handling = false
   end
 end

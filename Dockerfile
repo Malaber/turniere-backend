@@ -1,11 +1,13 @@
 # syntax=docker/dockerfile:1.7
 
-ARG RUBY_VERSION=3.1.2
-ARG BUNDLER_VERSION=2.3.13
+ARG RUBY_VERSION=4.0.3
+ARG BUNDLER_VERSION=4.0.6
+ARG base_commit=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
 FROM ruby:${RUBY_VERSION}-slim AS runtime-base
 
 ARG BUNDLER_VERSION
+ARG DEBIAN_FRONTEND=noninteractive
 
 ENV LANG=C.UTF-8 \
     BUNDLE_JOBS=4 \
@@ -18,6 +20,7 @@ WORKDIR /app
 RUN apt-get update -qq \
     && apt-get install -y --no-install-recommends \
         libpq5 \
+        libyaml-0-2 \
         nodejs \
         openssl \
     && rm -rf /var/lib/apt/lists/* \
@@ -26,15 +29,17 @@ RUN apt-get update -qq \
 
 FROM runtime-base AS build-base
 
+ARG DEBIAN_FRONTEND=noninteractive
+
 RUN apt-get update -qq \
     && apt-get install -y --no-install-recommends \
         build-essential \
         git \
         libpq-dev \
         libsqlite3-dev \
+        libyaml-dev \
         pkg-config \
         python3 \
-        python3-pip \
     && rm -rf /var/lib/apt/lists/*
 
 COPY Gemfile Gemfile.lock ./
@@ -54,13 +59,14 @@ RUN bundle config set with 'development test' \
 
 FROM runtime-base AS production
 
-ARG GIT_COMMIT_SHA=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+ARG base_commit=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
-ENV RAILS_ENV=production
-ENV GIT_COMMIT_SHA=${GIT_COMMIT_SHA}
+ENV RAILS_ENV=production \
+    GIT_COMMIT_SHA=${base_commit}
 
 COPY --from=bundle-production /usr/local/bundle /usr/local/bundle
 COPY --from=bundle-production /app/vendor/bundle /app/vendor/bundle
+
 COPY Gemfile Gemfile.lock /app/
 COPY app /app/app
 COPY bin /app/bin
@@ -69,30 +75,32 @@ COPY db /app/db
 COPY public /app/public
 COPY script /app/script
 COPY config.ru Rakefile /app/
+
 # Duplicate production environment to beta environment
 COPY config/environments/production.rb /app/config/environments/beta.rb
 
 EXPOSE 3000
 
-CMD ["sh", "-lc", "bundle exec rails db:migrate && bundle exec rails s -p 3000 -b 0.0.0.0"]
+CMD ["sh", "-lc", "bundle exec rails db:migrate && bundle exec rails s -b 0.0.0.0"]
 
 FROM runtime-base AS test
 
-ARG GIT_COMMIT_SHA=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+ARG base_commit=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+ARG DEBIAN_FRONTEND=noninteractive
 
-ENV RAILS_ENV=test
-ENV GIT_COMMIT_SHA=${GIT_COMMIT_SHA}
+ENV RAILS_ENV=test \
+    GIT_COMMIT_SHA=${base_commit}
 
 RUN apt-get update -qq \
     && apt-get install -y --no-install-recommends \
         libsqlite3-0 \
         python3 \
-        python3-pip \
-    && rm -rf /var/lib/apt/lists/* \
-    && python3 -m pip install --no-cache-dir invoke
+        python3-invoke \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY --from=bundle-test /usr/local/bundle /usr/local/bundle
 COPY --from=bundle-test /app/vendor/bundle /app/vendor/bundle
+
 COPY Gemfile Gemfile.lock /app/
 COPY app /app/app
 COPY bin /app/bin

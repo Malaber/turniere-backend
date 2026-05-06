@@ -14,7 +14,7 @@ RSpec.describe Beamer, type: :model do
     end
 
     it 'allows same name in different tournaments' do
-      create(:beamer, name: 'projector')
+      beamer = create(:beamer, name: 'projector')
       other = build(:beamer, name: 'projector', tournament: create(:tournament))
       expect(other).to be_valid
     end

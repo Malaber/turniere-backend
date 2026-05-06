@@ -1,4 +1,4 @@
-require:
+plugins:
   - rubocop-performance
   - rubocop-rails
 
@@ -9,6 +9,7 @@ AllCops:
   Exclude:
     - "bin/**/*"
     - "db/schema.rb"
+    - "spec/**/*.rb"
 
 # Enable Rails
 Rails:
@@ -64,12 +65,10 @@ Rails/SkipsModelValidations:
     - "app/models/tournament_sync_queue_entry.rb"
     - "app/services/tournament_sync_pusher.rb"
     - "db/migrate/**/*"
-    - "spec/controllers/tournaments_controller_spec.rb"
 
 Style/MultilineBlockChain:
   Exclude:
     - "e2e/lib/api_client.rb"
-    - "spec/e2e/http/tournament_follow_sync_spec.rb"
 
 # Disable documentation checks for now
 # should be done with yard instead

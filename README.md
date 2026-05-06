@@ -30,6 +30,10 @@ bundle exec rspec
 Leader/follower tournament sync docs:
 
 - [doc/leader_follower.md](doc/leader_follower.md)
+- [doc/account_profiles_api.md](doc/account_profiles_api.md)
+- [doc/tournament_management_api.md](doc/tournament_management_api.md)
+- [doc/match_metadata_api.md](doc/match_metadata_api.md)
+- [doc/team_action_lists_api.md](doc/team_action_lists_api.md)
 - [doc/timer_api.md](doc/timer_api.md)
 - [doc/beamer_live_updates.md](doc/beamer_live_updates.md)
 - [doc/tournament_live_updates.md](doc/tournament_live_updates.md)

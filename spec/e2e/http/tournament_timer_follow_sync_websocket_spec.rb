@@ -40,30 +40,77 @@ RSpec.describe 'Tournament timer follower sync websocket HTTP E2E' do
     initial_payload = cable_client.wait_for_timer_payload!
     expect(initial_payload.fetch('timestamp')).to be_nil
     expect(initial_payload.fetch('timer_mode')).to be_nil
+    expect(initial_payload.fetch('timer_reason')).to be_nil
+    expect(initial_payload.fetch('timer_reason_text')).to be_nil
 
-    countdown = source_client.patch("/tournaments/#{source.fetch(:id)}/timer", body: { timestamp_seconds: 120 })
+    countdown = source_client.patch("/tournaments/#{source.fetch(:id)}/timer", body: {
+                                      timestamp_seconds: 120,
+                                      timer_reason: 'match_end'
+                                    })
     expect(countdown[:status]).to eq(200)
+    sync_now_if_requested!(source.fetch(:id))
 
     countdown_payload = wait_for_timer_state!(cable_client, timer_mode: 'countdown')
     expect(countdown_payload.fetch('timestamp')).to eq(countdown.dig(:json, :timestamp))
+    expect(countdown_payload.fetch('timer_reason')).to eq('match_end')
+    expect(countdown_payload.fetch('timer_reason_text')).to be_nil
 
-    countup = source_client.patch("/tournaments/#{source.fetch(:id)}/timer", body: { timer_mode: 'countup' })
+    reason_update = source_client.patch("/tournaments/#{source.fetch(:id)}/timer", body: {
+                                          timer_reason: 'custom',
+                                          timer_reason_text: 'Follower reason after start'
+                                        })
+    expect(reason_update[:status]).to eq(200)
+    sync_now_if_requested!(source.fetch(:id))
+
+    reason_payload = wait_for_timer_payload_matching!(cable_client) do |payload|
+      payload.fetch('timestamp') == countdown.dig(:json, :timestamp) &&
+        payload.fetch('timer_mode') == 'countdown' &&
+        payload.fetch('timer_reason') == 'custom' &&
+        payload.fetch('timer_reason_text') == 'Follower reason after start'
+    end
+    expect(reason_payload.fetch('timestamp')).to eq(countdown.dig(:json, :timestamp))
+
+    reason_clear = source_client.patch("/tournaments/#{source.fetch(:id)}/timer", body: {
+                                         timer_reason: nil
+                                       })
+    expect(reason_clear[:status]).to eq(200)
+    sync_now_if_requested!(source.fetch(:id))
+
+    reason_cleared_payload = wait_for_timer_payload_matching!(cable_client) do |payload|
+      payload.fetch('timestamp') == countdown.dig(:json, :timestamp) &&
+        payload.fetch('timer_mode') == 'countdown' &&
+        payload.fetch('timer_reason').nil? &&
+        payload.fetch('timer_reason_text').nil?
+    end
+    expect(reason_cleared_payload.fetch('timestamp')).to eq(countdown.dig(:json, :timestamp))
+
+    countup = source_client.patch("/tournaments/#{source.fetch(:id)}/timer", body: {
+                                    timer_mode: 'countup',
+                                    timer_reason: 'custom',
+                                    timer_reason_text: 'Follower sync custom reason'
+                                  })
     expect(countup[:status]).to eq(200)
+    sync_now_if_requested!(source.fetch(:id))
 
     countup_payload = wait_for_timer_state!(cable_client, timer_mode: 'countup')
     expect(countup_payload.fetch('timestamp')).to eq(countup.dig(:json, :timestamp))
+    expect(countup_payload.fetch('timer_reason')).to eq('custom')
+    expect(countup_payload.fetch('timer_reason_text')).to eq('Follower sync custom reason')
 
     clear = source_client.patch("/tournaments/#{source.fetch(:id)}/timer", body: { clear_timer: true })
     expect(clear[:status]).to eq(200)
+    sync_now_if_requested!(source.fetch(:id))
 
     cleared_payload = wait_for_timer_state!(cable_client, timer_mode: nil)
     expect(cleared_payload.fetch('timestamp')).to be_nil
+    expect(cleared_payload.fetch('timer_reason')).to be_nil
+    expect(cleared_payload.fetch('timer_reason_text')).to be_nil
   ensure
     cable_client&.close
   end
 
   def login_client(base_url:)
-    client = TurniereE2E::ApiClient.new(base_url:)
+    client = TurniereE2E::ApiClient.new(base_url: base_url)
     response = client.login!(email: owner_email, password: owner_password)
     expect(response[:status]).to eq(200)
     client
@@ -74,7 +121,7 @@ RSpec.describe 'Tournament timer follower sync websocket HTTP E2E' do
                              name: "#{name_prefix} #{SecureRandom.hex(3)}",
                              description: 'Follower websocket timer source tournament',
                              public: false,
-                             teams: Array.new(4) do |index|
+                             teams: 4.times.map do |index|
                                { name: "#{name_prefix.tr(' ', '')}-#{index + 1}" }
                              end
                            })
@@ -95,13 +142,26 @@ RSpec.describe 'Tournament timer follower sync websocket HTTP E2E' do
     response.fetch(:json)
   end
 
-  def wait_for_timer_state!(cable_client, timer_mode:, timeout: 20)
-    deadline = Time.zone.now + timeout
-    loop do
-      payload = cable_client.wait_for_timer_payload!(timeout: [deadline - Time.zone.now, 0.1].max)
-      return payload if payload.fetch('timer_mode') == timer_mode
+  def sync_now_if_requested!(source_tournament_id)
+    return unless ENV.fetch('TURNIERE_E2E_SYNC_MODE', nil) == 'manual'
 
-      raise "follower timer websocket payload not received within #{timeout}s" if Time.zone.now >= deadline
+    response = source_client.post("/tournaments/#{source_tournament_id}/test_sync")
+    expect(response[:status]).to eq(200)
+  end
+
+  def wait_for_timer_state!(cable_client, timer_mode:, timeout: 20)
+    wait_for_timer_payload_matching!(cable_client, timeout: timeout) do |payload|
+      payload.fetch('timer_mode') == timer_mode
+    end
+  end
+
+  def wait_for_timer_payload_matching!(cable_client, timeout: 20)
+    deadline = Time.now + timeout
+    loop do
+      payload = cable_client.wait_for_timer_payload!(timeout: [deadline - Time.now, 0.1].max)
+      return payload if yield(payload)
+
+      raise "follower timer websocket payload not received within #{timeout}s" if Time.now >= deadline
     end
   end
 end

@@ -22,7 +22,7 @@ module PerformanceHelpers
     end
 
     duration_ms = (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started_at) * 1000.0
-    { result:, query_count:, duration_ms: }
+    { result: result, query_count: query_count, duration_ms: duration_ms }
   end
 
   def create_group_stage_tournament(groups_count:, teams_per_group:)

@@ -24,18 +24,17 @@ RSpec.describe GroupsController, type: :controller do
 
     it 'returns ranking_decision metadata for group scores' do
       tournament = @group.stage.tournament
-      tournament.update!(playoff_teams_amount: 2, instant_finalists_amount: 2,
-                         intermediate_round_participants_amount: 0)
+      tournament.update!(playoff_teams_amount: 2, instant_finalists_amount: 2, intermediate_round_participants_amount: 0)
       @group.stage.update!(level: -1)
       @group.matches.destroy_all
       @group.group_scores.destroy_all
 
-      team_a = create(:team, tournament:, name: 'A')
-      team_b = create(:team, tournament:, name: 'B')
+      team_a = create(:team, tournament: tournament, name: 'A')
+      team_b = create(:team, tournament: tournament, name: 'B')
 
       create(:group_match, group: @group, state: :finished).tap do |match|
-        create(:match_score, match:, team: team_a, points: 3)
-        create(:match_score, match:, team: team_b, points: 1)
+        create(:match_score, match: match, team: team_a, points: 3)
+        create(:match_score, match: match, team: team_b, points: 1)
       end
 
       score_a = create(:group_score, group: @group, team: team_a, group_points: 3, scored_points: 3, received_points: 1)

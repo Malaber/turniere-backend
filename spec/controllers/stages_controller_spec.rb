@@ -26,7 +26,7 @@ RSpec.describe StagesController, type: :controller do
         match.save!
       end
 
-      UpdateGroupsGroupScoresAndSave.call(group:)
+      UpdateGroupsGroupScoresAndSave.call(group: group)
     end
 
     stage.reload
@@ -97,6 +97,13 @@ RSpec.describe StagesController, type: :controller do
           tournament = running_group_stage.tournament.reload
           expect(tournament.team_action_lists).to be_empty
         end
+
+        it 'writes a transaction log entry for starting playoffs' do
+          entry = running_group_stage.tournament.transaction_log_entries.last
+          expect(entry.action).to eq('playoffs.started')
+          expect(entry.message).to include('started playoffs')
+          expect(entry.metadata['advancing_team_ids']).to match_array(GroupStageService.get_advancing_teams(running_group_stage).map(&:id))
+        end
       end
 
       context 'as another user' do
@@ -122,7 +129,7 @@ RSpec.describe StagesController, type: :controller do
       end
 
       it 'it returns unprocessable entity' do
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
       end
 
       it 'returns the correct error' do
@@ -145,7 +152,7 @@ RSpec.describe StagesController, type: :controller do
       end
 
       it 'it returns unprocessable entity' do
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
       end
 
       it 'returns the correct error' do
@@ -164,7 +171,7 @@ RSpec.describe StagesController, type: :controller do
       end
 
       it 'it returns unprocessable entity' do
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
       end
 
       it 'returns the correct error' do
@@ -179,20 +186,17 @@ RSpec.describe StagesController, type: :controller do
 
       before do
         tournament = group_stage.tournament
-        tournament.update!(playoff_teams_amount: 1, instant_finalists_amount: 1,
-                           intermediate_round_participants_amount: 0)
+        tournament.update!(playoff_teams_amount: 1, instant_finalists_amount: 1, intermediate_round_participants_amount: 0)
         group = create(:group, stage: group_stage, match_count: 0, number: 1)
         group_stage.groups = [group]
-        team_a = create(:team, tournament:, name: 'A')
-        team_b = create(:team, tournament:, name: 'B')
-        create(:group_match, group:, state: :finished).tap do |match|
-          create(:match_score, match:, team: team_a, points: 2)
-          create(:match_score, match:, team: team_b, points: 2)
+        team_a = create(:team, tournament: tournament, name: 'A')
+        team_b = create(:team, tournament: tournament, name: 'B')
+        create(:group_match, group: group, state: :finished).tap do |match|
+          create(:match_score, match: match, team: team_a, points: 2)
+          create(:match_score, match: match, team: team_b, points: 2)
         end
-        score_a = create(:group_score, group:, team: team_a, group_points: 7, scored_points: 4,
-                                       received_points: 1)
-        score_b = create(:group_score, group:, team: team_b, group_points: 7, scored_points: 4,
-                                       received_points: 1)
+        score_a = create(:group_score, group: group, team: team_a, group_points: 7, scored_points: 4, received_points: 1)
+        score_b = create(:group_score, group: group, team: team_b, group_points: 7, scored_points: 4, received_points: 1)
         GroupStageService.send(:recalculate_position_of_group_scores!, [score_a, score_b]).each(&:save!)
 
         apply_authentication_headers_for group_stage.owner
@@ -200,7 +204,7 @@ RSpec.describe StagesController, type: :controller do
       end
 
       it 'returns unprocessable entity' do
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
       end
 
       it 'returns a helpful decider error' do
@@ -208,6 +212,13 @@ RSpec.describe StagesController, type: :controller do
         expect(body[:error]).to eq('Playoffs cannot be generated yet because a decider match is required for an advancing place')
         expect(body[:blocking_ties].size).to eq(1)
         expect(body[:blocking_ties].first[:team_names]).to eq(%w[A B])
+      end
+
+      it 'writes a failed playoff start transaction log entry' do
+        entry = group_stage.tournament.transaction_log_entries.last
+        expect(entry.action).to eq('playoffs.start_failed')
+        expect(entry.message).to include('failed because decider missing')
+        expect(entry.metadata['reason']).to eq('decider_missing')
       end
     end
 
@@ -218,20 +229,17 @@ RSpec.describe StagesController, type: :controller do
 
       before do
         tournament = group_stage.tournament
-        tournament.update!(playoff_teams_amount: 2, instant_finalists_amount: 2,
-                           intermediate_round_participants_amount: 0)
+        tournament.update!(playoff_teams_amount: 2, instant_finalists_amount: 2, intermediate_round_participants_amount: 0)
         group = create(:group, stage: group_stage, match_count: 0, number: 1)
         group_stage.groups = [group]
-        team_a = create(:team, tournament:, name: 'A')
-        team_b = create(:team, tournament:, name: 'B')
-        create(:group_match, group:, state: :finished).tap do |match|
-          create(:match_score, match:, team: team_a, points: 2)
-          create(:match_score, match:, team: team_b, points: 2)
+        team_a = create(:team, tournament: tournament, name: 'A')
+        team_b = create(:team, tournament: tournament, name: 'B')
+        create(:group_match, group: group, state: :finished).tap do |match|
+          create(:match_score, match: match, team: team_a, points: 2)
+          create(:match_score, match: match, team: team_b, points: 2)
         end
-        score_a = create(:group_score, group:, team: team_a, group_points: 7, scored_points: 4,
-                                       received_points: 1)
-        score_b = create(:group_score, group:, team: team_b, group_points: 7, scored_points: 4,
-                                       received_points: 1)
+        score_a = create(:group_score, group: group, team: team_a, group_points: 7, scored_points: 4, received_points: 1)
+        score_b = create(:group_score, group: group, team: team_b, group_points: 7, scored_points: 4, received_points: 1)
         GroupStageService.send(:recalculate_position_of_group_scores!, [score_a, score_b]).each(&:save!)
 
         apply_authentication_headers_for group_stage.owner
@@ -239,7 +247,7 @@ RSpec.describe StagesController, type: :controller do
       end
 
       it 'returns unprocessable entity' do
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
       end
 
       it 'returns a helpful decider error' do

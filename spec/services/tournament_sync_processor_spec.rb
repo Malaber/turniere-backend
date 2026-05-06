@@ -9,10 +9,9 @@ RSpec.describe TournamentSyncProcessor do
                           sync_target_url: 'https://remote.example.com/tournaments/1/sync_state',
                           sync_auth_token: 'shared-secret')
       TournamentSyncEnqueue.call(tournament)
-      entry = TournamentSyncQueueEntry.find_by!(tournament:)
+      entry = TournamentSyncQueueEntry.find_by!(tournament: tournament)
 
-      allow(TournamentSyncPusher).to receive(:push_snapshot!).and_raise(TournamentSyncPusher::SyncFailed,
-                                                                        'network down')
+      allow(TournamentSyncPusher).to receive(:push_snapshot!).and_raise(TournamentSyncPusher::SyncFailed, 'network down')
 
       described_class.process_due!
 

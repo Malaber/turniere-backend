@@ -77,9 +77,9 @@ RSpec.describe BeamersController, type: :controller do
       before(:each) { apply_authentication_headers_for @owner }
 
       it 'creates a new beamer' do
-        expect do
+        expect {
           post :create, params: { tournament_id: @tournament.to_param }.merge(valid_params)
-        end.to change(@tournament.beamers, :count).by(1)
+        }.to change(@tournament.beamers, :count).by(1)
         expect(response).to have_http_status(:created)
       end
 
@@ -95,14 +95,14 @@ RSpec.describe BeamersController, type: :controller do
         post :create, params: {
           tournament_id: @tournament.to_param, name: 'bad', display_state: 'invalid'
         }
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
       end
 
       it 'rejects duplicate name in same tournament' do
         post :create, params: {
           tournament_id: @tournament.to_param, name: @beamer.name, display_state: 'during_game'
         }
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
       end
     end
 
@@ -157,7 +157,7 @@ RSpec.describe BeamersController, type: :controller do
           tournament_id: @tournament.to_param, id: @beamer.to_param,
           display_state: 'bogus'
         }
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
       end
     end
 
@@ -194,11 +194,11 @@ RSpec.describe BeamersController, type: :controller do
       before(:each) { apply_authentication_headers_for @owner }
 
       it 'deletes the beamer' do
-        expect do
+        expect {
           delete :destroy, params: {
             tournament_id: @tournament.to_param, id: @beamer.to_param
           }
-        end.to change(@tournament.beamers, :count).by(-1)
+        }.to change(@tournament.beamers, :count).by(-1)
         expect(response).to have_http_status(:no_content)
       end
     end

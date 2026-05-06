@@ -14,10 +14,10 @@ RSpec.describe 'Tournament lifecycle HTTP E2E' do
   let(:base_url) { ENV.fetch('TURNIERE_E2E_BASE_URL', 'http://127.0.0.1:3000') }
   let(:runner) do
     TurniereE2E::ScenarioRunner.new(
-      base_url:,
+      base_url: base_url,
       email: ENV.fetch('TURNIERE_E2E_EMAIL'),
       password: ENV.fetch('TURNIERE_E2E_PASSWORD'),
-      username: ENV.fetch('TURNIERE_E2E_USERNAME', nil)
+      username: ENV['TURNIERE_E2E_USERNAME']
     )
   end
 
@@ -31,7 +31,7 @@ RSpec.describe 'Tournament lifecycle HTTP E2E' do
     expect(result.dig(:checkpoints, :statistics, :group_scores_count)).to eq(16)
 
     playoffs_created = result.dig(:checkpoints, :playoffs_created, :stage_summaries)
-    playoff_entry_stage = playoffs_created.reject { |stage| stage[:level] == -1 }.max_by { |stage| stage[:level] }
+    playoff_entry_stage = playoffs_created.select { |stage| stage[:level] != -1 }.max_by { |stage| stage[:level] }
     expect(playoff_entry_stage[:match_states].count).to eq(4)
 
     final_attempt = result.dig(:checkpoints, :final_finish_attempted, :finish_attempt)
@@ -49,8 +49,8 @@ RSpec.describe 'Tournament lifecycle HTTP E2E' do
     expect(created[:intermediate_round_participants_amount]).to eq(2)
 
     playoff_entry_stage = result.dig(:checkpoints, :playoffs_created, :stage_summaries)
-                                .reject { |stage| stage[:level] == -1 }
-                                .max_by { |stage| stage[:level] }
+                              .select { |stage| stage[:level] != -1 }
+                              .max_by { |stage| stage[:level] }
     expect(playoff_entry_stage[:state]).to eq('intermediate_stage')
     expect(playoff_entry_stage[:match_states].count('single_team')).to eq(3)
     expect(playoff_entry_stage[:match_states].count('not_started')).to eq(1)
@@ -59,6 +59,27 @@ RSpec.describe 'Tournament lifecycle HTTP E2E' do
     expect(final_attempt[:status]).to eq(200)
     expect(result.dig(:checkpoints, :final_finish_attempted, :tournament, :stage_summaries)
       .find { |stage| stage[:level] == 0 }[:match_states]).to eq(%w[finished finished])
+  end
+
+  it 'deletes and recreates group-stage playoffs over HTTP with changed group results' do
+    result = runner.run_group_stage_playoff_recreation
+    checkpoints = result.fetch(:checkpoints)
+
+    expect(checkpoints.fetch(:first_playoffs_created).fetch(:playoff_matchups)).to eq([
+      %w[G1-S1 G2-S2],
+      %w[G1-S2 G2-S1]
+    ])
+    expect(checkpoints.fetch(:first_playoffs_deleted).fetch(:stage_summaries).map { |stage| stage.fetch(:level) }).to eq([-1])
+    expect(checkpoints.fetch(:first_playoffs_deleted).fetch(:stage_summaries).first.fetch(:state)).to eq('in_progress')
+    expect(checkpoints.fetch(:second_playoffs_created).fetch(:playoff_matchups)).to eq([
+      %w[G1-S2 G2-S1],
+      %w[G1-S1 G2-S2]
+    ])
+    expect(checkpoints.fetch(:second_playoffs_deleted).fetch(:stage_summaries).map { |stage| stage.fetch(:level) }).to eq([-1])
+    expect(checkpoints.fetch(:third_playoffs_created).fetch(:playoff_matchups)).to eq([
+      %w[G1-S1 G2-S1],
+      %w[G1-S2 G2-S2]
+    ])
   end
 
   {
@@ -76,8 +97,7 @@ RSpec.describe 'Tournament lifecycle HTTP E2E' do
       expect(positions.fetch('G1-S2')).to eq(expected_positions[1])
 
       if direct_result == :drawn
-        expect(ordered_scores[0].slice(:team_name, :position, :group_points, :difference_in_points, :scored_points,
-                                       :received_points))
+        expect(ordered_scores[0].slice(:team_name, :position, :group_points, :difference_in_points, :scored_points, :received_points))
           .to eq(
             team_name: 'G1-S1',
             position: 1,
@@ -86,8 +106,7 @@ RSpec.describe 'Tournament lifecycle HTTP E2E' do
             scored_points: 4,
             received_points: 1
           )
-        expect(ordered_scores[1].slice(:team_name, :position, :group_points, :difference_in_points, :scored_points,
-                                       :received_points))
+        expect(ordered_scores[1].slice(:team_name, :position, :group_points, :difference_in_points, :scored_points, :received_points))
           .to eq(
             team_name: 'G1-S2',
             position: 1,
@@ -98,10 +117,9 @@ RSpec.describe 'Tournament lifecycle HTTP E2E' do
           )
       else
         expected_first_group_points = direct_result == :lost ? 9 : 6
-        expected_second_group_points = 6
+        expected_second_group_points = direct_result == :lost ? 6 : 6
 
-        expect(ordered_scores[0].slice(:team_name, :position, :group_points, :difference_in_points, :scored_points,
-                                       :received_points))
+        expect(ordered_scores[0].slice(:team_name, :position, :group_points, :difference_in_points, :scored_points, :received_points))
           .to eq(
             team_name: expected_positions[0] == 1 ? 'G1-S1' : 'G1-S2',
             position: 1,
@@ -110,8 +128,7 @@ RSpec.describe 'Tournament lifecycle HTTP E2E' do
             scored_points: 5,
             received_points: 2
           )
-        expect(ordered_scores[1].slice(:team_name, :position, :group_points, :difference_in_points, :scored_points,
-                                       :received_points))
+        expect(ordered_scores[1].slice(:team_name, :position, :group_points, :difference_in_points, :scored_points, :received_points))
           .to eq(
             team_name: expected_positions[0] == 1 ? 'G1-S2' : 'G1-S1',
             position: 2,
@@ -126,11 +143,28 @@ RSpec.describe 'Tournament lifecycle HTTP E2E' do
 
   [2, 3, 5, 8].each do |team_count|
     it "drives a #{team_count}-team playoff-only tournament over HTTP to completion" do
-      result = runner.run_playoff_only(team_count:)
+      result = runner.run_playoff_only(team_count: team_count)
 
       completed_stages = result.dig(:checkpoints, :completed, :stage_summaries)
       final_stage = completed_stages.find { |stage| stage[:level] == 0 }
       expect(final_stage[:match_states]).to eq(team_count > 3 ? %w[finished finished] : ['finished'])
     end
+  end
+
+  it 'records ordered owner-readable transaction history over HTTP' do
+    result = runner.run_transaction_log_history
+    log = result.dig(:checkpoints, :transaction_log)
+
+    expect(log.fetch(:sequences)).to eq((1..log.fetch(:sequences).count).to_a)
+    expect(log.fetch(:actions)).to include(
+      'tournament.created',
+      'match.state_changed',
+      'match_score.updated',
+      'playoffs.start_failed',
+      'decider_match.created',
+      'playoffs.started'
+    )
+    expect(log.fetch(:messages).join("\n")).to include('failed because decider missing')
+    expect(log.fetch(:messages).join("\n")).to include('started playoffs, advancing teams:')
   end
 end

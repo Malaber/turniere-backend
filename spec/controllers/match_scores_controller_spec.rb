@@ -51,6 +51,23 @@ RSpec.describe MatchScoresController, type: :controller do
             expect(body[:points]).to eq(valid_update[:points])
             expect(body[:hidden_points]).to eq(valid_update[:hidden_points])
           end
+
+          it 'writes a transaction log entry for the score change' do
+            expect(TournamentLiveBroadcast).to receive(:call).with(@match_score.tournament.id)
+
+            expect do
+              put :update, params: { id: @match_score.to_param }.merge(valid_update)
+            end.to change { @match_score.tournament.transaction_log_entries.count }.by(1)
+
+            entry = @match_score.tournament.transaction_log_entries.last
+            expect(entry.action).to eq('match_score.updated')
+            expect(entry.message).to include("changed matchscore #{@match_score.id}")
+            expect(entry.metadata['match_score_id']).to eq(@match_score.id)
+            expect(entry.metadata['changes']['points']).to eq(
+              'from' => @match_score.points,
+              'to' => valid_update[:points]
+            )
+          end
         end
 
         context 'when match_score update fails' do
@@ -62,7 +79,7 @@ RSpec.describe MatchScoresController, type: :controller do
 
           it 'returns unprocessable entity' do
             put :update, params: { id: @match_score.to_param }.merge(valid_update)
-            expect(response).to have_http_status(:unprocessable_entity)
+            expect(response).to have_http_status(:unprocessable_content)
           end
         end
       end

@@ -48,5 +48,6 @@ DeviseTokenAuth.setup do |config|
   # do so by enabling this flag. NOTE: This feature is highly experimental!
   # config.enable_standard_devise_support = false
 
+  config.bypass_sign_in = false
   config.default_confirm_success_url = 'https://turnie.re'
 end

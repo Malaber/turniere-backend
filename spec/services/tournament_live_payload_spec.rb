@@ -26,12 +26,17 @@ RSpec.describe 'Tournament live payloads' do
       payload = described_class.build(tournament)
       serialized_match = payload.find { |candidate| candidate[:id] == match.id }
 
-      expect(serialized_match.keys).to match_array(%i[id position state teams match_scores group stage])
+      expect(serialized_match.keys).to match_array(
+        %i[id position state location start_time notes teams match_scores group stage]
+      )
       expect(serialized_match[:state]).to eq(match.state)
       expect(serialized_match[:position]).to eq(match.position)
+      expect(serialized_match[:location]).to eq(match.location)
+      expect(serialized_match[:start_time]).to eq(match.start_time)
+      expect(serialized_match[:notes]).to eq(match.notes)
       expect(serialized_match.dig(:group, :id)).to eq(match.group_id)
       expect(serialized_match.dig(:stage, :id)).to eq(match.group.stage_id)
-      expect(serialized_match[:teams].pluck(:id)).to match_array(match.teams.map(&:id))
+      expect(serialized_match[:teams].map { |team| team[:id] }).to match_array(match.teams.map(&:id))
       expect(serialized_match[:match_scores].map { |score| score[:team][:id] }).to match_array(match.teams.map(&:id))
     end
 
@@ -47,6 +52,21 @@ RSpec.describe 'Tournament live payloads' do
       expect(matches.map(&:position).uniq).to eq([0])
       expect(matches.map { |match| match.group.stage.level }.uniq).to eq([-1])
       expect(matches.map(&:group_id)).to match_array(tournament.group_stage.groups.map(&:id))
+    end
+
+    it 'returns only catch-up group matches for upcoming state' do
+      tournament = create(:group_stage_tournament, group_count: 4, match_factory: :filled_group_match)
+      groups = tournament.group_stage.groups.sort_by(&:number)
+
+      set_group_match_states(groups[0], %i[finished finished finished in_progress])
+      groups.drop(1).each do |group|
+        set_group_match_states(group, %i[finished finished in_progress not_started])
+      end
+
+      matches = described_class.matches_for(tournament, state: 'upcoming')
+
+      expect(matches.map(&:group_id)).to match_array(groups.drop(1).map(&:id))
+      expect(matches.map(&:position).uniq).to eq([3])
     end
 
     it 'filters all matches belonging to a stage level' do
@@ -81,6 +101,35 @@ RSpec.describe 'Tournament live payloads' do
       expect(payload[:tournament_id]).to eq(tournament.id)
       expect(payload[:state]).to eq('not_started')
       expect(payload[:matches]).to eq(TournamentMatchesPayload.build(tournament, state: 'not_started'))
+    end
+  end
+
+  describe TournamentTimerBroadcastPayload do
+    it 'serializes timer reason fields for websocket subscribers' do
+      tournament = create(
+        :tournament,
+        timestamp: Time.utc(2026, 4, 24, 10, 15, 0),
+        timer_mode: 'countdown',
+        timer_reason: 'custom',
+        timer_reason_text: 'Opening ceremony'
+      )
+
+      payload = described_class.build(tournament)
+
+      expect(payload).to include(
+        type: 'timer.updated',
+        tournament_id: tournament.id,
+        timestamp: '2026-04-24T10:15:00Z',
+        timer_mode: 'countdown',
+        timer_reason: 'custom',
+        timer_reason_text: 'Opening ceremony'
+      )
+    end
+  end
+
+  def set_group_match_states(group, states)
+    group.matches.order(:id).each_with_index do |match, index|
+      match.update!(position: index, state: states.fetch(index))
     end
   end
 end

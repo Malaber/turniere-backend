@@ -86,7 +86,7 @@ RSpec.describe 'Tournament beamer websocket HTTP E2E' do
                              name: "#{name_prefix} #{SecureRandom.hex(3)}",
                              description: 'Websocket beamer tournament',
                              public: true,
-                             teams: Array.new(4) do |index|
+                             teams: 4.times.map do |index|
                                { name: "#{name_prefix.tr(' ', '')}-S#{index + 1}" }
                              end
                            })
@@ -95,13 +95,13 @@ RSpec.describe 'Tournament beamer websocket HTTP E2E' do
   end
 
   def wait_for_beamer_payload!(cable_client, event_type:, display_state:, timeout: 20)
-    deadline = Time.zone.now + timeout
+    deadline = Time.now + timeout
     loop do
-      payload = cable_client.wait_for_beamer_payload!(timeout: [deadline - Time.zone.now, 0.1].max)
+      payload = cable_client.wait_for_beamer_payload!(timeout: [deadline - Time.now, 0.1].max)
       return payload if payload.fetch('type') == event_type &&
                         payload.dig('beamer', 'display_state') == display_state
 
-      raise "beamer websocket payload not received within #{timeout}s" if Time.zone.now >= deadline
+      raise "beamer websocket payload not received within #{timeout}s" if Time.now >= deadline
     end
   end
 end

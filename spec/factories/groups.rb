@@ -11,9 +11,9 @@ FactoryBot.define do
     stage
 
     after(:create) do |group, evaluator|
-      create_list(evaluator.match_factory, evaluator.match_count, group:)
+      create_list(evaluator.match_factory, evaluator.match_count, group: group)
       group.group_scores = group.teams.map do |team|
-        create(:group_score, team:, group:)
+        create(:group_score, team: team, group: group)
       end
     end
   end

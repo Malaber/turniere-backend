@@ -80,7 +80,7 @@ module TurniereE2E
       login!(**@login_credentials) if refresh_session && should_refresh_session?(method, path)
 
       uri = URI.parse("#{base_url}#{path}")
-      uri.query = URI.encode_www_form(params) if params.present?
+      uri.query = URI.encode_www_form(params) if params&.any?
 
       request_class = case method
                       when :get then Net::HTTP::Get

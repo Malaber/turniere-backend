@@ -23,9 +23,7 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
   let(:owner_password) { ENV.fetch('TURNIERE_E2E_PASSWORD') }
   let(:sync_token) { "sync-#{SecureRandom.hex(8)}" }
   let(:source_owner_client) { login_client(base_url: source_base_url, email: owner_email, password: owner_password) }
-  let(:follower_owner_client) do
-    login_client(base_url: follower_base_url, email: owner_email, password: owner_password)
-  end
+  let(:follower_owner_client) { login_client(base_url: follower_base_url, email: owner_email, password: owner_password) }
   let(:source_anonymous_client) { TurniereE2E::ApiClient.new(base_url: source_base_url) }
   let(:follower_anonymous_client) { TurniereE2E::ApiClient.new(base_url: follower_base_url) }
 
@@ -41,28 +39,72 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
 
     log_phase!('configure sync and verify initial replication')
     configure_sync = source_owner_client.patch("/tournaments/#{source.fetch(:id)}", body: {
-                                                 sync_target_url: "#{follower_base_url}/tournaments/#{follower.fetch(:id)}/sync_state",
-                                                 sync_auth_token: sync_token
-                                               })
+                                          sync_target_url: "#{follower_base_url}/tournaments/#{follower.fetch(:id)}/sync_state",
+                                          sync_auth_token: sync_token
+                                        })
     expect(configure_sync[:status]).to eq(200)
-    exercise_unrelated_requests!(source_noise:, follower_noise:)
+    exercise_unrelated_requests!(source_noise: source_noise, follower_noise: follower_noise)
 
     source = fetch_tournament(client: source_anonymous_client, tournament_id: source.fetch(:id))
-    follower = wait_for_tournament_sync!(source_tournament_id: source.fetch(:id),
-                                         follower_tournament_id: follower.fetch(:id))
+    follower = wait_for_tournament_sync!(source_tournament_id: source.fetch(:id), follower_tournament_id: follower.fetch(:id))
     expect(tournament_signature(follower)).to eq(tournament_signature(source))
-    expect(synced_team_id_pairs(source:, follower:)).not_to be_empty
+    expect(synced_team_id_pairs(source: source, follower: follower)).not_to be_empty
+
+    log_phase!('update match metadata and verify follower mirrors it')
+    source_group_stage = source.fetch(:stages).find { |stage| stage.fetch(:level) == -1 }
+    first_source_group = source_group_stage.fetch(:groups).sort_by { |group| group.fetch(:number) }.first
+    first_group_matches = first_source_group.fetch(:matches).sort_by { |match| match.fetch(:position) }
+    single_metadata = source_owner_client.patch("/matches/#{first_group_matches.fetch(0).fetch(:id)}", body: {
+                                                  location: 'Main Hall',
+                                                  start_time: '17:00',
+                                                  notes: 'Opening match'
+                                                })
+    explicit_bulk_metadata = source_owner_client.patch("/tournaments/#{source.fetch(:id)}/matches/metadata", body: {
+                                                         match_ids: first_group_matches.values_at(1, 2).map { |match| match.fetch(:id) },
+                                                         location: 'Court B',
+                                                         start_time: '17:30'
+                                                       })
+    group_position_metadata = source_owner_client.patch("/tournaments/#{source.fetch(:id)}/matches/metadata", body: {
+                                                         group_stage_position: 3,
+                                                         start_time: '18:00',
+                                                         notes: 'Group position 3 wave'
+                                                       })
+    expect(single_metadata[:status]).to eq(200)
+    expect(single_metadata.dig(:json, :location)).to eq('Main Hall')
+    expect(explicit_bulk_metadata[:status]).to eq(200)
+    expect(explicit_bulk_metadata[:json].map { |match| match.fetch(:location) }).to all(eq('Court B'))
+    expect(group_position_metadata[:status]).to eq(200)
+    expect(group_position_metadata[:json].map { |match| match.fetch(:start_time) }).to all(eq('18:00'))
+
+    source = fetch_tournament(client: source_anonymous_client, tournament_id: source.fetch(:id))
+    follower = wait_for_tournament_sync!(source_tournament_id: source.fetch(:id), follower_tournament_id: follower.fetch(:id))
+    expect(tournament_signature(follower)).to eq(tournament_signature(source))
+
+    follower_group_stage = follower.fetch(:stages).find { |stage| stage.fetch(:level) == -1 }
+    follower_group = follower_group_stage.fetch(:groups).sort_by { |group| group.fetch(:number) }.first
+    follower_first_match = follower_group.fetch(:matches).sort_by { |match| match.fetch(:position) }.first
+    locked_match_metadata = follower_owner_client.patch("/matches/#{follower_first_match.fetch(:id)}", body: {
+                                                          location: 'Follower edit'
+                                                        })
+    locked_bulk_metadata = follower_owner_client.patch("/tournaments/#{follower.fetch(:id)}/matches/metadata", body: {
+                                                         match_ids: [follower_first_match.fetch(:id)],
+                                                         start_time: '19:00'
+                                                       })
+    expect(locked_match_metadata[:status]).to eq(423)
+    expect(locked_match_metadata.dig(:json, :error)).to eq('Tournament is in read only follower mode')
+    expect(locked_bulk_metadata[:status]).to eq(423)
+    expect(locked_bulk_metadata.dig(:json, :error)).to eq('Tournament is in read only follower mode')
 
     log_phase!('swap matches on leader and verify follower behavior')
     source_group_stage = source.fetch(:stages).find { |stage| stage.fetch(:level) == -1 }
-    first_source_group = source_group_stage.fetch(:groups).min_by { |group| group.fetch(:number) }
+    first_source_group = source_group_stage.fetch(:groups).sort_by { |group| group.fetch(:number) }.first
     second_source_group = source_group_stage.fetch(:groups).sort_by { |group| group.fetch(:number) }[1]
     first_group_matches = first_source_group.fetch(:matches).sort_by { |match| match.fetch(:position) }
     first_position_match = first_group_matches.fetch(0)
     fourth_position_match = first_group_matches.fetch(3)
-    wrong_group_match = second_source_group.fetch(:matches).min_by { |match| match.fetch(:position) }
+    wrong_group_match = second_source_group.fetch(:matches).sort_by { |match| match.fetch(:position) }.first
     follower_group_stage = follower.fetch(:stages).find { |stage| stage.fetch(:level) == -1 }
-    first_follower_group = follower_group_stage.fetch(:groups).min_by { |group| group.fetch(:number) }
+    first_follower_group = follower_group_stage.fetch(:groups).sort_by { |group| group.fetch(:number) }.first
     follower_first_position_match = first_follower_group.fetch(:matches).find do |match|
       match_team_names(match) == match_team_names(first_position_match)
     end
@@ -75,24 +117,21 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
                                             })
     expect(leader_swap[:status]).to eq(200)
     expect(leader_swap[:json].map { |match| match.fetch(:position) }).to match_array([
-                                                                                       first_position_match.fetch(:position),
-                                                                                       fourth_position_match.fetch(:position)
-                                                                                     ])
+      first_position_match.fetch(:position),
+      fourth_position_match.fetch(:position)
+    ])
     source = fetch_tournament(client: source_anonymous_client, tournament_id: source.fetch(:id))
-    follower = wait_for_tournament_sync!(source_tournament_id: source.fetch(:id),
-                                         follower_tournament_id: follower.fetch(:id))
+    follower = wait_for_tournament_sync!(source_tournament_id: source.fetch(:id), follower_tournament_id: follower.fetch(:id))
     expect(tournament_signature(follower)).to eq(tournament_signature(source))
     expect(group_match_positions(source, group_number: first_source_group.fetch(:number))).to eq(
       group_match_positions(follower, group_number: first_follower_group.fetch(:number))
     )
-    expect(group_match_positions(source,
-                                 group_number: first_source_group.fetch(:number)).fetch(match_team_names(first_position_match))).to eq(
-                                   fourth_position_match.fetch(:position)
-                                 )
-    expect(group_match_positions(source,
-                                 group_number: first_source_group.fetch(:number)).fetch(match_team_names(fourth_position_match))).to eq(
-                                   first_position_match.fetch(:position)
-                                 )
+    expect(group_match_positions(source, group_number: first_source_group.fetch(:number)).fetch(match_team_names(first_position_match))).to eq(
+      fourth_position_match.fetch(:position)
+    )
+    expect(group_match_positions(source, group_number: first_source_group.fetch(:number)).fetch(match_team_names(fourth_position_match))).to eq(
+      first_position_match.fetch(:position)
+    )
 
     follower_before_invalid_swap = tournament_signature(follower)
     source_before_invalid_swap = tournament_signature(source)
@@ -103,8 +142,7 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
     expect(wrong_group_swap[:status]).to eq(422)
     expect(wrong_group_swap.dig(:json, :error)).to eq('Matches must be different group matches from the same group')
     source_after_invalid_swap = fetch_tournament(client: source_anonymous_client, tournament_id: source.fetch(:id))
-    follower_after_invalid_swap = fetch_tournament(client: follower_anonymous_client,
-                                                   tournament_id: follower.fetch(:id))
+    follower_after_invalid_swap = fetch_tournament(client: follower_anonymous_client, tournament_id: follower.fetch(:id))
     expect(tournament_signature(source_after_invalid_swap)).to eq(source_before_invalid_swap)
     expect(tournament_signature(follower_after_invalid_swap)).to eq(follower_before_invalid_swap)
 
@@ -118,15 +156,19 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
 
     log_phase!('tighten playoff cutoff and rename teams')
     update_cutoff = source_owner_client.patch("/tournaments/#{source.fetch(:id)}", body: {
-                                                playoff_teams_amount: 4,
-                                                instant_finalists_amount: 4,
-                                                intermediate_round_participants_amount: 0
-                                              })
+                                         location: 'Source Updated Arena',
+                                         starts_at: '2030-07-01T10:00:00+02:00',
+                                         ends_at: '2030-07-01T18:00:00+02:00',
+                                         website_url: 'https://example.com/updated-sync-source',
+                                         playoff_teams_amount: 4,
+                                         instant_finalists_amount: 4,
+                                         intermediate_round_participants_amount: 0
+                                       })
     expect(update_cutoff[:status]).to eq(200)
-    exercise_unrelated_requests!(source_noise:, follower_noise:)
+    exercise_unrelated_requests!(source_noise: source_noise, follower_noise: follower_noise)
 
     source_group_stage = fetch_tournament(client: source_anonymous_client, tournament_id: source.fetch(:id))
-                         .fetch(:stages).find { |stage| stage.fetch(:level) == -1 }
+                           .fetch(:stages).find { |stage| stage.fetch(:level) == -1 }
     rename_source_tournament_teams!(
       source_tournament_id: source.fetch(:id),
       team_names: [
@@ -134,35 +176,43 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
         group_team_map(source_group_stage.fetch(:groups).last).fetch(2).fetch(:name)
       ]
     )
-    source_noise.concat(seed_unrelated_tournaments!(client: source_owner_client, prefix: 'Source Midway Noise',
-                                                    range: 2..3))
-    follower_noise.concat(seed_unrelated_tournaments!(client: follower_owner_client, prefix: 'Follower Midway Noise',
-                                                      range: 3..4))
-    exercise_unrelated_requests!(source_noise:, follower_noise:)
+    source_noise.concat(seed_unrelated_tournaments!(client: source_owner_client, prefix: 'Source Midway Noise', range: 2..3))
+    follower_noise.concat(seed_unrelated_tournaments!(client: follower_owner_client, prefix: 'Follower Midway Noise', range: 3..4))
+    exercise_unrelated_requests!(source_noise: source_noise, follower_noise: follower_noise)
 
     log_phase!('play group stage with deciders')
-    play_group_with_decider_lifecycle!(source_id: source.fetch(:id), groups: source_group_stage.fetch(:groups).sort_by do |group|
-                                                                               group.fetch(:number)
-                                                                             end)
-    exercise_unrelated_requests!(source_noise:, follower_noise:)
+    play_group_with_decider_lifecycle!(source_id: source.fetch(:id), groups: source_group_stage.fetch(:groups).sort_by { |group| group.fetch(:number) })
+    exercise_unrelated_requests!(source_noise: source_noise, follower_noise: follower_noise)
 
     log_phase!('verify playoff generation replicated')
     source = fetch_tournament(client: source_anonymous_client, tournament_id: source.fetch(:id))
-    follower = wait_for_tournament_sync!(source_tournament_id: source.fetch(:id),
-                                         follower_tournament_id: follower.fetch(:id))
+    follower = wait_for_tournament_sync!(source_tournament_id: source.fetch(:id), follower_tournament_id: follower.fetch(:id))
     expect(tournament_signature(follower)).to eq(tournament_signature(source))
     expect(follower.fetch(:stages).map { |stage| stage.fetch(:level) }).to include(-1, 0, 1)
-    expect(synced_team_id_pairs(source:, follower:)).not_to be_empty
+    expect(synced_team_id_pairs(source: source, follower: follower)).not_to be_empty
     expect(source.fetch(:team_action_lists)).to eq([])
     expect(follower.fetch(:team_action_lists)).to eq([])
+
+    log_phase!('bulk update playoff match metadata and verify follower mirrors it')
+    source_playoff_stage = source.fetch(:stages).select { |stage| stage.fetch(:level) >= 0 }.max_by { |stage| stage.fetch(:level) }
+    playoff_metadata = source_owner_client.patch("/tournaments/#{source.fetch(:id)}/matches/metadata", body: {
+                                                   stage_level: source_playoff_stage.fetch(:level),
+                                                   location: 'Finals Arena',
+                                                   start_time: '21:00',
+                                                   notes: 'Playoff wave'
+                                                 })
+    expect(playoff_metadata[:status]).to eq(200)
+    expect(playoff_metadata[:json].map { |match| match.fetch(:location) }).to all(eq('Finals Arena'))
+    source = fetch_tournament(client: source_anonymous_client, tournament_id: source.fetch(:id))
+    follower = wait_for_tournament_sync!(source_tournament_id: source.fetch(:id), follower_tournament_id: follower.fetch(:id))
+    expect(tournament_signature(follower)).to eq(tournament_signature(source))
 
     log_phase!('create team action list on source and verify follower mirrors it')
     created_list = create_team_action_list!(source.fetch(:id))
     expect(created_list.fetch(:key)).to eq(playoff_token_list_key)
 
     source = fetch_tournament(client: source_anonymous_client, tournament_id: source.fetch(:id))
-    follower = wait_for_tournament_sync!(source_tournament_id: source.fetch(:id),
-                                         follower_tournament_id: follower.fetch(:id))
+    follower = wait_for_tournament_sync!(source_tournament_id: source.fetch(:id), follower_tournament_id: follower.fetch(:id))
     expect(playoff_token_list(source)).not_to be_nil
     expect(playoff_token_list(follower)).not_to be_nil
     expect(playoff_token_list(follower).fetch(:team_action_items).map { |item| item.dig(:team, :name) })
@@ -186,55 +236,103 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
     log_phase!('mark playoff token collected on source through business key route and verify follower mirrors it')
     source_token_item = playoff_token_list(source).fetch(:team_action_items).first
     source_token_update = source_owner_client.patch(
-      "/tournaments/#{source.fetch(:id)}/team_action_lists/#{playoff_token_list_key}/teams/#{source_token_item.dig(
-        :team, :id
-      )}",
+      "/tournaments/#{source.fetch(:id)}/team_action_lists/#{playoff_token_list_key}/teams/#{source_token_item.dig(:team, :id)}",
       body: { completed: true }
     )
     expect(source_token_update[:status]).to eq(200)
 
     source = fetch_tournament(client: source_anonymous_client, tournament_id: source.fetch(:id))
-    follower = wait_for_tournament_sync!(source_tournament_id: source.fetch(:id),
-                                         follower_tournament_id: follower.fetch(:id))
+    follower = wait_for_tournament_sync!(source_tournament_id: source.fetch(:id), follower_tournament_id: follower.fetch(:id))
     expect(playoff_token_item_completed?(source, team_name: source_token_item.dig(:team, :name))).to eq(true)
     expect(playoff_token_item_completed?(follower, team_name: source_token_item.dig(:team, :name))).to eq(true)
 
     follower_token_item = find_team_action_item(follower, team_name: source_token_item.dig(:team, :name))
     locked_token_update = follower_owner_client.patch(
-      "/tournaments/#{follower.fetch(:id)}/team_action_lists/#{playoff_token_list_key}/teams/#{follower_token_item.dig(
-        :team, :id
-      )}",
+      "/tournaments/#{follower.fetch(:id)}/team_action_lists/#{playoff_token_list_key}/teams/#{follower_token_item.dig(:team, :id)}",
       body: { completed: false }
     )
     expect(locked_token_update[:status]).to eq(423)
     expect(locked_token_update.dig(:json, :error)).to eq('Tournament is in read only follower mode')
 
-    source_noise.concat(seed_unrelated_tournaments!(client: source_owner_client, prefix: 'Source Playoff Noise',
-                                                    range: 2..4))
-    follower_noise.concat(seed_unrelated_tournaments!(client: follower_owner_client, prefix: 'Follower Playoff Noise',
-                                                      range: 2..5))
-    exercise_unrelated_requests!(source_noise:, follower_noise:)
+    source_noise.concat(seed_unrelated_tournaments!(client: source_owner_client, prefix: 'Source Playoff Noise', range: 2..4))
+    follower_noise.concat(seed_unrelated_tournaments!(client: follower_owner_client, prefix: 'Follower Playoff Noise', range: 2..5))
+    exercise_unrelated_requests!(source_noise: source_noise, follower_noise: follower_noise)
 
     log_phase!('finish playoff bracket')
     finish_playoff_bracket!(source_id: source.fetch(:id))
-    exercise_unrelated_requests!(source_noise:, follower_noise:)
+    exercise_unrelated_requests!(source_noise: source_noise, follower_noise: follower_noise)
 
     log_phase!('verify final follower state and takeover')
     source = fetch_tournament(client: source_anonymous_client, tournament_id: source.fetch(:id))
-    follower = wait_for_tournament_sync!(source_tournament_id: source.fetch(:id),
-                                         follower_tournament_id: follower.fetch(:id))
+    follower = wait_for_tournament_sync!(source_tournament_id: source.fetch(:id), follower_tournament_id: follower.fetch(:id))
     expect(tournament_signature(follower)).to eq(tournament_signature(source))
-    expect(synced_team_id_pairs(source:, follower:)).not_to be_empty
+    expect(synced_team_id_pairs(source: source, follower: follower)).not_to be_empty
 
-    disable_follower = follower_owner_client.patch("/tournaments/#{follower.fetch(:id)}",
-                                                   body: { read_only_mode: false })
+    disable_follower = follower_owner_client.patch("/tournaments/#{follower.fetch(:id)}", body: { read_only_mode: false })
     expect(disable_follower[:status]).to eq(200)
 
     follower_after_disable = fetch_tournament(client: follower_anonymous_client, tournament_id: follower.fetch(:id))
     writable_team = follower_after_disable.fetch(:teams).first
-    takeover_update = follower_owner_client.patch("/teams/#{writable_team.fetch(:id)}",
-                                                  body: { name: "#{writable_team.fetch(:name)} takeover" })
+    takeover_update = follower_owner_client.patch("/teams/#{writable_team.fetch(:id)}", body: { name: "#{writable_team.fetch(:name)} takeover" })
     expect(takeover_update[:status]).to eq(200)
+  end
+
+  it 'mirrors repeated playoff deletion and recreation into the follower tournament' do
+    log_phase!('create small source and follower tournaments')
+    source = create_group_stage_tournament(
+      client: source_owner_client,
+      public: false,
+      name_prefix: 'Sync Playoff Delete Source',
+      group_count: 2,
+      teams_per_group: 2,
+      playoff_teams_amount: 2
+    )
+    follower = create_follower_tournament(client: follower_owner_client, public: true, name_prefix: 'Sync Playoff Delete Follower')
+
+    configure_sync = source_owner_client.patch("/tournaments/#{source.fetch(:id)}", body: {
+                                                 sync_target_url: sync_state_url(follower.fetch(:id)),
+                                                 sync_auth_token: sync_token
+                                               })
+    expect(configure_sync[:status]).to eq(200)
+    follower = wait_for_tournament_sync!(source_tournament_id: source.fetch(:id), follower_tournament_id: follower.fetch(:id))
+    expect(tournament_signature(follower)).to eq(tournament_signature(source))
+
+    rounds = playoff_recreation_rounds
+    rounds.each_with_index do |round, index|
+      log_phase!("create playoffs round #{index + 1}")
+      apply_group_score_round!(
+        source_tournament_id: source.fetch(:id),
+        scores_by_team_name: round.fetch(:scores_by_team_name)
+      )
+      source = fetch_tournament(client: source_anonymous_client, tournament_id: source.fetch(:id))
+      group_stage = source.fetch(:stages).find { |stage| stage.fetch(:level) == -1 }
+      finish_stage = source_owner_client.patch("/stages/#{group_stage.fetch(:id)}", body: { state: 'finished' })
+      expect(finish_stage[:status]).to eq(200)
+
+      source = fetch_tournament(client: source_anonymous_client, tournament_id: source.fetch(:id))
+      follower = wait_for_tournament_sync!(source_tournament_id: source.fetch(:id), follower_tournament_id: follower.fetch(:id))
+      expect(playoff_matchups(source)).to eq(round.fetch(:expected_playoff_matchups))
+      expect(playoff_matchups(follower)).to eq(round.fetch(:expected_playoff_matchups))
+      expect(tournament_signature(follower)).to eq(tournament_signature(source))
+
+      next if index == rounds.size - 1
+
+      locked_delete = follower_owner_client.delete("/tournaments/#{follower.fetch(:id)}/playoffs")
+      expect(locked_delete[:status]).to eq(423)
+      expect(locked_delete.dig(:json, :error)).to eq('Tournament is in read only follower mode')
+
+      log_phase!("delete playoffs round #{index + 1}")
+      delete_playoffs = source_owner_client.delete("/tournaments/#{source.fetch(:id)}/playoffs")
+      expect(delete_playoffs[:status]).to eq(200)
+
+      source = fetch_tournament(client: source_anonymous_client, tournament_id: source.fetch(:id))
+      follower = wait_for_tournament_sync!(source_tournament_id: source.fetch(:id), follower_tournament_id: follower.fetch(:id))
+      expect(source.fetch(:stages).map { |stage| stage.fetch(:level) }).to eq([-1])
+      expect(follower.fetch(:stages).map { |stage| stage.fetch(:level) }).to eq([-1])
+      expect(source.fetch(:stages).first.fetch(:state)).to eq('in_progress')
+      expect(follower.fetch(:stages).first.fetch(:state)).to eq('in_progress')
+      expect(tournament_signature(follower)).to eq(tournament_signature(source))
+    end
   end
 
   def log_phase!(message)
@@ -243,23 +341,30 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
   end
 
   def login_client(base_url:, email:, password:)
-    client = TurniereE2E::ApiClient.new(base_url:)
-    response = client.login!(email:, password:)
+    client = TurniereE2E::ApiClient.new(base_url: base_url)
+    response = client.login!(email: email, password: password)
 
     expect(response[:status]).to eq(200)
     expect(client.authenticated?).to eq(true)
     client
   end
 
-  def create_group_stage_tournament(client:, public:, name_prefix:)
+  def create_group_stage_tournament(client:, public:, name_prefix:, **options)
+    group_count = options.fetch(:group_count, 4)
+    teams_per_group = options.fetch(:teams_per_group, 4)
+    playoff_teams_amount = options.fetch(:playoff_teams_amount, 8)
     payload = {
       name: "#{name_prefix} #{unique_suffix}",
       description: 'Follower sync source tournament',
-      public:,
+      public: public,
+      location: "Source Venue #{name_prefix}",
+      starts_at: '2030-06-01T10:00:00+02:00',
+      ends_at: '2030-06-01T18:00:00+02:00',
+      website_url: 'https://example.com/sync-source',
       group_stage: true,
-      playoff_teams_amount: 8,
-      teams: 4.times.flat_map do |group_index|
-        Array.new(4) do |seed_index|
+      playoff_teams_amount: playoff_teams_amount,
+      teams: group_count.times.flat_map do |group_index|
+        teams_per_group.times.map do |seed_index|
           {
             name: "#{name_prefix.tr(' ', '')}-G#{group_index + 1}-S#{seed_index + 1}",
             group: group_index
@@ -270,34 +375,46 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
 
     response = client.post('/tournaments', body: payload)
     expect(response[:status]).to eq(201)
-    fetch_tournament(client:, tournament_id: response.dig(:json, :id))
+    fetch_tournament(client: client, tournament_id: response.dig(:json, :id))
+  end
+
+  def sync_state_url(follower_id)
+    "#{follower_base_url}/tournaments/#{follower_id}/sync_state"
   end
 
   def create_playoff_tournament(client:, public:, name_prefix:)
     payload = {
       name: "#{name_prefix} #{unique_suffix}",
       description: 'Unrelated playoff tournament',
-      public:,
-      teams: Array.new(4) do |index|
+      public: public,
+      location: "Noise Venue #{name_prefix}",
+      starts_at: '2030-06-01T10:00:00+02:00',
+      ends_at: '2030-06-01T18:00:00+02:00',
+      website_url: 'https://example.com/noise',
+      teams: 4.times.map do |index|
         { name: "#{name_prefix.tr(' ', '')}-S#{index + 1}" }
       end
     }
 
     response = client.post('/tournaments', body: payload)
     expect(response[:status]).to eq(201)
-    fetch_tournament(client:, tournament_id: response.dig(:json, :id))
+    fetch_tournament(client: client, tournament_id: response.dig(:json, :id))
   end
 
   def create_follower_tournament(client:, public:, name_prefix:)
     response = client.post('/tournaments', body: {
                              name: "#{name_prefix} #{unique_suffix}",
                              description: 'Follower tournament',
-                             public:,
+                             public: public,
+                             location: "Follower Venue #{name_prefix}",
+                             starts_at: '2030-05-01T10:00:00+02:00',
+                             ends_at: '2030-05-01T18:00:00+02:00',
+                             website_url: 'https://example.com/follower',
                              read_only_mode: true,
                              sync_auth_token: sync_token
                            })
     expect(response[:status]).to eq(201)
-    fetch_tournament(client:, tournament_id: response.dig(:json, :id))
+    fetch_tournament(client: client, tournament_id: response.dig(:json, :id))
   end
 
   def fetch_tournament(client:, tournament_id:)
@@ -321,9 +438,9 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
     amount = rand(range)
     Array.new(amount) do |index|
       if index.even?
-        create_playoff_tournament(client:, public: false, name_prefix: "#{prefix} Playoff #{index}")
+        create_playoff_tournament(client: client, public: false, name_prefix: "#{prefix} Playoff #{index}")
       else
-        create_group_stage_tournament(client:, public: true, name_prefix: "#{prefix} Groups #{index}")
+        create_group_stage_tournament(client: client, public: true, name_prefix: "#{prefix} Groups #{index}")
       end
     end
   end
@@ -339,7 +456,7 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
     update = client.patch("/tournaments/#{tournament.fetch(:id)}", body: { name: updated_name })
     expect(update[:status]).to eq(200)
 
-    refreshed = fetch_tournament(client:, tournament_id: tournament.fetch(:id))
+    refreshed = fetch_tournament(client: client, tournament_id: tournament.fetch(:id))
     team = refreshed.fetch(:teams).first
     return if team.nil?
 
@@ -363,21 +480,21 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
   end
 
   def wait_for_tournament_sync!(source_tournament_id:, follower_tournament_id:, timeout: 20)
-    deadline = Time.zone.now + timeout
-    last_progress_at = Time.zone.now
+    deadline = Time.now + timeout
+    last_progress_at = Time.now
 
     loop do
       source = fetch_tournament(client: source_anonymous_client, tournament_id: source_tournament_id)
       follower = fetch_tournament(client: follower_anonymous_client, tournament_id: follower_tournament_id)
       return follower if tournament_signature(source) == tournament_signature(follower)
 
-      if Time.zone.now - last_progress_at >= 2
+      if Time.now - last_progress_at >= 2
         puts "sync wait source=#{sync_progress_signature(source).inspect} follower=#{sync_progress_signature(follower).inspect}"
         $stdout.flush
-        last_progress_at = Time.zone.now
+        last_progress_at = Time.now
       end
 
-      if Time.zone.now >= deadline
+      if Time.now >= deadline
         raise <<~ERROR
           Follower did not catch up within #{timeout}s
           source_signature=#{tournament_signature(source).inspect}
@@ -397,8 +514,8 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
   end
 
   def synced_team_id_pairs(source:, follower:)
-    source_by_name = source.fetch(:teams).index_by do |team|
-      team.fetch(:name)
+    source_by_name = source.fetch(:teams).each_with_object({}) do |team, teams_by_name|
+      teams_by_name[team.fetch(:name)] = team
     end
     follower.fetch(:teams).filter_map do |team|
       source_team = source_by_name[team.fetch(:name)]
@@ -419,18 +536,17 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
     end
 
     group_stage = fetch_tournament(client: source_anonymous_client, tournament_id: source_id)
-                  .fetch(:stages).find { |stage| stage.fetch(:level) == -1 }
+                    .fetch(:stages).find { |stage| stage.fetch(:level) == -1 }
 
     stage_finish = source_owner_client.patch("/stages/#{group_stage.fetch(:id)}", body: { state: 'finished' })
     expect(stage_finish[:status]).to eq(422)
-    expect(stage_finish.dig(:json,
-                            :error)).to eq('Playoffs cannot be generated yet because a decider match is required for an advancing place')
+    expect(stage_finish.dig(:json, :error)).to eq('Playoffs cannot be generated yet because a decider match is required for an advancing place')
     expect(stage_finish.dig(:json, :blocking_ties).size).to be >= 2
 
     stage_finish.fetch(:json).fetch(:blocking_ties).each_with_index do |blocking_tie, index|
       decider_create = source_owner_client.post("/groups/#{blocking_tie.fetch(:group_id)}/matches", body: {
-                                                  team_ids: blocking_tie.fetch(:team_ids)
-                                                })
+                                           team_ids: blocking_tie.fetch(:team_ids)
+                                         })
       expect(decider_create[:status]).to eq(201)
       decider_match = decider_create.fetch(:json)
 
@@ -446,8 +562,7 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
       expect(finish_decider[:status]).to eq(200)
     end
 
-    finish_stage_after_decider = source_owner_client.patch("/stages/#{group_stage.fetch(:id)}",
-                                                           body: { state: 'finished' })
+    finish_stage_after_decider = source_owner_client.patch("/stages/#{group_stage.fetch(:id)}", body: { state: 'finished' })
     expect(finish_stage_after_decider[:status]).to eq(200)
   end
 
@@ -485,17 +600,105 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
     play_match!(match_id: match.fetch(:id), first_score: score_a, second_score: score_b)
   end
 
+  def playoff_recreation_rounds
+    [
+      {
+        scores_by_team_name: {
+          'G1-S1' => 3,
+          'G1-S2' => 1,
+          'G2-S1' => 3,
+          'G2-S2' => 1
+        },
+        expected_playoff_matchups: [
+          %w[G1-S1 G2-S2],
+          %w[G1-S2 G2-S1]
+        ]
+      },
+      {
+        scores_by_team_name: {
+          'G1-S1' => 0,
+          'G1-S2' => 4,
+          'G2-S1' => 0,
+          'G2-S2' => 4
+        },
+        expected_playoff_matchups: [
+          %w[G1-S2 G2-S1],
+          %w[G1-S1 G2-S2]
+        ]
+      },
+      {
+        scores_by_team_name: {
+          'G1-S1' => 5,
+          'G1-S2' => 2,
+          'G2-S1' => 2,
+          'G2-S2' => 5
+        },
+        expected_playoff_matchups: [
+          %w[G1-S1 G2-S1],
+          %w[G1-S2 G2-S2]
+        ]
+      }
+    ]
+  end
+
+  def apply_group_score_round!(source_tournament_id:, scores_by_team_name:)
+    tournament = fetch_tournament(client: source_anonymous_client, tournament_id: source_tournament_id)
+    group_stage = tournament.fetch(:stages).find { |stage| stage.fetch(:level) == -1 }
+
+    group_stage.fetch(:groups).each do |group|
+      group.fetch(:matches).each do |match|
+        if match.fetch(:state) == 'not_started'
+          start_response = source_owner_client.patch("/matches/#{match.fetch(:id)}", body: { state: 'in_progress' })
+          expect(start_response[:status]).to eq(200)
+        end
+
+        update_match_points_by_seed!(match.fetch(:id), scores_by_team_name)
+
+        next if match.fetch(:state) == 'finished'
+
+        finish_response = source_owner_client.patch("/matches/#{match.fetch(:id)}", body: { state: 'finished' })
+        expect(finish_response[:status]).to eq(200)
+      end
+    end
+  end
+
+  def update_match_points_by_seed!(match_id, scores_by_team_name)
+    match = source_anonymous_client.get("/matches/#{match_id}")
+    expect(match[:status]).to eq(200)
+
+    match.fetch(:json).fetch(:match_scores).each do |score|
+      response = source_owner_client.patch("/match_scores/#{score.fetch(:id)}", body: {
+                                             points: scores_by_team_name.fetch(seed_label(score.dig(:team, :name)))
+                                           })
+      expect(response[:status]).to eq(200)
+    end
+  end
+
+  def playoff_matchups(tournament)
+    entry_stage = tournament.fetch(:stages)
+                            .select { |stage| stage.fetch(:level) >= 0 }
+                            .max_by { |stage| stage.fetch(:level) }
+    entry_stage.fetch(:matches)
+               .sort_by { |match| match.fetch(:position) }
+               .map do |match|
+      match.fetch(:match_scores)
+           .map { |score| seed_label(score.dig(:team, :name)) }
+           .sort
+    end
+  end
+
+  def seed_label(team_name)
+    team_name[/G\d+-S\d+\z/] || team_name
+  end
+
   def finish_playoff_bracket!(source_id:)
     loop do
       tournament = fetch_tournament(client: source_anonymous_client, tournament_id: source_id)
       playoff_matches = tournament.fetch(:stages)
-                                  .select { |stage| stage.fetch(:level) >= 0 }
-                                  .flat_map { |stage| stage.fetch(:matches) }
-                                  .select do |match|
-                          %w[not_started
-                             in_progress].include?(match.fetch(:state)) && match.fetch(:match_scores).size == 2
-                        end
-                                  .sort_by { |match| [match.dig(:stage, :id) || 0, match.fetch(:position)] }
+                                 .select { |stage| stage.fetch(:level) >= 0 }
+                                 .flat_map { |stage| stage.fetch(:matches) }
+                                 .select { |match| %w[not_started in_progress].include?(match.fetch(:state)) && match.fetch(:match_scores).size == 2 }
+                                 .sort_by { |match| [match.dig(:stage, :id) || 0, match.fetch(:position)] }
       break if playoff_matches.empty?
 
       playoff_matches.each_with_index do |match, index|
@@ -516,8 +719,7 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
 
     ordered_scores = match.fetch(:json).fetch(:match_scores).sort_by { |score| score.fetch(:id) }
     [first_score, second_score].each_with_index do |points, index|
-      response = source_owner_client.patch("/match_scores/#{ordered_scores[index].fetch(:id)}",
-                                           body: { points: })
+      response = source_owner_client.patch("/match_scores/#{ordered_scores[index].fetch(:id)}", body: { points: points })
       expect(response[:status]).to eq(200)
     end
 
@@ -529,13 +731,18 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
     {
       name: tournament.fetch(:name),
       public: tournament.fetch(:public),
+      location: tournament[:location],
+      starts_at: tournament[:starts_at],
+      ends_at: tournament[:ends_at],
+      website_url: tournament[:website_url],
       playoff_teams_amount: tournament.fetch(:playoff_teams_amount),
       instant_finalists_amount: tournament.fetch(:instant_finalists_amount),
       intermediate_round_participants_amount: tournament.fetch(:intermediate_round_participants_amount),
       timestamp: tournament[:timestamp],
-      teams: tournament.fetch(:teams).map do |team|
-               team.slice(:name, :advancing_from_group_stage)
-             end.sort_by { |team| team.fetch(:name) },
+      timer_mode: tournament[:timer_mode],
+      timer_reason: tournament[:timer_reason],
+      timer_reason_text: tournament[:timer_reason_text],
+      teams: tournament.fetch(:teams).map { |team| team.slice(:name, :advancing_from_group_stage) }.sort_by { |team| team.fetch(:name) },
       team_action_lists: tournament.fetch(:team_action_lists, []).sort_by { |list| list.fetch(:key) }.map do |list|
         {
           key: list.fetch(:key),
@@ -576,6 +783,9 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
       state: match.fetch(:state),
       position: match.fetch(:position),
       decider: match.fetch(:decider),
+      location: match[:location],
+      start_time: match[:start_time],
+      notes: match[:notes],
       scores: match.fetch(:match_scores).map do |score|
         {
           team_name: score.dig(:team, :name),
@@ -627,6 +837,6 @@ RSpec.describe 'Tournament follower sync HTTP E2E' do
   end
 
   def playoff_token_item_completed?(tournament, team_name:)
-    find_team_action_item(tournament, team_name:).fetch(:completed)
+    find_team_action_item(tournament, team_name: team_name).fetch(:completed)
   end
 end

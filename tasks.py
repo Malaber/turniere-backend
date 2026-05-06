@@ -28,6 +28,14 @@ E2E_USERNAME = "e2e-user"
 E2E_ALT_EMAIL = "e2e-alt@example.com"
 E2E_ALT_PASSWORD = "password123"
 E2E_ALT_USERNAME = "e2e-alt-user"
+LOAD_HTTP_CLIENTS = "1,10,50,100"
+LOAD_WEBSOCKET_CLIENTS = "1,10,50,100,200"
+LOAD_HTTP_REQUESTS_PER_CLIENT = "3"
+LOAD_WEBSOCKET_HOLD_SECONDS = "1.0"
+LOAD_WEBSOCKET_CONNECT_BATCH_SIZE = "25"
+LOAD_GROUP_COUNT = "4"
+LOAD_TEAMS_PER_GROUP = "4"
+LOAD_PLAYOFF_TEAMS = "8"
 
 PRODUCTION_TAG = "registry.gitlab.com/turniere/turniere-backend/production/commits:local"
 TEST_TAG = "registry.gitlab.com/turniere/turniere-backend/test/commits:local"
@@ -49,6 +57,18 @@ BLACKBOX_MAILGUN_API_KEY = "blackbox-test-api-key"
 BLACKBOX_MAILGUN_DOMAIN = "blackbox.example.com"
 SPEC_ROOT = Path("spec")
 E2E_SPEC_ROOT = SPEC_ROOT / "e2e" / "http"
+LINT_TARGETS = (
+    "Gemfile",
+    "Rakefile",
+    "config.ru",
+    "app",
+    "config",
+    "db/migrate",
+    "db/seeds.rb",
+    "e2e",
+    "lib",
+    "script",
+)
 ROOT = Path(__file__).resolve().parent
 DB_DIR = ROOT / "db"
 GEMFILE_LOCK_PATH = ROOT / "Gemfile.lock"
@@ -189,6 +209,7 @@ def _compose_env(
         TURNIERE_BLACKBOX_SECRET_KEY_BASE=BLACKBOX_SECRET_KEY_BASE,
         TURNIERE_BLACKBOX_MAILGUN_API_KEY=BLACKBOX_MAILGUN_API_KEY,
         TURNIERE_BLACKBOX_MAILGUN_DOMAIN=BLACKBOX_MAILGUN_DOMAIN,
+        TURNIERE_BLACKBOX_DISABLE_EMAIL_DELIVERY="1",
         TURNIERE_E2E_BASE_URL=BLACKBOX_INTERNAL_BASE_URL,
         TURNIERE_E2E_EXPECT_PROFILING=expect_profiling,
         TURNIERE_E2E_EMAIL=E2E_EMAIL,
@@ -220,6 +241,7 @@ def _follow_compose_env(
         TURNIERE_BLACKBOX_SECRET_KEY_BASE=BLACKBOX_SECRET_KEY_BASE,
         TURNIERE_BLACKBOX_MAILGUN_API_KEY=BLACKBOX_MAILGUN_API_KEY,
         TURNIERE_BLACKBOX_MAILGUN_DOMAIN=BLACKBOX_MAILGUN_DOMAIN,
+        TURNIERE_BLACKBOX_DISABLE_EMAIL_DELIVERY="1",
         TURNIERE_SOURCE_E2E_BASE_URL=BLACKBOX_SOURCE_INTERNAL_BASE_URL,
         TURNIERE_FOLLOWER_E2E_BASE_URL=BLACKBOX_FOLLOWER_INTERNAL_BASE_URL,
         TURNIERE_E2E_EMAIL=E2E_EMAIL,
@@ -254,7 +276,7 @@ def _docker_build_command(tag, target, platforms=None, push=False):
             "--target",
             target,
             "--build-arg",
-            f"GIT_COMMIT_SHA={_git_commit_sha()}",
+            f"base_commit={_git_commit_sha()}",
             "-t",
             tag,
             "-f",
@@ -272,7 +294,7 @@ def _docker_build_command(tag, target, platforms=None, push=False):
         "--target",
         target,
         "--build-arg",
-        f"GIT_COMMIT_SHA={_git_commit_sha()}",
+        f"base_commit={_git_commit_sha()}",
         "-t",
         tag,
         "-f",
@@ -460,33 +482,53 @@ def _spec_shards(node_total):
 
 
 def _shared_production_env():
-    return _env(
-        RAILS_ENV="production",
-        POSTGRES_URL=os.environ.get(
+    database_url = os.environ.get(
+        "DATABASE_URL",
+        os.environ.get(
             "POSTGRES_URL",
             f"postgres://{BLACKBOX_DB_USER}:{BLACKBOX_DB_PASSWORD}@postgres:5432/{BLACKBOX_DB_NAME}",
         ),
+    )
+    rails_max_threads = os.environ.get("RAILS_MAX_THREADS", "5")
+
+    return _env(
+        RAILS_ENV="production",
+        DATABASE_URL=database_url,
+        POSTGRES_URL=database_url,
         POSTGRES_USERNAME=os.environ.get("POSTGRES_USERNAME", BLACKBOX_DB_USER),
         POSTGRES_PASSWORD=os.environ.get("POSTGRES_PASSWORD", BLACKBOX_DB_PASSWORD),
         SECRET_KEY_BASE=os.environ.get("SECRET_KEY_BASE", BLACKBOX_SECRET_KEY_BASE),
         MAILGUN_API_KEY=os.environ.get("MAILGUN_API_KEY", BLACKBOX_MAILGUN_API_KEY),
         MAILGUN_DOMAIN=os.environ.get("MAILGUN_DOMAIN", BLACKBOX_MAILGUN_DOMAIN),
+        TURNIERE_DISABLE_EMAIL_DELIVERY=os.environ.get("TURNIERE_DISABLE_EMAIL_DELIVERY", "1"),
         RAILS_LOG_TO_STDOUT=os.environ.get("RAILS_LOG_TO_STDOUT", "1"),
         RAILS_SERVE_STATIC_FILES=os.environ.get("RAILS_SERVE_STATIC_FILES", "1"),
+        WEB_CONCURRENCY=os.environ.get("WEB_CONCURRENCY", "2"),
+        RAILS_MAX_THREADS=rails_max_threads,
+        RAILS_DB_POOL=os.environ.get("RAILS_DB_POOL", rails_max_threads),
+        SIDEKIQ_CONCURRENCY=os.environ.get("SIDEKIQ_CONCURRENCY", "5"),
     )
 
 
 def _production_env_for(db_host, db_name):
+    database_url = f"postgres://{BLACKBOX_DB_USER}:{BLACKBOX_DB_PASSWORD}@{db_host}:5432/{db_name}"
+
     return _env(
         RAILS_ENV="production",
-        POSTGRES_URL=f"postgres://{BLACKBOX_DB_USER}:{BLACKBOX_DB_PASSWORD}@{db_host}:5432/{db_name}",
+        DATABASE_URL=database_url,
+        POSTGRES_URL=database_url,
         POSTGRES_USERNAME=BLACKBOX_DB_USER,
         POSTGRES_PASSWORD=BLACKBOX_DB_PASSWORD,
         SECRET_KEY_BASE=BLACKBOX_SECRET_KEY_BASE,
         MAILGUN_API_KEY=BLACKBOX_MAILGUN_API_KEY,
         MAILGUN_DOMAIN=BLACKBOX_MAILGUN_DOMAIN,
+        TURNIERE_DISABLE_EMAIL_DELIVERY="1",
         RAILS_LOG_TO_STDOUT="1",
         RAILS_SERVE_STATIC_FILES="1",
+        WEB_CONCURRENCY=os.environ.get("WEB_CONCURRENCY", "2"),
+        RAILS_MAX_THREADS=os.environ.get("RAILS_MAX_THREADS", "5"),
+        RAILS_DB_POOL=os.environ.get("RAILS_DB_POOL", os.environ.get("RAILS_MAX_THREADS", "5")),
+        SIDEKIQ_CONCURRENCY=os.environ.get("SIDEKIQ_CONCURRENCY", "5"),
     )
 
 
@@ -522,10 +564,79 @@ def _run_blackbox_rspec(base_url, email, password, username, alt_email=E2E_ALT_E
         )
 
 
+def _load_env_value(value, env_name, default):
+    value = str(value or "").strip()
+    if value:
+        return value
+    return os.environ.get(env_name, default)
+
+
+def _run_load_test(
+    c,
+    base_url=TEST_BASE_URL,
+    email=E2E_EMAIL,
+    password=E2E_PASSWORD,
+    username=E2E_USERNAME,
+    tournament_id="",
+    http_clients="",
+    websocket_clients="",
+    http_requests_per_client="",
+    websocket_hold_seconds="",
+    websocket_connect_batch_size="",
+    group_count="",
+    teams_per_group="",
+    playoff_teams_amount="",
+    format="text",
+):
+    env = _env(
+        TURNIERE_E2E_BASE_URL=base_url,
+        TURNIERE_E2E_EMAIL=email,
+        TURNIERE_E2E_PASSWORD=password,
+        TURNIERE_E2E_USERNAME=username,
+        TURNIERE_LOAD_HTTP_CLIENTS=_load_env_value(http_clients, "TURNIERE_LOAD_HTTP_CLIENTS", LOAD_HTTP_CLIENTS),
+        TURNIERE_LOAD_WEBSOCKET_CLIENTS=_load_env_value(
+            websocket_clients,
+            "TURNIERE_LOAD_WEBSOCKET_CLIENTS",
+            LOAD_WEBSOCKET_CLIENTS,
+        ),
+        TURNIERE_LOAD_HTTP_REQUESTS_PER_CLIENT=_load_env_value(
+            http_requests_per_client,
+            "TURNIERE_LOAD_HTTP_REQUESTS_PER_CLIENT",
+            LOAD_HTTP_REQUESTS_PER_CLIENT,
+        ),
+        TURNIERE_LOAD_WEBSOCKET_HOLD_SECONDS=_load_env_value(
+            websocket_hold_seconds,
+            "TURNIERE_LOAD_WEBSOCKET_HOLD_SECONDS",
+            LOAD_WEBSOCKET_HOLD_SECONDS,
+        ),
+        TURNIERE_LOAD_WEBSOCKET_CONNECT_BATCH_SIZE=_load_env_value(
+            websocket_connect_batch_size,
+            "TURNIERE_LOAD_WEBSOCKET_CONNECT_BATCH_SIZE",
+            LOAD_WEBSOCKET_CONNECT_BATCH_SIZE,
+        ),
+        TURNIERE_LOAD_GROUP_COUNT=_load_env_value(group_count, "TURNIERE_LOAD_GROUP_COUNT", LOAD_GROUP_COUNT),
+        TURNIERE_LOAD_TEAMS_PER_GROUP=_load_env_value(
+            teams_per_group,
+            "TURNIERE_LOAD_TEAMS_PER_GROUP",
+            LOAD_TEAMS_PER_GROUP,
+        ),
+        TURNIERE_LOAD_PLAYOFF_TEAMS=_load_env_value(
+            playoff_teams_amount,
+            "TURNIERE_LOAD_PLAYOFF_TEAMS",
+            LOAD_PLAYOFF_TEAMS,
+        ),
+        TURNIERE_LOAD_FORMAT=format,
+    )
+    if tournament_id:
+        env["TURNIERE_LOAD_TOURNAMENT_ID"] = str(tournament_id)
+
+    c.run(_bundle_exec("ruby", "e2e/load_test.rb"), env=env, pty=True)
+
+
 def _start_server(command, env, log_path="/tmp/turniere-e2e-server.log"):
     log_handle = open(log_path, "w")
     process = subprocess.Popen(
-        ["/bin/sh", "-lc", command],
+        ["/bin/sh", "-c", command],
         env=env,
         stdout=log_handle,
         stderr=subprocess.STDOUT,
@@ -534,10 +645,17 @@ def _start_server(command, env, log_path="/tmp/turniere-e2e-server.log"):
     return process, log_handle
 
 
+def _server_env(env=None):
+    server_env = _env(GIT_COMMIT_SHA=_git_commit_sha())
+    if _rails_env(env) == "test":
+        server_env["WEB_CONCURRENCY"] = os.environ.get("WEB_CONCURRENCY", "1")
+    return server_env
+
+
 def _start_test_server(host=SERVER_HOST, port=SERVER_PORT):
     return _start_server(
         f"{_bundle_exec('rails', 's')} -e test -b {host} -p {port}",
-        _env(),
+        _server_env("test"),
     )
 
 
@@ -603,7 +721,11 @@ def db_reset(c, env="test"):
 @task
 def server(c, host=SERVER_HOST, port=SERVER_PORT, env=None):
     """Start the backend locally in development."""
-    c.run(f"RAILS_ENV={_rails_env(env)} {_bundle_exec('rails', 's')} -b {host} -p {port}", pty=True)
+    c.run(
+        f"RAILS_ENV={_rails_env(env)} {_bundle_exec('rails', 's')} -b {host} -p {port}",
+        env=_server_env(env),
+        pty=True,
+    )
 
 
 @task(name="start-local")
@@ -648,9 +770,10 @@ def start_test_local(
 
 
 @task
-def test(c):
-    """Run the normal RSpec suite."""
-    _stream_subprocess(_rspec_command(), env=_env())
+def test(c, spec=""):
+    """Run the normal RSpec suite, or one or more spec files via --spec."""
+    spec_paths = shlex.split(spec) if spec else []
+    _stream_subprocess(_rspec_command(*spec_paths), env=_env())
 
 
 @task(name="test-shard")
@@ -691,7 +814,7 @@ def test_shard(c, node_index=1, node_total=8, dry_run=False):
 @task
 def lint(c):
     """Run RuboCop."""
-    c.run(_bundle_exec("rubocop", "--cache", "false"), pty=True)
+    c.run(_bundle_exec("rubocop", *LINT_TARGETS, "--cache", "false"), pty=True)
 
 
 @task(name="bootstrap-dev-user")
@@ -800,6 +923,92 @@ def verify_http(
         _stop_process(process, log_handle)
 
 
+@task(name="load-test")
+def load_test(
+    c,
+    base_url=TEST_BASE_URL,
+    email=E2E_EMAIL,
+    password=E2E_PASSWORD,
+    username=E2E_USERNAME,
+    tournament_id="",
+    http_clients="",
+    websocket_clients="",
+    http_requests_per_client="",
+    websocket_hold_seconds="",
+    websocket_connect_batch_size="",
+    group_count="",
+    teams_per_group="",
+    playoff_teams_amount="",
+    format="text",
+):
+    """Run HTTP read and ActionCable websocket load smoke tests against a running backend."""
+    _run_load_test(
+        c,
+        base_url=base_url,
+        email=email,
+        password=password,
+        username=username,
+        tournament_id=tournament_id,
+        http_clients=http_clients,
+        websocket_clients=websocket_clients,
+        http_requests_per_client=http_requests_per_client,
+        websocket_hold_seconds=websocket_hold_seconds,
+        websocket_connect_batch_size=websocket_connect_batch_size,
+        group_count=group_count,
+        teams_per_group=teams_per_group,
+        playoff_teams_amount=playoff_teams_amount,
+        format=format,
+    )
+
+
+@task(name="verify-load-test")
+def verify_load_test(
+    c,
+    base_url=TEST_BASE_URL,
+    email=E2E_EMAIL,
+    password=E2E_PASSWORD,
+    username=E2E_USERNAME,
+    reset_db=True,
+    http_clients="",
+    websocket_clients="",
+    http_requests_per_client="",
+    websocket_hold_seconds="",
+    websocket_connect_batch_size="",
+    group_count="",
+    teams_per_group="",
+    playoff_teams_amount="",
+):
+    """Boot a local test server, then run HTTP/websocket load smoke tests against it."""
+    if reset_db:
+        db_reset(c, env="test")
+    db_migrate(c, env="test")
+    bootstrap_e2e_user(c, email=email, password=password, username=username)
+    parsed_base_url = urlparse(base_url)
+    server_host = parsed_base_url.hostname or "127.0.0.1"
+    server_port = parsed_base_url.port or 3000
+
+    process, log_handle = _start_test_server(host=server_host, port=server_port)
+    try:
+        _wait_for_http(base_url=base_url, timeout=60)
+        load_test(
+            c,
+            base_url=base_url,
+            email=email,
+            password=password,
+            username=username,
+            http_clients=http_clients,
+            websocket_clients=websocket_clients,
+            http_requests_per_client=http_requests_per_client,
+            websocket_hold_seconds=websocket_hold_seconds,
+            websocket_connect_batch_size=websocket_connect_batch_size,
+            group_count=group_count,
+            teams_per_group=teams_per_group,
+            playoff_teams_amount=playoff_teams_amount,
+        )
+    finally:
+        _stop_process(process, log_handle)
+
+
 @task
 def verify(c):
     """Run lint, normal specs, and HTTP E2E locally."""
@@ -842,6 +1051,28 @@ def scenario_intermediate(
     """Materialize the 3-group intermediate-round scenario over HTTP."""
     c.run(
         f"ruby script/e2e_scenarios.rb group_stage_intermediate_round --stop-at {stop_at}",
+        env=_env(
+            TURNIERE_E2E_BASE_URL=base_url,
+            TURNIERE_E2E_EMAIL=email,
+            TURNIERE_E2E_PASSWORD=password,
+            TURNIERE_E2E_USERNAME=username,
+        ),
+        pty=True,
+    )
+
+
+@task(name="scenario-playoff-recreation")
+def scenario_playoff_recreation(
+    c,
+    base_url=TEST_BASE_URL,
+    email=E2E_EMAIL,
+    password=E2E_PASSWORD,
+    username=E2E_USERNAME,
+    stop_at="third_playoffs_created",
+):
+    """Materialize a group-stage playoff delete/recreate scenario over HTTP."""
+    c.run(
+        f"ruby script/e2e_scenarios.rb group_stage_playoff_recreation --stop-at {stop_at}",
         env=_env(
             TURNIERE_E2E_BASE_URL=base_url,
             TURNIERE_E2E_EMAIL=email,
@@ -921,6 +1152,101 @@ def docker_build_all(c):
     """Build the production and test Docker images."""
     docker_build_production(c)
     docker_build_test(c)
+
+
+def _assert_output_match(label, output, pattern):
+    if re.search(pattern, output) is not None:
+        return
+
+    tail = output[-4000:] if output else "<empty output>"
+    raise RuntimeError(f"{label} did not match {pattern!r}.\nLast output:\n{tail}")
+
+
+def _blackbox_app_exec(env, *command):
+    result = _compose_run(["exec", "-T", "app", *command], env=env, capture_output=True)
+    output = "\n".join(part for part in (result.stdout, result.stderr) if part)
+    return output.strip()
+
+
+def _assert_blackbox_scaling_config(env, expected):
+    logs = _compose_run(["logs", "app"], env=env, capture_output=True).stdout
+
+    _assert_output_match("Puma worker count", logs, rf"Workers:\s+{re.escape(expected['web_concurrency'])}\b")
+    _assert_output_match("Puma max threads", logs, rf"Max threads:\s+{re.escape(expected['rails_max_threads'])}\b")
+    _assert_output_match("Puma environment", logs, r"Environment:\s+production\b")
+
+    pool_size = _blackbox_app_exec(env, "bundle", "exec", "rails", "runner", "puts ActiveRecord::Base.connection_pool.size")
+    if pool_size.splitlines()[-1] != expected["rails_db_pool"]:
+        raise RuntimeError(f"Expected DB pool {expected['rails_db_pool']}, got {pool_size!r}")
+
+    sidekiq_config = _blackbox_app_exec(
+        env,
+        "ruby",
+        "-rerb",
+        "-e",
+        "puts ERB.new(File.read('config/sidekiq.yml')).result",
+    )
+    expected_sidekiq = f":concurrency: {expected['sidekiq_concurrency']}"
+    if expected_sidekiq not in sidekiq_config:
+        raise RuntimeError(f"Expected Sidekiq config {expected_sidekiq!r}, got {sidekiq_config!r}")
+
+
+@task(name="docker-blackbox-scaling-config")
+def docker_blackbox_scaling_config(
+    c,
+    host_port="3004",
+    app_image=PRODUCTION_TAG,
+    runner_image=TEST_TAG,
+    postgres_image=BLACKBOX_POSTGRES_IMAGE,
+    build=True,
+):
+    """Build once, boot the production image with two scaling env sets, and assert runtime config."""
+    if build:
+        docker_build_production(c, tag=app_image)
+
+    cases = [
+        {
+            "label": "medium",
+            "web_concurrency": "2",
+            "rails_max_threads": "3",
+            "rails_db_pool": "4",
+            "sidekiq_concurrency": "6",
+        },
+        {
+            "label": "event",
+            "web_concurrency": "3",
+            "rails_max_threads": "4",
+            "rails_db_pool": "5",
+            "sidekiq_concurrency": "7",
+        },
+    ]
+
+    for expected in cases:
+        env = _compose_env(
+            host_port=host_port,
+            app_image=app_image,
+            runner_image=runner_image,
+            postgres_image=postgres_image,
+            expect_profiling="false",
+        )
+        env.update(
+            TURNIERE_BLACKBOX_RAILS_ENV="production",
+            TURNIERE_BLACKBOX_WEB_CONCURRENCY=expected["web_concurrency"],
+            TURNIERE_BLACKBOX_RAILS_MAX_THREADS=expected["rails_max_threads"],
+            TURNIERE_BLACKBOX_RAILS_DB_POOL=expected["rails_db_pool"],
+            TURNIERE_BLACKBOX_SIDEKIQ_CONCURRENCY=expected["sidekiq_concurrency"],
+        )
+
+        _print_header(f"Scaling config case: {expected['label']}")
+        try:
+            _compose_run(["down", "-v", "--remove-orphans"], env=env, check=False)
+            _compose_run(["up", "-d", "postgres", "app"], env=env)
+            _wait_for_http(base_url=f"http://127.0.0.1:{host_port}", timeout=120)
+            _assert_blackbox_scaling_config(env, expected)
+        finally:
+            _compose_run(["down", "-v", "--remove-orphans"], env=env, check=False)
+
+    print("Scaling config changed across boots without rebuilding the production image.")
 
 
 @task(name="docker-blackbox-up")
@@ -1734,6 +2060,59 @@ def blackbox_service(
 
     _print_header("Running HTTP E2E against production image")
     _run_blackbox_rspec(base_url, email, password, username, alt_email, alt_password, alt_username)
+
+
+@task(name="blackbox-load-service")
+def blackbox_load_service(
+    c,
+    base_url=BLACKBOX_INTERNAL_BASE_URL,
+    email=E2E_EMAIL,
+    password=E2E_PASSWORD,
+    username=E2E_USERNAME,
+    http_clients="",
+    websocket_clients="",
+    http_requests_per_client="",
+    websocket_hold_seconds="",
+    websocket_connect_batch_size="",
+    group_count="",
+    teams_per_group="",
+    playoff_teams_amount="",
+):
+    """Run load smoke tests against an already running production app plus Postgres sidecar."""
+    _print_header("Running production database migrations")
+    c.run("bundle exec rails db:migrate", env=_shared_production_env(), pty=True)
+
+    _print_header(f"Waiting for app healthcheck at {base_url}")
+    _wait_for_http(base_url=base_url, timeout=120)
+
+    _print_header("Bootstrapping confirmed E2E user")
+    _bootstrap_blackbox_users(
+        c,
+        _shared_production_env(),
+        email,
+        password,
+        username,
+        E2E_ALT_EMAIL,
+        E2E_ALT_PASSWORD,
+        E2E_ALT_USERNAME,
+    )
+
+    _print_header("Running HTTP/websocket load smoke against production image")
+    _run_load_test(
+        c,
+        base_url=base_url,
+        email=email,
+        password=password,
+        username=username,
+        http_clients=http_clients,
+        websocket_clients=websocket_clients,
+        http_requests_per_client=http_requests_per_client,
+        websocket_hold_seconds=websocket_hold_seconds,
+        websocket_connect_batch_size=websocket_connect_batch_size,
+        group_count=group_count,
+        teams_per_group=teams_per_group,
+        playoff_teams_amount=playoff_teams_amount,
+    )
 
 
 @task(name="blackbox-follow-service")

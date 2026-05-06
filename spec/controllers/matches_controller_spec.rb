@@ -47,7 +47,7 @@ RSpec.describe MatchesController, type: :controller do
         get :index, params: { tournament_id: @tournament.to_param }
         match = deserialize_response(response).first
 
-        expect(match.keys).to match_array(%i[id position state teams match_scores group stage])
+        expect(match.keys).to match_array(%i[id position state location start_time notes teams match_scores group stage])
         expect(match[:teams]).to all(include(:id, :name))
       end
 
@@ -72,7 +72,7 @@ RSpec.describe MatchesController, type: :controller do
         expect(body.map { |match| match[:id] }).to match_array(stage.matches.map(&:id))
       end
     end
-    # TODO: add test for upcoming once there is test data for a "valid" group stage
+    # TODO add test for upcoming once there is test data for a "valid" group stage
   end
 
   describe 'GET #show' do
@@ -86,14 +86,12 @@ RSpec.describe MatchesController, type: :controller do
       get :show, params: { id: @match.to_param }
       body = deserialize_response response
       expect(body[:state]).to eq(@match.state)
-      expect(body[:match_scores].pluck(:id)).to eq(@match.match_scores.map(&:id))
+      expect(body[:match_scores].map { |ms| ms[:id] }).to eq(@match.match_scores.map(&:id))
     end
   end
 
   describe 'POST #create' do
-    let(:group_stage_tournament) do
-      create(:group_stage_tournament, group_count: 1, match_factory: :finished_group_match)
-    end
+    let(:group_stage_tournament) { create(:group_stage_tournament, group_count: 1, match_factory: :finished_group_match) }
     let(:group) { group_stage_tournament.stages.find_by(level: -1).groups.first }
     let(:team_ids) { group.teams.first(2).map(&:id) }
 
@@ -103,8 +101,10 @@ RSpec.describe MatchesController, type: :controller do
       end
 
       it 'creates a decider match at the end of the group' do
+        log_count = group_stage_tournament.transaction_log_entries.count
+
         expect do
-          post :create, params: { group_id: group.to_param, team_ids: }
+          post :create, params: { group_id: group.to_param, team_ids: team_ids }
         end.to change { group.matches.reload.count }.by(1)
 
         expect(response).to have_http_status(:created)
@@ -112,6 +112,8 @@ RSpec.describe MatchesController, type: :controller do
         expect(created_match.decider?).to eq(true)
         expect(created_match.state).to eq('not_started')
         expect(created_match.teams.map(&:id)).to match_array(team_ids)
+        expect(group_stage_tournament.transaction_log_entries.count).to eq(log_count + 1)
+        expect(group_stage_tournament.transaction_log_entries.last.action).to eq('decider_match.created')
       end
     end
 
@@ -122,7 +124,7 @@ RSpec.describe MatchesController, type: :controller do
 
       it 'rejects the request' do
         post :create, params: { group_id: group.to_param, team_ids: [group.teams.first.id] }
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
       end
     end
   end
@@ -160,8 +162,8 @@ RSpec.describe MatchesController, type: :controller do
         expect(last_match.reload.position).to eq(original_first_position)
 
         body = deserialize_response(response)
-        expect(body.pluck(:id)).to match_array([first_match.id, last_match.id])
-        expect(body.pluck(:position)).to match_array([original_first_position, original_last_position])
+        expect(body.map { |match| match[:id] }).to match_array([first_match.id, last_match.id])
+        expect(body.map { |match| match[:position] }).to match_array([original_first_position, original_last_position])
       end
 
       it 'rejects matches from different groups' do
@@ -169,7 +171,7 @@ RSpec.describe MatchesController, type: :controller do
 
         patch :swap, params: { id: first_match.to_param, other_match_id: foreign_match.to_param }
 
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
         expect(deserialize_response(response)[:error]).to eq('Matches must be different group matches from the same group')
       end
 
@@ -190,6 +192,102 @@ RSpec.describe MatchesController, type: :controller do
         patch :swap, params: { id: first_match.to_param, other_match_id: last_match.to_param }
 
         expect(response).to have_http_status(:forbidden)
+      end
+    end
+  end
+
+  describe 'PATCH #metadata' do
+    let(:group_stage_tournament) { create(:group_stage_tournament, group_count: 2, match_factory: :filled_group_match) }
+
+    context 'as owner' do
+      before do
+        apply_authentication_headers_for group_stage_tournament.owner
+        allow(TournamentSyncEnqueue).to receive(:call)
+        allow(TournamentLiveBroadcast).to receive(:call)
+      end
+
+      it 'updates selected matches by explicit ids' do
+        selected_matches = group_stage_tournament.matches.first(2)
+
+        patch :metadata, params: {
+          tournament_id: group_stage_tournament.to_param,
+          match_ids: selected_matches.map(&:id),
+          location: 'Court A',
+          start_time: '17:00',
+          notes: 'Bring player cards'
+        }
+
+        expect(response).to be_successful
+        expect(selected_matches.map { |match| match.reload.location }).to all(eq('Court A'))
+        expect(selected_matches.map { |match| match.reload.start_time }).to all(eq('17:00'))
+        expect(selected_matches.map { |match| match.reload.notes }).to all(eq('Bring player cards'))
+        expect(deserialize_response(response).map { |match| match[:id] }).to eq(selected_matches.map(&:id))
+        expect(TournamentSyncEnqueue).to have_received(:call).with(group_stage_tournament)
+        expect(TournamentLiveBroadcast).to have_received(:call).with(group_stage_tournament.id)
+      end
+
+      it 'updates group stage matches by position filter' do
+        patch :metadata, params: {
+          tournament_id: group_stage_tournament.to_param,
+          group_stage_position: 1,
+          start_time: '18:00'
+        }
+
+        expect(response).to be_successful
+        group_stage_tournament.matches.each do |match|
+          expected_start_time = match.group_match? && match.position == 1 ? '18:00' : nil
+          expect(match.reload.start_time).to eq(expected_start_time)
+        end
+      end
+
+      it 'updates playoff matches by stage level filter' do
+        playoff_tournament = create(:stage_tournament, stage_count: 3, user: group_stage_tournament.owner)
+        target_stage = playoff_tournament.stages.find_by!(level: 3)
+
+        patch :metadata, params: {
+          tournament_id: playoff_tournament.to_param,
+          stage_level: target_stage.level,
+          start_time: '21:00'
+        }
+
+        expect(response).to be_successful
+        playoff_tournament.matches.each do |match|
+          expected_start_time = match.stage == target_stage ? '21:00' : nil
+          expect(match.reload.start_time).to eq(expected_start_time)
+        end
+      end
+
+      it 'requires a selector' do
+        patch :metadata, params: { tournament_id: group_stage_tournament.to_param, start_time: '17:00' }
+
+        expect(response).to have_http_status(:bad_request)
+        expect(deserialize_response(response)[:error]).to eq('Select matches with match_ids, filters, or all=true')
+      end
+
+      it 'rejects matches outside the tournament' do
+        other_match = create(:match)
+
+        patch :metadata, params: {
+          tournament_id: group_stage_tournament.to_param,
+          match_ids: [other_match.id],
+          start_time: '17:00'
+        }
+
+        expect(response).to have_http_status(:not_found)
+        expect(deserialize_response(response)[:error]).to eq("Matches not found in tournament: #{other_match.id}")
+      end
+
+      it 'rejects read only follower tournaments' do
+        group_stage_tournament.update!(read_only_mode: true, sync_auth_token: 'shared-secret')
+
+        patch :metadata, params: {
+          tournament_id: group_stage_tournament.to_param,
+          match_ids: [group_stage_tournament.matches.first.id],
+          start_time: '17:00'
+        }
+
+        expect(response).to have_http_status(:locked)
+        expect(deserialize_response(response)[:error]).to eq('Tournament is in read only follower mode')
       end
     end
   end
@@ -233,6 +331,59 @@ RSpec.describe MatchesController, type: :controller do
             expect(response).to be_successful
             body = deserialize_response response
             expect(body[:state]).to eq(valid_update[:state])
+          end
+
+          it 'updates metadata without changing match state' do
+            expect(TournamentLiveBroadcast).to receive(:call).with(@match.tournament.id)
+
+            put :update, params: {
+              id: @match.to_param,
+              location: 'Main Hall',
+              start_time: '17:00',
+              notes: 'Stream setup needed'
+            }
+
+            expect(response).to be_successful
+            @match.reload
+            expect(@match.state).to eq('not_started')
+            expect(@match.location).to eq('Main Hall')
+            expect(@match.start_time).to eq('17:00')
+            expect(@match.notes).to eq('Stream setup needed')
+            expect(deserialize_response(response)).to include(
+              location: 'Main Hall',
+              start_time: '17:00',
+              notes: 'Stream setup needed'
+            )
+          end
+
+          it 'writes a transaction log entry for the state change' do
+            expect(TournamentLiveBroadcast).to receive(:call).with(@match.tournament.id)
+
+            expect do
+              put :update, params: { id: @match.to_param }.merge(valid_update)
+            end.to change { @match.tournament.transaction_log_entries.count }.by(1)
+
+            entry = @match.tournament.transaction_log_entries.last
+            expect(entry.action).to eq('match.state_changed')
+            expect(entry.sequence).to eq(1)
+            expect(entry.message).to include("changed match #{@match.id}")
+            expect(entry.message).to include('running')
+            expect(entry.metadata['new_state']).to eq('in_progress')
+          end
+
+          it 'stops an in-progress match and resets its scores' do
+            @match.update!(state: :in_progress)
+            @match.match_scores.each do |match_score|
+              match_score.update!(points: 7, hidden_points: 5)
+            end
+
+            expect(TournamentLiveBroadcast).to receive(:call).with(@match.tournament.id)
+            put :update, params: { id: @match.to_param, state: 'not_started' }
+
+            expect(response).to be_successful
+            expect(@match.reload.state).to eq('not_started')
+            expect(@match.match_scores.reload.map(&:points)).to all(eq(0))
+            expect(@match.match_scores.reload.map(&:hidden_points)).to all(eq(0))
           end
 
           context 'on a running playoff match' do
@@ -290,7 +441,7 @@ RSpec.describe MatchesController, type: :controller do
                 end
 
                 it 'returns an unprocessable entity response' do
-                  expect(response).to have_http_status(:unprocessable_entity)
+                  expect(response).to have_http_status(:unprocessable_content)
                 end
 
                 it 'doesn\'t change the matches status' do
@@ -323,7 +474,7 @@ RSpec.describe MatchesController, type: :controller do
 
               it 'returns unprocessable entity' do
                 put :update, params: { id: @running_playoff_match.to_param }.merge(finished)
-                expect(response).to have_http_status(:unprocessable_entity)
+                expect(response).to have_http_status(:unprocessable_content)
               end
             end
 
@@ -343,7 +494,7 @@ RSpec.describe MatchesController, type: :controller do
                   allow_any_instance_of(Match).to receive(:winner).and_return(@running_playoff_match.match_scores.first.team)
 
                   put :update, params: { id: @running_playoff_match.to_param }.merge(finished)
-                  expect(response).to have_http_status(:unprocessable_entity)
+                  expect(response).to have_http_status(:unprocessable_content)
                 end
               end
             end
@@ -377,14 +528,22 @@ RSpec.describe MatchesController, type: :controller do
         context 'with invalid params' do
           it 'renders an unprocessable entity response' do
             put :update, params: { id: @match.to_param }.merge(invalid_update)
-            expect(response).to have_http_status(:unprocessable_entity)
+            expect(response).to have_http_status(:unprocessable_content)
           end
         end
 
         context 'with senseless params' do
           it 'renders an unprocessable entity response' do
             put :update, params: { id: @match.to_param }.merge(senseless_update)
-            expect(response).to have_http_status(:unprocessable_entity)
+            expect(response).to have_http_status(:unprocessable_content)
+          end
+        end
+
+        context 'with stop params on a not-started match' do
+          it 'renders an unprocessable entity response' do
+            put :update, params: { id: @match.to_param, state: 'not_started' }
+            expect(response).to have_http_status(:unprocessable_content)
+            expect(deserialize_response(response)[:error]).to eq("Match can't stop in this state")
           end
         end
       end
@@ -403,6 +562,34 @@ RSpec.describe MatchesController, type: :controller do
       end
     end
 
+    context 'on a running group match' do
+      let(:tournament) { create(:group_stage_tournament, group_count: 1, match_factory: :filled_group_match) }
+      let(:group) { tournament.stages.find_by(level: -1).groups.first }
+      let(:group_match) { group.matches.first }
+
+      before do
+        apply_authentication_headers_for tournament.owner
+        group_match.update!(state: :in_progress)
+        group_match.match_scores.order(:id).each_with_index do |match_score, index|
+          match_score.update!(points: index.zero? ? 9 : 2, hidden_points: index.zero? ? 4 : 1)
+        end
+        UpdateGroupsGroupScoresAndSave.call(group: group)
+      end
+
+      it 'stops the match, clears scores, and recalculates group scores' do
+        put :update, params: { id: group_match.to_param, state: 'not_started' }
+
+        expect(response).to be_successful
+        expect(group_match.reload.state).to eq('not_started')
+        expect(group_match.match_scores.reload.map(&:points)).to all(eq(0))
+        expect(group_match.match_scores.reload.map(&:hidden_points)).to all(eq(0))
+        involved_group_scores = group.group_scores.reload.select { |score| group_match.teams.include?(score.team) }
+        expect(involved_group_scores.map(&:group_points)).to all(eq(0))
+        expect(involved_group_scores.map(&:scored_points)).to all(eq(0))
+        expect(involved_group_scores.map(&:received_points)).to all(eq(0))
+      end
+    end
+
     context 'on a playoff match that isn\'t ready yet' do
       let(:invalid_update) do
         {
@@ -418,7 +605,7 @@ RSpec.describe MatchesController, type: :controller do
         context 'with invalid params' do
           it 'renders an unprocessable entity response' do
             put :update, params: { id: @not_ready_playoff_match.to_param }.merge(invalid_update)
-            expect(response).to have_http_status(:unprocessable_entity)
+            expect(response).to have_http_status(:unprocessable_content)
           end
         end
       end

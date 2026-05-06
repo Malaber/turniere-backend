@@ -85,7 +85,7 @@ RSpec.describe 'Tournament follower sync beamer websocket HTTP E2E' do
                              name: "#{name_prefix} #{SecureRandom.hex(3)}",
                              description: 'Follower beamer websocket source tournament',
                              public: true,
-                             teams: Array.new(4) do |index|
+                             teams: 4.times.map do |index|
                                { name: "#{name_prefix.tr(' ', '')}-S#{index + 1}" }
                              end
                            })
@@ -125,25 +125,25 @@ RSpec.describe 'Tournament follower sync beamer websocket HTTP E2E' do
   end
 
   def wait_for_default_beamer!(tournament_id:, timeout: 20)
-    deadline = Time.zone.now + timeout
+    deadline = Time.now + timeout
     loop do
       beamer = fetch_beamer(base_url: follower_base_url, tournament_id:, beamer_name: DEFAULT_BEAMER_NAME)
       return beamer if beamer.fetch(:name) == DEFAULT_BEAMER_NAME
 
-      raise "follower default beamer not present within #{timeout}s" if Time.zone.now >= deadline
+      raise "follower default beamer not present within #{timeout}s" if Time.now >= deadline
 
       sleep 0.5
     end
   end
 
   def wait_for_beamer_payload!(cable_client, event_type:, display_state:, timeout: 20)
-    deadline = Time.zone.now + timeout
+    deadline = Time.now + timeout
     loop do
-      payload = cable_client.wait_for_beamer_payload!(timeout: [deadline - Time.zone.now, 0.1].max)
+      payload = cable_client.wait_for_beamer_payload!(timeout: [deadline - Time.now, 0.1].max)
       return payload if payload.fetch('type') == event_type &&
                         payload.dig('beamer', 'display_state') == display_state
 
-      raise "follower beamer websocket payload not received within #{timeout}s" if Time.zone.now >= deadline
+      raise "follower beamer websocket payload not received within #{timeout}s" if Time.now >= deadline
     end
   end
 end

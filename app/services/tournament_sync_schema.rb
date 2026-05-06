@@ -9,11 +9,17 @@ class TournamentSyncSchema
         code
         description
         public
+        location
+        starts_at
+        ends_at
+        website_url
         playoff_teams_amount
         instant_finalists_amount
         intermediate_round_participants_amount
         timestamp
         timer_mode
+        timer_reason
+        timer_reason_text
       ].freeze,
       ignored: %w[
         user_id
@@ -22,6 +28,7 @@ class TournamentSyncSchema
         read_only_mode
         sync_target_url
         sync_auth_token
+        sync_auth_token_digest
         sync_source_tournament_id
         sync_last_pushed_at
         sync_last_push_error
@@ -45,7 +52,7 @@ class TournamentSyncSchema
       ignored: %w[created_at updated_at sync_source_id].freeze
     }.freeze,
     Match => {
-      synced: %w[id state position stage_id group_id decider].freeze,
+      synced: %w[id state position stage_id group_id decider location start_time notes].freeze,
       ignored: %w[created_at updated_at sync_source_id].freeze
     }.freeze,
     MatchScore => {

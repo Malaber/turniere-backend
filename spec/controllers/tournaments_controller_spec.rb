@@ -24,7 +24,7 @@ RSpec.describe TournamentsController, type: :controller do
         get :index
         tournaments = deserialize_response response
         public_tournaments = tournaments.select { |t| t[:public] }
-        expect(public_tournaments.pluck(:id)).to match_array(Tournament.where(public: true).pluck(:id))
+        expect(public_tournaments.map { |t| t[:id] }).to match_array(Tournament.where(public: true).map { |t| t[:id] })
       end
     end
 
@@ -35,15 +35,15 @@ RSpec.describe TournamentsController, type: :controller do
 
       it 'returns all private tournaments' do
         apply_authentication_headers_for @another_user
-        get(:index, params:)
+        get :index, params: params
         tournaments = deserialize_response response
-        private_tournaments = Tournament.where(owner: @another_user, public: false).pluck(:id)
-        returned_private_tournaments = tournaments.filter { |t| !t[:public] }.pluck(:id)
+        private_tournaments = Tournament.where(owner: @another_user, public: false).map { |t| t[:id] }
+        returned_private_tournaments = tournaments.filter { |t| !t[:public] }.map { |t| t[:id] }
         expect(returned_private_tournaments).to match_array(private_tournaments)
       end
 
       it 'returns no private tournaments for unauthenticated users' do
-        get(:index, params:)
+        get :index, params: params
         tournaments = deserialize_response response
         private_tournaments = tournaments.reject { |t| t[:public] }
         expect(private_tournaments.size).to eq(0)
@@ -51,14 +51,14 @@ RSpec.describe TournamentsController, type: :controller do
 
       it 'returns no private tournaments owned by another user' do
         apply_authentication_headers_for @user
-        get(:index, params:)
+        get :index, params: params
         tournaments = deserialize_response response
-        expect(tournaments.pluck(:id)).not_to include(@private_tournament.id)
+        expect(tournaments.map { |t| t[:id] }).not_to include(@private_tournament.id)
       end
 
       it 'returns no public tournaments' do
         apply_authentication_headers_for @another_user
-        get(:index, params:)
+        get :index, params: params
         tournaments = deserialize_response response
         expect(tournaments.count { |t| t[:public] }).to eq(0)
       end
@@ -70,15 +70,15 @@ RSpec.describe TournamentsController, type: :controller do
       end
 
       it 'returns all public tournaments' do
-        get(:index, params:)
+        get :index, params: params
         tournaments = deserialize_response response
         public_tournaments = tournaments.select { |t| t[:public] }
-        expect(public_tournaments.pluck(:id)).to match_array(Tournament.where(public: true).pluck(:id))
+        expect(public_tournaments.map { |t| t[:id] }).to match_array(Tournament.where(public: true).map { |t| t[:id] })
       end
 
       it 'returns no private tournaments' do
         apply_authentication_headers_for @another_user
-        get(:index, params:)
+        get :index, params: params
         tournaments = deserialize_response response
         expect(tournaments.count { |t| !t[:public] }).to eq(0)
       end
@@ -105,7 +105,8 @@ RSpec.describe TournamentsController, type: :controller do
       expected_keys = %i[
         id name code public description playoff_teams_amount
         instant_finalists_amount intermediate_round_participants_amount
-        timestamp timer_mode owner_username stages teams team_action_lists
+        location starts_at ends_at website_url
+        timestamp timer_mode timer_reason timer_reason_text owner_username stages teams team_action_lists
       ]
       expect(json.keys).to match_array(expected_keys)
       expect(json[:name]).to eq(@tournament.name)
@@ -150,9 +151,11 @@ RSpec.describe TournamentsController, type: :controller do
       json = deserialize_response(response)
       expect(json[:read_only_mode]).to eq(true)
       expect(json[:sync_target_url]).to eq('https://remote.example.com/tournaments/1/sync_state')
+      expect(json[:sync_auth_configured]).to eq(true)
       expect(json[:sync_last_pushed_at]).to eq(pushed_at.iso8601)
       expect(json[:sync_last_push_error]).to eq('push failed')
       expect(json).not_to have_key(:sync_auth_token)
+      expect(json).not_to have_key(:sync_auth_token_digest)
       expect(json).to eq(TournamentSerializer.new(@tournament, scope: @tournament.owner).as_json)
     end
 
@@ -224,13 +227,20 @@ RSpec.describe TournamentsController, type: :controller do
   describe 'GET #timer' do
     it 'returns timer state in ISO 8601 format' do
       timestamp = Time.utc(2026, 4, 13, 18, 0, 0)
-      @tournament.update!(timestamp:, timer_mode: 'countdown')
+      @tournament.update!(
+        timestamp: timestamp,
+        timer_mode: 'countdown',
+        timer_reason: 'custom',
+        timer_reason_text: 'Opening ceremony'
+      )
 
       get :timer, params: { id: @tournament.to_param }
 
       expect(response).to be_successful
       expect(deserialize_response(response)[:timestamp]).to eq(timestamp.iso8601)
       expect(deserialize_response(response)[:timer_mode]).to eq('countdown')
+      expect(deserialize_response(response)[:timer_reason]).to eq('custom')
+      expect(deserialize_response(response)[:timer_reason_text]).to eq('Opening ceremony')
     end
   end
 
@@ -242,42 +252,142 @@ RSpec.describe TournamentsController, type: :controller do
     it 'stores timezone-aware timestamp values without shifting them' do
       timestamp = '2030-04-13T18:00:00+02:00'
 
-      patch :set_timer, params: { id: @tournament.to_param, timestamp: }
+      patch :set_timer, params: {
+        id: @tournament.to_param,
+        timestamp: timestamp,
+        timer_reason: 'tournament_start'
+      }
 
       expect(response).to be_successful
       expect(@tournament.reload.timestamp.iso8601).to eq(Time.iso8601(timestamp).utc.iso8601)
+      expect(@tournament.timer_reason).to eq('tournament_start')
+      expect(@tournament.timer_reason_text).to be_nil
       expect(deserialize_response(response)[:timestamp]).to eq(@tournament.timestamp.iso8601)
       expect(deserialize_response(response)[:timer_mode]).to eq('countdown')
+      expect(deserialize_response(response)[:timer_reason]).to eq('tournament_start')
     end
 
     it 'starts countup timer at current time when timer_mode=countup' do
       before_request = Time.zone.now
 
-      patch :set_timer, params: { id: @tournament.to_param, timer_mode: 'countup' }
+      patch :set_timer, params: {
+        id: @tournament.to_param,
+        timer_mode: 'countup',
+        timer_reason: 'custom',
+        timer_reason_text: 'Tie-break delay'
+      }
 
       expect(response).to be_successful
       expect(@tournament.reload.timer_mode).to eq('countup')
-      expect(@tournament.timestamp).to be_between(before_request - 1.second, 1.second.from_now)
+      expect(@tournament.timer_reason).to eq('custom')
+      expect(@tournament.timer_reason_text).to eq('Tie-break delay')
+      expect(@tournament.timestamp).to be_between(before_request - 1.second, Time.zone.now + 1.second)
       expect(deserialize_response(response)[:timer_mode]).to eq('countup')
+      expect(deserialize_response(response)[:timer_reason]).to eq('custom')
+      expect(deserialize_response(response)[:timer_reason_text]).to eq('Tie-break delay')
     end
 
     it 'clears timer state when clear_timer=true' do
-      @tournament.update!(timestamp: Time.utc(2030, 4, 13, 18, 0, 0), timer_mode: 'countdown')
+      @tournament.update!(
+        timestamp: Time.utc(2030, 4, 13, 18, 0, 0),
+        timer_mode: 'countdown',
+        timer_reason: 'custom',
+        timer_reason_text: 'Warm-up pause'
+      )
 
       patch :set_timer, params: { id: @tournament.to_param, clear_timer: true }
 
       expect(response).to be_successful
       expect(@tournament.reload.timestamp).to be_nil
       expect(@tournament.timer_mode).to be_nil
+      expect(@tournament.timer_reason).to be_nil
+      expect(@tournament.timer_reason_text).to be_nil
       expect(deserialize_response(response)[:timestamp]).to be_nil
       expect(deserialize_response(response)[:timer_mode]).to be_nil
+      expect(deserialize_response(response)[:timer_reason]).to be_nil
+      expect(deserialize_response(response)[:timer_reason_text]).to be_nil
+    end
+
+    it 'updates timer reason without changing active timer clock' do
+      original_timestamp = Time.utc(2030, 4, 13, 18, 0, 0)
+      @tournament.update!(
+        timestamp: original_timestamp,
+        timer_mode: 'countdown',
+        timer_reason: 'tournament_start'
+      )
+
+      patch :set_timer, params: {
+        id: @tournament.to_param,
+        timer_reason: 'custom',
+        timer_reason_text: 'Schedule pause'
+      }
+
+      expect(response).to be_successful
+      expect(@tournament.reload.timestamp).to eq(original_timestamp)
+      expect(@tournament.timer_mode).to eq('countdown')
+      expect(@tournament.timer_reason).to eq('custom')
+      expect(@tournament.timer_reason_text).to eq('Schedule pause')
+      expect(deserialize_response(response)[:timestamp]).to eq(original_timestamp.iso8601)
+      expect(deserialize_response(response)[:timer_mode]).to eq('countdown')
+      expect(deserialize_response(response)[:timer_reason]).to eq('custom')
+      expect(deserialize_response(response)[:timer_reason_text]).to eq('Schedule pause')
+
+      patch :set_timer, params: {
+        id: @tournament.to_param,
+        timer_reason: ''
+      }
+
+      expect(response).to be_successful
+      expect(@tournament.reload.timestamp).to eq(original_timestamp)
+      expect(@tournament.timer_mode).to eq('countdown')
+      expect(@tournament.timer_reason).to be_nil
+      expect(@tournament.timer_reason_text).to be_nil
+      expect(deserialize_response(response)[:timestamp]).to eq(original_timestamp.iso8601)
+      expect(deserialize_response(response)[:timer_mode]).to eq('countdown')
+      expect(deserialize_response(response)[:timer_reason]).to be_nil
+      expect(deserialize_response(response)[:timer_reason_text]).to be_nil
+    end
+
+    it 'rejects timer reason updates when no timer is active' do
+      patch :set_timer, params: { id: @tournament.to_param, timer_reason: 'match_end' }
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(deserialize_response(response)[:error]).to eq('timer_reason requires active timer')
     end
 
     it 'rejects timestamp_seconds for countup mode' do
       patch :set_timer, params: { id: @tournament.to_param, timer_mode: 'countup', timestamp_seconds: 120 }
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(deserialize_response(response)[:error]).to eq('timestamp_seconds is only allowed for countdown mode')
+    end
+
+    it 'rejects invalid timer reason values' do
+      patch :set_timer, params: { id: @tournament.to_param, timestamp_seconds: 120, timer_reason: 'ceremony' }
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(deserialize_response(response)[:error]).to eq('Invalid timer_reason')
+    end
+
+    it 'requires timer_reason_text for custom timer reason' do
+      patch :set_timer, params: { id: @tournament.to_param, timestamp_seconds: 120, timer_reason: 'custom' }
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(deserialize_response(response)[:error]).to eq('timer_reason_text is required for custom timer_reason')
+    end
+
+    it 'rejects timer_reason_text for predefined timer reasons' do
+      patch :set_timer, params: {
+        id: @tournament.to_param,
+        timestamp_seconds: 120,
+        timer_reason: 'match_end',
+        timer_reason_text: 'Extra info'
+      }
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(deserialize_response(response)[:error]).to eq(
+        'timer_reason_text is only allowed when timer_reason is custom'
+      )
     end
   end
 
@@ -329,8 +439,12 @@ RSpec.describe TournamentsController, type: :controller do
           expect(response).to have_http_status(:created)
           tournament = Tournament.find(deserialize_response(response)[:id])
           expect(tournament.read_only_mode?).to eq(true)
+          expect(tournament.sync_auth_token).to be_nil
+          expect(tournament.sync_auth_token_digest).to be_present
           expect(tournament.teams).to be_empty
           expect(tournament.stages).to be_empty
+          expect(deserialize_response(response)).not_to have_key(:sync_auth_token)
+          expect(deserialize_response(response)).not_to have_key(:sync_auth_token_digest)
         end
       end
 
@@ -339,6 +453,25 @@ RSpec.describe TournamentsController, type: :controller do
           expect do
             post :create, params: create_playoff_tournament_data
           end.to change(Tournament, :count).by(1)
+        end
+
+        it 'stores tournament metadata' do
+          starts_at = '2030-06-01T10:00:00+02:00'
+          ends_at = '2030-06-01T18:00:00+02:00'
+
+          post :create, params: create_playoff_tournament_data.merge(
+            location: 'Stadtpark Halle',
+            starts_at: starts_at,
+            ends_at: ends_at,
+            website_url: 'https://example.com/tournaments/summer-cup'
+          )
+
+          expect(response).to have_http_status(:created)
+          tournament = Tournament.find(deserialize_response(response)[:id])
+          expect(tournament.location).to eq('Stadtpark Halle')
+          expect(tournament.starts_at.iso8601).to eq(Time.iso8601(starts_at).utc.iso8601)
+          expect(tournament.ends_at.iso8601).to eq(Time.iso8601(ends_at).utc.iso8601)
+          expect(tournament.website_url).to eq('https://example.com/tournaments/summer-cup')
         end
 
         it 'associates the new tournament with the authenticated user' do
@@ -406,7 +539,7 @@ RSpec.describe TournamentsController, type: :controller do
           context 'playoff_teams_amount unacceptable' do
             shared_examples_for 'wrong playoff_teams_amount' do
               it 'fails' do
-                expect(response).to have_http_status(:unprocessable_entity)
+                expect(response).to have_http_status(:unprocessable_content)
               end
               it 'returns the correct error message' do
                 expect(deserialize_response(response)[:playoff_teams_amount].first)
@@ -462,7 +595,7 @@ RSpec.describe TournamentsController, type: :controller do
           data = create_group_tournament_data
           data[:teams].pop
           post :create, params: data
-          expect(response).to have_http_status(:unprocessable_entity)
+          expect(response).to have_http_status(:unprocessable_content)
         end
       end
 
@@ -475,12 +608,35 @@ RSpec.describe TournamentsController, type: :controller do
             post :create, params: data
           end.to change(Team, :count).by(data[:teams].count)
         end
+
+        it 'creates player accounts from team email values' do
+          data = create_playoff_tournament_data
+          data.delete :teams
+          data[:teams] = [
+            {
+              name: 'Alpha',
+              player_emails: ['alpha-player@example.com', 'alpha-partner@example.com']
+            },
+            { name: 'Beta' },
+            { name: 'Gamma' },
+            { name: 'Delta' }
+          ]
+
+          expect do
+            post :create, params: data
+          end.to change(User, :count).by(2)
+
+          tournament = Tournament.find(deserialize_response(response)[:id])
+          expect(tournament.teams.find_by(name: 'Alpha').players.map(&:email))
+            .to match_array(['alpha-player@example.com', 'alpha-partner@example.com'])
+          expect(tournament.teams.find_by(name: 'Beta').players).to be_empty
+        end
       end
 
       context 'with invalid parameters' do
         it 'renders an unprocessable entity response' do
           put :create, params: { teams: [1, 2, 3] }
-          expect(response).to have_http_status(:unprocessable_entity)
+          expect(response).to have_http_status(:unprocessable_content)
         end
       end
 
@@ -489,7 +645,7 @@ RSpec.describe TournamentsController, type: :controller do
           data = create_group_tournament_data
           data[:teams] = [{ group: 1 }, { group: 1 }, { group: 2 }, { group: 2 }]
           post :create, params: data
-          expect(response).to have_http_status(:unprocessable_entity)
+          expect(response).to have_http_status(:unprocessable_content)
         end
       end
     end
@@ -521,6 +677,43 @@ RSpec.describe TournamentsController, type: :controller do
           expect(@tournament.name).to eq(valid_update[:name])
         end
 
+        it 'updates tournament metadata' do
+          starts_at = '2030-06-01T10:00:00+02:00'
+          ends_at = '2030-06-01T18:00:00+02:00'
+
+          put :update, params: {
+            id: @tournament.to_param,
+            location: 'Arena Nord',
+            starts_at: starts_at,
+            ends_at: ends_at,
+            website_url: 'https://example.com/events/arena-nord'
+          }
+
+          expect(response).to have_http_status(:ok)
+          @tournament.reload
+          json = deserialize_response(response)
+          expect(@tournament.location).to eq('Arena Nord')
+          expect(@tournament.starts_at.iso8601).to eq(Time.iso8601(starts_at).utc.iso8601)
+          expect(@tournament.ends_at.iso8601).to eq(Time.iso8601(ends_at).utc.iso8601)
+          expect(@tournament.website_url).to eq('https://example.com/events/arena-nord')
+          expect(json[:starts_at]).to eq(@tournament.starts_at.iso8601)
+          expect(json[:ends_at]).to eq(@tournament.ends_at.iso8601)
+        end
+
+        it 'rejects invalid tournament metadata' do
+          put :update, params: {
+            id: @tournament.to_param,
+            starts_at: '2030-06-01T18:00:00+02:00',
+            ends_at: '2030-06-01T10:00:00+02:00',
+            website_url: 'notaurl'
+          }
+
+          expect(response).to have_http_status(:unprocessable_content)
+          json = deserialize_response(response)
+          expect(json[:ends_at]).to include('must be after starts_at')
+          expect(json[:website_url]).to include('is invalid')
+        end
+
         it 'renders a JSON response with the tournament' do
           put :update, params: { id: @tournament.to_param }.merge(valid_update)
           expect(response).to have_http_status(:ok)
@@ -542,6 +735,9 @@ RSpec.describe TournamentsController, type: :controller do
           expect(@tournament.read_only_mode?).to eq(false)
           expect(@tournament.sync_target_url).to include('/sync_state')
           expect(@tournament.sync_auth_token).to eq('new-token')
+          expect(@tournament.sync_auth_token_digest).to be_nil
+          expect(deserialize_response(response)).not_to have_key(:sync_auth_token)
+          expect(deserialize_response(response)).not_to have_key(:sync_auth_token_digest)
         end
 
         it 'allows follower takeover when only read_only_mode is disabled' do
@@ -558,6 +754,7 @@ RSpec.describe TournamentsController, type: :controller do
           expect(@tournament.read_only_mode?).to eq(false)
           expect(@tournament.sync_target_url).to be_blank
           expect(@tournament.sync_auth_token).to be_blank
+          expect(@tournament.sync_auth_token_digest).to be_blank
         end
 
         it 'blocks normal updates while tournament is read only' do
@@ -577,18 +774,18 @@ RSpec.describe TournamentsController, type: :controller do
 
           it 'fails when only instant_finalists_amount is changed' do
             put :update, params: { id: @filled_tournament.to_param }.merge(instant_finalists_amount: 29)
-            expect(response).to have_http_status(:unprocessable_entity)
+            expect(response).to have_http_status(:unprocessable_content)
           end
 
           it 'fails when only intermediate_round_participants_amount is changed' do
             put :update, params: { id: @filled_tournament.to_param }.merge(intermediate_round_participants_amount: 29)
-            expect(response).to have_http_status(:unprocessable_entity)
+            expect(response).to have_http_status(:unprocessable_content)
           end
 
           it 'fails when parameters don\'t match' do
             put :update, params: { id: @filled_tournament.to_param }.merge(intermediate_round_participants_amount: 29,
                                                                            instant_finalists_amount: 32)
-            expect(response).to have_http_status(:unprocessable_entity)
+            expect(response).to have_http_status(:unprocessable_content)
           end
 
           it 'succeeds when all three are changed correctly' do
@@ -607,7 +804,7 @@ RSpec.describe TournamentsController, type: :controller do
 
             it 'returns unprocessable entity' do
               put :update, params: { id: @filled_tournament.to_param }.merge(playoff_teams_amount: 8)
-              expect(response).to have_http_status(:unprocessable_entity)
+              expect(response).to have_http_status(:unprocessable_content)
             end
 
             it 'doesn\'t change playoff_teams_amount' do
@@ -660,7 +857,7 @@ RSpec.describe TournamentsController, type: :controller do
 
           it 'fails when playoff_teams_amount is higher than the amount of teams participating' do
             put :update, params: { id: @filled_tournament.to_param }.merge(playoff_teams_amount: 783)
-            expect(response).to have_http_status(:unprocessable_entity)
+            expect(response).to have_http_status(:unprocessable_content)
           end
         end
       end
@@ -724,6 +921,119 @@ RSpec.describe TournamentsController, type: :controller do
     end
   end
 
+  describe 'DELETE #destroy_playoffs' do
+    context 'without authentication headers' do
+      it 'renders an unauthorized error response' do
+        tournament = create_group_stage_with_unplayed_playoffs
+
+        delete :destroy_playoffs, params: { id: tournament.to_param }
+
+        expect(response).to have_http_status(:unauthorized)
+      end
+    end
+
+    context 'as owner' do
+      before do
+        apply_authentication_headers_for tournament.owner
+        allow(TournamentLiveBroadcast).to receive(:call)
+      end
+
+      let(:tournament) { create_group_stage_with_unplayed_playoffs }
+
+      it 'deletes unplayed playoff stages and reopens the group stage' do
+        expect do
+          delete :destroy_playoffs, params: { id: tournament.to_param }
+        end.to change { tournament.reload.stages.where('level >= 0').count }.from(1).to(0)
+
+        expect(response).to have_http_status(:ok)
+        expect(tournament.group_stage.reload).to be_in_progress
+        expect(deserialize_response(response).fetch(:stages).map { |stage| stage.fetch(:level) }).to eq([-1])
+      end
+
+      it 'pushes sync and live updates after deletion' do
+        expect(TournamentSyncEnqueue).to receive(:call).with(tournament)
+        expect(TournamentLiveBroadcast).to receive(:call).with(tournament.id)
+
+        delete :destroy_playoffs, params: { id: tournament.to_param }
+
+        expect(response).to have_http_status(:ok)
+      end
+
+      it 'rejects deletion after a playoff match has started' do
+        playoff_match = tournament.stages.find { |stage| stage.level >= 0 }.matches.first
+        playoff_match.update!(state: :in_progress)
+
+        expect do
+          delete :destroy_playoffs, params: { id: tournament.to_param }
+        end.not_to(change { tournament.reload.stages.where('level >= 0').count })
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(deserialize_response(response)[:error]).to eq(
+          'Playoffs cannot be deleted after matches have started or scores changed'
+        )
+        expect(tournament.group_stage.reload).to be_finished
+      end
+
+      it 'rejects deletion after a playoff score has changed' do
+        playoff_match = tournament.stages.find { |stage| stage.level >= 0 }.matches.first
+        playoff_match.match_scores.first.update!(points: 1)
+
+        delete :destroy_playoffs, params: { id: tournament.to_param }
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(deserialize_response(response)[:error]).to eq(
+          'Playoffs cannot be deleted after matches have started or scores changed'
+        )
+        expect(tournament.reload.stages.where('level >= 0').count).to eq(1)
+      end
+
+      it 'rejects deletion when no group stage exists' do
+        playoff_only = create(:stage_tournament, stage_count: 1)
+        apply_authentication_headers_for playoff_only.owner
+
+        delete :destroy_playoffs, params: { id: playoff_only.to_param }
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(deserialize_response(response)[:error]).to eq('Only group-stage playoffs can be deleted')
+      end
+
+      it 'blocks deletion while tournament is read only' do
+        tournament.update!(read_only_mode: true, sync_auth_token: 'shared-secret')
+
+        delete :destroy_playoffs, params: { id: tournament.to_param }
+
+        expect(response).to have_http_status(:locked)
+      end
+    end
+
+    context 'as another user' do
+      it 'renders a forbidden error response' do
+        tournament = create_group_stage_with_unplayed_playoffs
+        apply_authentication_headers_for create(:user)
+
+        delete :destroy_playoffs, params: { id: tournament.to_param }
+
+        expect(response).to have_http_status(:forbidden)
+      end
+    end
+
+    def create_group_stage_with_unplayed_playoffs
+      tournament = create(
+        :group_stage_tournament,
+        stage_count: 0,
+        group_count: 2,
+        teams_count: 4,
+        playoff_teams_amount: 2,
+        instant_finalists_amount: 2,
+        intermediate_round_participants_amount: 0
+      )
+      tournament.group_stage.update!(state: :finished)
+      result = AddPlayoffsToTournamentAndSave.call(tournament: tournament, teams: tournament.teams.take(2))
+      expect(result).to be_a_success
+      tournament.reload
+    end
+  end
+
   describe 'PATCH #sync_state' do
     before do
       @tournament.update!(read_only_mode: true, sync_auth_token: 'shared-secret')
@@ -740,6 +1050,10 @@ RSpec.describe TournamentsController, type: :controller do
           code: 'abc123',
           description: 'Synced description',
           public: true,
+          location: 'Synced Arena',
+          starts_at: '2030-06-01T10:00:00+02:00',
+          ends_at: '2030-06-01T18:00:00+02:00',
+          website_url: 'https://example.com/synced',
           playoff_teams_amount: 4,
           instant_finalists_amount: 4,
           intermediate_round_participants_amount: 0,
@@ -757,7 +1071,13 @@ RSpec.describe TournamentsController, type: :controller do
       @tournament.reload
       expect(@tournament.sync_source_tournament_id).to eq(123)
       expect(@tournament.name).to eq('Synced Tournament')
+      expect(@tournament.location).to eq('Synced Arena')
+      expect(@tournament.starts_at.iso8601).to eq(Time.iso8601('2030-06-01T10:00:00+02:00').utc.iso8601)
+      expect(@tournament.ends_at.iso8601).to eq(Time.iso8601('2030-06-01T18:00:00+02:00').utc.iso8601)
+      expect(@tournament.website_url).to eq('https://example.com/synced')
       expect(@tournament.teams.pluck(:name)).to eq(['Alpha'])
+      expect(deserialize_response(response)).not_to have_key(:sync_auth_token)
+      expect(deserialize_response(response)).not_to have_key(:sync_auth_token_digest)
     end
 
     it 'rejects invalid tokens' do
@@ -797,13 +1117,16 @@ RSpec.describe TournamentsController, type: :controller do
       expect(json[:id]).to eq(@tournament.id)
       expect(json[:sync_last_pushed_at]).to eq(pushed_at.iso8601)
       expect(json[:sync_last_push_error]).to be_nil
+      expect(json[:sync_auth_configured]).to eq(true)
+      expect(json).not_to have_key(:sync_auth_token)
+      expect(json).not_to have_key(:sync_auth_token_digest)
       expect(TournamentSyncPusher).to have_received(:push!).with(@tournament)
     end
 
     it 'rejects sync test without complete leader configuration' do
       post :test_sync, params: { id: @tournament.to_param }
 
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
       expect(deserialize_response(response)[:error])
         .to eq('Tournament sync test requires writable tournament with sync_target_url and sync_auth_token')
     end
@@ -826,6 +1149,56 @@ RSpec.describe TournamentsController, type: :controller do
       json = deserialize_response(response)
       expect(json[:error]).to eq('connection refused')
       expect(json.dig(:tournament, :sync_last_push_error)).to eq('connection refused')
+    end
+  end
+
+  describe 'PATCH #start_next_group_matches' do
+    let(:tournament) { create(:group_stage_tournament, group_count: 4, match_factory: :filled_group_match) }
+    let(:groups) { tournament.group_stage.groups.sort_by(&:number) }
+
+    before do
+      set_group_match_states(groups[0], %i[finished finished finished in_progress])
+      groups.drop(1).each do |group|
+        set_group_match_states(group, %i[finished finished in_progress not_started])
+      end
+    end
+
+    context 'as owner' do
+      before do
+        apply_authentication_headers_for tournament.owner
+      end
+
+      it 'starts only lowest pending catch-up matches and returns them' do
+        expect(TournamentLiveBroadcast).to receive(:call).with(tournament.id)
+
+        patch :start_next_group_matches, params: { id: tournament.to_param }
+
+        expect(response).to have_http_status(:ok)
+        body = deserialize_response(response)
+        expect(body.map { |match| match.dig(:group, :id) }).to match_array(groups.drop(1).map(&:id))
+        expect(body.map { |match| match[:position] }.uniq).to eq([3])
+        expect(body.map { |match| match[:state] }.uniq).to eq(['in_progress'])
+        expect(groups.drop(1).map { |group| group.matches.find_by!(position: 3).reload.state }.uniq)
+          .to eq(['in_progress'])
+      end
+    end
+
+    context 'as another user' do
+      before do
+        apply_authentication_headers_for create(:user)
+      end
+
+      it 'renders a forbidden error response' do
+        patch :start_next_group_matches, params: { id: tournament.to_param }
+
+        expect(response).to have_http_status(:forbidden)
+      end
+    end
+
+    def set_group_match_states(group, states)
+      group.matches.order(:id).each_with_index do |match, index|
+        match.update!(position: index, state: states.fetch(index))
+      end
     end
   end
 end

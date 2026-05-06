@@ -61,7 +61,7 @@ RSpec.describe PlayoffStageService do
       { team_size: 9, expected_amount_of_playoff_stages: 4 },
       { team_size: 10, expected_amount_of_playoff_stages: 4 },
       { team_size: 16, expected_amount_of_playoff_stages: 4 },
-      { team_size: 24, expected_amount_of_playoff_stages: 5 }
+      { team_size: 24, expected_amount_of_playoff_stages: 5 },
     ].each do |parameters|
       it "generates playoff stages for #{parameters[:team_size]} teams" do
         amount_of_teams = parameters[:team_size]

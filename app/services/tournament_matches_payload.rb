@@ -79,12 +79,7 @@ class TournamentMatchesPayload
     end
 
     def upcoming_group_matches(tournament)
-      group_stage = tournament.stages.find { |stage| stage.level == -1 }
-      return [] if group_stage.nil?
-
-      group_stage.groups.filter_map do |group|
-        group.matches.select { |match| match.state == 'not_started' }.min_by(&:position)
-      end
+      TournamentGroupMatchStarter.upcoming_matches(tournament)
     end
 
     def upcoming_playoff_matches(tournament)

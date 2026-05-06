@@ -15,6 +15,8 @@ Frontend should treat timer state as:
 - no timer: `timestamp = null`, `timer_mode = null`
 - countdown: `timer_mode = "countdown"`
 - countup: `timer_mode = "countup"`
+- optional reason: `timer_reason` may be `tournament_start`, `playoff_start`, `match_end`, or `custom`
+- custom reason: `timer_reason = "custom"` and `timer_reason_text` contains the display text
 
 ## Read Flow
 
@@ -31,7 +33,9 @@ Response shape:
 ```json
 {
   "timestamp": "2026-04-24T10:15:00Z",
-  "timer_mode": "countdown"
+  "timer_mode": "countdown",
+  "timer_reason": "tournament_start",
+  "timer_reason_text": null
 }
 ```
 
@@ -40,6 +44,13 @@ Possible values:
 - `timer_mode = "countdown"`
 - `timer_mode = "countup"`
 - `timer_mode = null`
+- `timer_reason = "tournament_start"`
+- `timer_reason = "playoff_start"`
+- `timer_reason = "match_end"`
+- `timer_reason = "custom"`
+- `timer_reason = null`
+
+`timer_reason_text` is only used when `timer_reason = "custom"`.
 
 ## Meaning Of `timestamp`
 
@@ -103,7 +114,8 @@ Request:
 
 ```json
 {
-  "timestamp_seconds": 120
+  "timestamp_seconds": 120,
+  "timer_reason": "tournament_start"
 }
 ```
 
@@ -120,7 +132,8 @@ Request:
 
 ```json
 {
-  "timestamp": "2026-04-24T10:15:00Z"
+  "timestamp": "2026-04-24T10:15:00Z",
+  "timer_reason": "playoff_start"
 }
 ```
 
@@ -129,7 +142,9 @@ Optional explicit mode:
 ```json
 {
   "timestamp": "2026-04-24T10:15:00Z",
-  "timer_mode": "countdown"
+  "timer_mode": "countdown",
+  "timer_reason": "custom",
+  "timer_reason_text": "Opening ceremony ran long"
 }
 ```
 
@@ -139,7 +154,8 @@ Request:
 
 ```json
 {
-  "timer_mode": "countup"
+  "timer_mode": "countup",
+  "timer_reason": "match_end"
 }
 ```
 
@@ -157,7 +173,9 @@ Backend also accepts explicit timestamp with countup mode:
 ```json
 {
   "timestamp": "2026-04-24T10:00:00Z",
-  "timer_mode": "countup"
+  "timer_mode": "countup",
+  "timer_reason": "custom",
+  "timer_reason_text": "Manual overtime"
 }
 ```
 
@@ -166,6 +184,39 @@ Useful for:
 - restoring imported state
 - rehydrating synced follower state
 - advanced admin tooling
+
+### Change timer reason without restarting
+
+After a timer is active, owner may change only the reason fields.
+Backend keeps current `timestamp` and `timer_mode` unchanged.
+
+Set a predefined reason:
+
+```json
+{
+  "timer_reason": "playoff_start"
+}
+```
+
+Set a custom reason:
+
+```json
+{
+  "timer_reason": "custom",
+  "timer_reason_text": "Opening ceremony ran long"
+}
+```
+
+Remove reason:
+
+```json
+{
+  "timer_reason": null
+}
+```
+
+Response shape is the normal timer state with the same active `timestamp` and
+`timer_mode`, plus updated reason fields.
 
 ### Clear timer
 
@@ -179,10 +230,12 @@ Request:
 
 Behavior:
 
-- backend clears both fields
+- backend clears all timer fields
 - response returns:
   - `timestamp = null`
   - `timer_mode = null`
+  - `timer_reason = null`
+  - `timer_reason_text = null`
 
 ## Validation Rules
 
@@ -194,6 +247,11 @@ Backend rejects:
 - `timestamp_seconds` together with `timer_mode = "countup"`
 - `timer_mode` by itself unless it is `countup`
 - `clear_timer` mixed with timer values
+- invalid `timer_reason`
+- reason-only updates when no timer is active
+- `timer_reason_text` without `timer_reason`
+- `timer_reason = "custom"` without `timer_reason_text`
+- `timer_reason_text` with any non-custom `timer_reason`
 
 Countdown timestamps must be future timestamps.
 Countup timestamps may be current or past timestamps.
@@ -223,7 +281,9 @@ Payload:
   "type": "timer.updated",
   "tournament_id": 123,
   "timestamp": "2026-04-24T10:15:00Z",
-  "timer_mode": "countdown"
+  "timer_mode": "countdown",
+  "timer_reason": "tournament_start",
+  "timer_reason_text": null
 }
 ```
 
@@ -243,7 +303,7 @@ Frontend rule:
 Recommended flow:
 
 1. Load tournament via `GET /tournaments/:id`
-2. Read `timer_mode` and `timestamp`
+2. Read `timer_mode`, `timestamp`, `timer_reason`, and `timer_reason_text`
 3. Open ActionCable subscription for same tournament id
 4. Replace local timer state whenever `timer.updated` arrives
 5. Derive displayed time from `Date.now()` plus stored backend timestamp
@@ -252,9 +312,11 @@ Recommended client state:
 
 ```ts
 type TimerState =
-  | { mode: null; timestampIso: null }
-  | { mode: "countdown"; timestampIso: string }
-  | { mode: "countup"; timestampIso: string };
+  | { mode: null; timestampIso: null; reason: null; reasonText: null }
+  | { mode: "countdown"; timestampIso: string; reason: TimerReason | null; reasonText: string | null }
+  | { mode: "countup"; timestampIso: string; reason: TimerReason | null; reasonText: string | null };
+
+type TimerReason = "tournament_start" | "playoff_start" | "match_end" | "custom";
 ```
 
 Suggested derivation logic:
@@ -283,7 +345,7 @@ Recommended rendering:
 
 Recommended local ticking:
 
-- keep backend state as timestamp + mode
+- keep backend state as timestamp + mode + reason
 - update rendered value with local interval
 - do not poll backend every second
 
@@ -300,7 +362,7 @@ Timer state is included in tournament sync snapshots.
 That means:
 
 - leader timer changes propagate to follower
-- follower tournament exposes same `timestamp` / `timer_mode`
+- follower tournament exposes same `timestamp` / `timer_mode` / `timer_reason` / `timer_reason_text`
 - follower websocket subscribers receive `timer.updated`
 - follower still rejects timer writes while read only
 
@@ -311,6 +373,7 @@ Implemented coverage:
 - API surface timer lifecycle:
   - countdown
   - countup
+  - reason-only set / change / remove
   - clear
   - validation
   - [spec/e2e/http/api_surface_spec.rb](../spec/e2e/http/api_surface_spec.rb)
@@ -321,5 +384,5 @@ Implemented coverage:
 
 Current note:
 
-- single-backend HTTP E2E timer specs pass
+- single-backend and local dual-server HTTP E2E timer specs pass
 - follower blackbox task still has existing Docker/network issue in follow setup, so production-style follow stack verification is not green yet

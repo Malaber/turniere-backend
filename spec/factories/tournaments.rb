@@ -13,14 +13,17 @@ FactoryBot.define do
       intermediate_round_participants_amount { 0 }
     end
     after(:create) do |tournament, evaluator|
-      tournament.teams = (evaluator.teams.presence || create_list(:team, evaluator.teams_count, tournament:))
+      if evaluator.teams.present?
+        tournament.teams = evaluator.teams
+      else
+        tournament.teams = create_list(:team, evaluator.teams_count, tournament: tournament)
+      end
       tournament.playoff_teams_amount = evaluator.playoff_teams_amount
       tournament.instant_finalists_amount = evaluator.instant_finalists_amount
       tournament.intermediate_round_participants_amount = evaluator.intermediate_round_participants_amount
-      if tournament.playoff_teams_amount != tournament.instant_finalists_amount + (tournament.intermediate_round_participants_amount / 2)
+      if tournament.playoff_teams_amount != tournament.instant_finalists_amount + tournament.intermediate_round_participants_amount / 2
         raise 'playoff_teams_amount must be equal to instant_finalists_amount + intermediate_round_participants_amount / 2'
       end
-
       tournament.save!
     end
 
@@ -33,7 +36,7 @@ FactoryBot.define do
         (1..evaluator.stage_count).each do |level|
           tournament.stages << create(
             :playoff_stage,
-            level:,
+            level: level,
             match_count: -1,
             match_type: level == evaluator.stage_count ? :running_playoff_match : :empty_prepared_playoff_match
           )

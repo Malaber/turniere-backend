@@ -15,21 +15,21 @@ RSpec.describe GroupScore, type: :model do
     let(:team_c) { create(:team) }
 
     let(:group_score_a) do
-      create(:group_score, group:, team: team_a, group_points: 6, scored_points: 7, received_points: 4)
+      create(:group_score, group: group, team: team_a, group_points: 6, scored_points: 7, received_points: 4)
     end
     let(:group_score_b) do
-      create(:group_score, group:, team: team_b, group_points: 6, scored_points: 7, received_points: 4)
+      create(:group_score, group: group, team: team_b, group_points: 6, scored_points: 7, received_points: 4)
     end
 
     it 'prefers the winner of the direct comparison when the first three criteria are tied' do
-      create(:group_match, group:, state: :finished).tap do |match|
-        create(:match_score, match:, team: team_a, points: 3)
-        create(:match_score, match:, team: team_c, points: 1)
+      create(:group_match, group: group, state: :finished).tap do |match|
+        create(:match_score, match: match, team: team_a, points: 3)
+        create(:match_score, match: match, team: team_c, points: 1)
       end
 
-      create(:group_match, group:, state: :finished).tap do |match|
-        create(:match_score, match:, team: team_a, points: 4)
-        create(:match_score, match:, team: team_b, points: 2)
+      create(:group_match, group: group, state: :finished).tap do |match|
+        create(:match_score, match: match, team: team_a, points: 4)
+        create(:match_score, match: match, team: team_b, points: 2)
       end
 
       group_score_a.reload
@@ -40,9 +40,9 @@ RSpec.describe GroupScore, type: :model do
     end
 
     it 'keeps the teams tied when their direct comparison was a draw' do
-      create(:group_match, group:, state: :finished).tap do |match|
-        create(:match_score, match:, team: team_a, points: 2)
-        create(:match_score, match:, team: team_b, points: 2)
+      create(:group_match, group: group, state: :finished).tap do |match|
+        create(:match_score, match: match, team: team_a, points: 2)
+        create(:match_score, match: match, team: team_b, points: 2)
       end
 
       group_score_a.reload
@@ -59,10 +59,10 @@ RSpec.describe GroupScore, type: :model do
     let(:team_b) { create(:team) }
 
     let(:group_score_a) do
-      create(:group_score, group:, team: team_a, group_points: 6, scored_points: 7, received_points: 4)
+      create(:group_score, group: group, team: team_a, group_points: 6, scored_points: 7, received_points: 4)
     end
     let(:group_score_b) do
-      create(:group_score, group:, team: team_b, group_points: 3, scored_points: 7, received_points: 4)
+      create(:group_score, group: group, team: team_b, group_points: 3, scored_points: 7, received_points: 4)
     end
 
     it 'reports the first deciding metric when points are different' do
@@ -78,7 +78,7 @@ RSpec.describe GroupScore, type: :model do
 
     it 'reports the direct comparison result when head-to-head resolves the tie' do
       group_score_b.update!(group_points: 6)
-      match = create(:group_match, group:, state: :finished).tap do |created_match|
+      match = create(:group_match, group: group, state: :finished).tap do |created_match|
         create(:match_score, match: created_match, team: team_a, points: 3)
         create(:match_score, match: created_match, team: team_b, points: 1)
       end
@@ -95,7 +95,7 @@ RSpec.describe GroupScore, type: :model do
 
     it 'reports an unresolved tie when head-to-head was a draw' do
       group_score_b.update!(group_points: 6)
-      match = create(:group_match, group:, state: :finished).tap do |created_match|
+      match = create(:group_match, group: group, state: :finished).tap do |created_match|
         create(:match_score, match: created_match, team: team_a, points: 2)
         create(:match_score, match: created_match, team: team_b, points: 2)
       end
@@ -112,11 +112,11 @@ RSpec.describe GroupScore, type: :model do
 
     it 'falls back to hidden points when direct comparison is still tied' do
       group_score_b.update!(group_points: 6)
-      direct_match = create(:group_match, group:, state: :finished).tap do |created_match|
+      direct_match = create(:group_match, group: group, state: :finished).tap do |created_match|
         create(:match_score, match: created_match, team: team_a, points: 2)
         create(:match_score, match: created_match, team: team_b, points: 2)
       end
-      decider_match = create(:group_match, group:, state: :finished, decider: true).tap do |created_match|
+      decider_match = create(:group_match, group: group, state: :finished, decider: true).tap do |created_match|
         create(:match_score, match: created_match, team: team_a, hidden_points: 3)
         create(:match_score, match: created_match, team: team_b, hidden_points: 1)
       end

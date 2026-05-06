@@ -15,7 +15,7 @@ class TeamActionItemsController < ApplicationController
     )
       render json: @team_action_item
     else
-      render json: @team_action_item.errors, status: :unprocessable_entity
+      render json: @team_action_item.errors, status: :unprocessable_content
     end
   end
 

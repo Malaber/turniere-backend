@@ -22,8 +22,12 @@ class TournamentSnapshotBuilder
 
   def build
     payload = tournament.attributes.symbolize_keys.slice(*ROOT_ATTRIBUTES)
+    payload[:starts_at] = tournament.starts_at&.iso8601
+    payload[:ends_at] = tournament.ends_at&.iso8601
     payload[:timestamp] = tournament.timestamp&.iso8601
     payload[:timer_mode] = tournament.timer_mode
+    payload[:timer_reason] = tournament.timer_reason
+    payload[:timer_reason_text] = tournament.timer_reason_text
     payload[:sync_generated_at] = Time.current.iso8601(6)
     payload[:teams] = teams_payload
     payload[:beamers] = beamers_payload

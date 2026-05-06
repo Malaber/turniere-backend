@@ -20,7 +20,7 @@ RSpec.describe 'Backend API surface HTTP E2E' do
 
   let(:owner_client) { login_client(email: owner_email, password: owner_password) }
   let(:other_client) { secondary_client }
-  let(:anonymous_client) { TurniereE2E::ApiClient.new(base_url:) }
+  let(:anonymous_client) { TurniereE2E::ApiClient.new(base_url: base_url) }
 
   it 'reports health' do
     response = anonymous_client.get('/healthz')
@@ -33,7 +33,9 @@ RSpec.describe 'Backend API surface HTTP E2E' do
     response = anonymous_client.get('/version')
 
     expect(response[:status]).to eq(200)
-    expect(response.dig(:json, :git_commit_sha)).to match(/\A[0-9a-f]{40}\z/)
+    sha = response.dig(:json, :git_commit_sha)
+    expect(sha).to match(/\A[0-9a-f]{40}\z/)
+    expect(sha).not_to eq("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
   end
 
   it 'supports registration for new users and still requires confirmation for login' do
@@ -41,16 +43,16 @@ RSpec.describe 'Backend API surface HTTP E2E' do
     email = "http-e2e-#{unique}@example.com"
     password = 'password123'
     username = "http-e2e-#{unique}"
-    client = TurniereE2E::ApiClient.new(base_url:)
+    client = TurniereE2E::ApiClient.new(base_url: base_url)
     registration = client.post('/users', body: {
-                                 email:,
-                                 password:,
+                                 email: email,
+                                 password: password,
                                  password_confirmation: password,
-                                 username:
+                                 username: username
                                })
-    login = TurniereE2E::ApiClient.new(base_url:).login!(email:, password:)
+    login = TurniereE2E::ApiClient.new(base_url: base_url).login!(email: email, password: password)
 
-    expect([500, *200..299]).to include(registration[:status])
+    expect(registration[:status]).to be_between(200, 299)
     expect(registration[:json]).not_to eq({})
     expect(login[:status]).to eq(401)
   end
@@ -66,12 +68,12 @@ RSpec.describe 'Backend API surface HTTP E2E' do
     invalid_index = anonymous_client.get('/tournaments', params: { type: 'bogus' })
 
     expect(public_index[:status]).to eq(200)
-    expect(public_index[:json].pluck(:id)).to include(public_tournament.fetch(:id))
-    expect(public_index[:json].pluck(:id)).not_to include(private_tournament.fetch(:id))
+    expect(public_index[:json].map { |tournament| tournament[:id] }).to include(public_tournament.fetch(:id))
+    expect(public_index[:json].map { |tournament| tournament[:id] }).not_to include(private_tournament.fetch(:id))
 
     expect(private_index[:status]).to eq(200)
-    expect(private_index[:json].pluck(:id)).to include(private_tournament.fetch(:id))
-    expect(private_index[:json].pluck(:id)).not_to include(public_tournament.fetch(:id))
+    expect(private_index[:json].map { |tournament| tournament[:id] }).to include(private_tournament.fetch(:id))
+    expect(private_index[:json].map { |tournament| tournament[:id] }).not_to include(public_tournament.fetch(:id))
 
     expect(simple_show[:status]).to eq(200)
     expect(simple_show[:json][:id]).to eq(public_tournament.fetch(:id))
@@ -80,6 +82,10 @@ RSpec.describe 'Backend API surface HTTP E2E' do
     expect(full_show[:status]).to eq(200)
     expect(full_show.dig(:json, :stages)).to be_an(Array)
     expect(full_show.dig(:json, :teams)).to be_an(Array)
+    expect(full_show.dig(:json, :location)).to start_with('Venue')
+    expect(full_show.dig(:json, :starts_at)).to eq('2030-06-01T08:00:00Z')
+    expect(full_show.dig(:json, :ends_at)).to eq('2030-06-01T16:00:00Z')
+    expect(full_show.dig(:json, :website_url)).to eq('https://example.com/turniere-e2e')
 
     expect(invalid_index[:status]).to eq(400)
     expect(invalid_index.dig(:json, :error)).to eq('invalid type')
@@ -100,10 +106,10 @@ RSpec.describe 'Backend API surface HTTP E2E' do
                                               teams: [{ name: 'Solo Team' }]
                                             })
 
-    expect(group_stage.fetch(:stages).pluck(:level)).to include(-1)
+    expect(group_stage.fetch(:stages).map { |stage| stage[:level] }).to include(-1)
     expect(group_stage.fetch(:teams).count).to eq(16)
 
-    expect(playoff_only.fetch(:stages).pluck(:level).sort).to eq([0, 1])
+    expect(playoff_only.fetch(:stages).map { |stage| stage[:level] }.sort).to eq([0, 1])
     expect(playoff_only.fetch(:teams).count).to eq(4)
 
     expect(invalid_teams[:status]).to eq(422)
@@ -112,11 +118,79 @@ RSpec.describe 'Backend API surface HTTP E2E' do
     expect(unauthenticated[:status]).to eq(401)
   end
 
+  it 'links player accounts to teams and exposes public account profiles' do
+    unless ENV['TURNIERE_E2E_ALT_EMAIL'] && ENV['TURNIERE_E2E_ALT_USERNAME']
+      skip('player profile flow requires TURNIERE_E2E_ALT_EMAIL and TURNIERE_E2E_ALT_USERNAME')
+    end
+
+    unique = unique_suffix
+    player_email = ENV.fetch('TURNIERE_E2E_ALT_EMAIL')
+    player_username = ENV.fetch('TURNIERE_E2E_ALT_USERNAME')
+    player_client = other_client
+    player_created_tournament = create_playoff_tournament(
+      client: player_client,
+      public: true,
+      name_prefix: 'Player Created'
+    )
+    tournament = create_playoff_tournament(client: owner_client, public: true, name_prefix: 'Player Profile')
+    linked_team = tournament.fetch(:teams).first
+    unlinked_team = tournament.fetch(:teams).fetch(1)
+
+    link_existing = owner_client.patch("/teams/#{linked_team.fetch(:id)}", body: { player_email: player_email })
+    player_update = player_client.patch("/teams/#{linked_team.fetch(:id)}", body: {
+                                          name: "#{linked_team.fetch(:name)} Player Rename"
+                                        })
+    player_reassign = player_client.patch("/teams/#{linked_team.fetch(:id)}", body: {
+                                            player_email: "stolen-#{unique}@example.com"
+                                          })
+    co_player_email = "http-e2e-co-player-#{unique}@example.com"
+    link_co_player = owner_client.patch("/teams/#{linked_team.fetch(:id)}", body: {
+                                          player_email: co_player_email
+                                        })
+    placeholder_email = "http-e2e-placeholder-#{unique}@example.com"
+    link_placeholder = owner_client.patch("/teams/#{unlinked_team.fetch(:id)}", body: {
+                                            player_email: placeholder_email
+                                          })
+    profile = anonymous_client.get("/accounts/#{player_id_by_name(link_existing, player_username)}")
+    placeholder_profile = anonymous_client.get("/accounts/#{player_id_by_name(link_placeholder, placeholder_email)}")
+
+    expect(player_client.authenticated?).to eq(true)
+    expect(linked_team[:players]).to eq([])
+
+    expect(link_existing[:status]).to eq(200)
+    expect(link_existing.dig(:json, :players).map { |player| player.fetch(:name) }).to eq([player_username])
+
+    expect(player_update[:status]).to eq(200)
+    expect(player_update.dig(:json, :name)).to end_with('Player Rename')
+    expect(player_reassign[:status]).to eq(403)
+
+    expect(link_co_player[:status]).to eq(200)
+    co_player_names = link_co_player.dig(:json, :players).map { |player| player.fetch(:name) }
+    expect(co_player_names).to include(player_username)
+    expect(co_player_names.any? { |name| name.start_with?('http-e2e-co-player') }).to eq(true)
+
+    expect(link_placeholder[:status]).to eq(200)
+    expect(link_placeholder.dig(:json, :players).first[:name]).to start_with('http-e2e-placeholder')
+    expect(placeholder_profile[:status]).to eq(200)
+    expect(placeholder_profile.dig(:json, :teams).map { |team| team.fetch(:id) }).to include(unlinked_team.fetch(:id))
+
+    expect(profile[:status]).to eq(200)
+    expect(profile.dig(:json, :name)).to eq(player_username)
+    expect(profile.dig(:json, :teams).map { |team| team.fetch(:id) }).to include(linked_team.fetch(:id))
+    expect(profile.dig(:json, :tournaments).map { |item| item.fetch(:id) }).to include(tournament.fetch(:id))
+    expect(profile.dig(:json, :created_tournaments).map { |item| item.fetch(:id) })
+      .to include(player_created_tournament.fetch(:id))
+  end
+
   it 'updates and destroys tournaments, enforces owner checks, and validates timer updates' do
     tournament = create_group_stage_tournament(client: owner_client, public: false, name_prefix: 'Mutable Tournament')
 
     update_response = owner_client.patch("/tournaments/#{tournament.fetch(:id)}", body: {
                                            name: "Renamed #{unique_suffix}",
+                                           location: 'Updated E2E Arena',
+                                           starts_at: '2030-07-01T10:00:00+02:00',
+                                           ends_at: '2030-07-01T18:00:00+02:00',
+                                           website_url: 'https://example.com/updated-turniere-e2e',
                                            playoff_teams_amount: 8,
                                            instant_finalists_amount: 8,
                                            intermediate_round_participants_amount: 0
@@ -132,16 +206,39 @@ RSpec.describe 'Backend API surface HTTP E2E' do
     forbidden_update = other_client.patch("/tournaments/#{tournament.fetch(:id)}", body: { name: 'Not Allowed' })
     unauthenticated_update = anonymous_client.patch("/tournaments/#{tournament.fetch(:id)}", body: { name: 'No Auth' })
 
-    timer_seconds = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/timer", body: { timestamp_seconds: 120 })
+    timer_seconds = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/timer", body: {
+                                         timestamp_seconds: 120,
+                                         timer_reason: 'tournament_start'
+                                       })
     timer_show = anonymous_client.get("/tournaments/#{tournament.fetch(:id)}/timer")
-    timer_countup = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/timer", body: { timer_mode: 'countup' })
+    timer_reason_custom = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/timer", body: {
+                                               timer_reason: 'custom',
+                                               timer_reason_text: 'Pause ran long'
+                                             })
+    timer_reason_remove = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/timer", body: {
+                                               timer_reason: nil
+                                             })
+    timer_countup = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/timer", body: {
+                                         timer_mode: 'countup',
+                                         timer_reason: 'custom',
+                                         timer_reason_text: 'Pause ran long'
+                                       })
     timer_clear = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/timer", body: { clear_timer: true })
     timer_double = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/timer", body: {
                                         timestamp_seconds: 120,
                                         timestamp: (Time.now.utc + 240).iso8601
                                       })
-    timer_invalid_seconds = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/timer",
-                                               body: { timestamp_seconds: 'nope' })
+    timer_invalid_reason = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/timer", body: {
+                                                timestamp_seconds: 120,
+                                                timer_reason: 'ceremony'
+                                              })
+    timer_custom_without_text = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/timer", body: {
+                                                     timestamp_seconds: 120,
+                                                     timer_reason: 'custom'
+                                                   })
+    timer_invalid_seconds = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/timer", body: {
+                                                 timestamp_seconds: 'nope'
+                                               })
     timer_past = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/timer", body: { timestamp_seconds: 0 })
     timer_countup_seconds = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/timer", body: {
                                                  timer_mode: 'countup',
@@ -154,6 +251,10 @@ RSpec.describe 'Backend API surface HTTP E2E' do
 
     expect(update_response[:status]).to eq(200)
     expect(update_response.dig(:json, :name)).to start_with('Renamed')
+    expect(update_response.dig(:json, :location)).to eq('Updated E2E Arena')
+    expect(update_response.dig(:json, :starts_at)).to eq('2030-07-01T08:00:00Z')
+    expect(update_response.dig(:json, :ends_at)).to eq('2030-07-01T16:00:00Z')
+    expect(update_response.dig(:json, :website_url)).to eq('https://example.com/updated-turniere-e2e')
 
     expect(auto_recalc_response[:status]).to eq(200)
     expect(auto_recalc_response.dig(:json, :playoff_teams_amount)).to eq(4)
@@ -170,18 +271,41 @@ RSpec.describe 'Backend API surface HTTP E2E' do
     expect(timer_seconds[:status]).to eq(200)
     expect(timer_seconds.dig(:json, :timestamp)).to be_a(String)
     expect(timer_seconds.dig(:json, :timer_mode)).to eq('countdown')
+    expect(timer_seconds.dig(:json, :timer_reason)).to eq('tournament_start')
+    expect(timer_seconds.dig(:json, :timer_reason_text)).to be_nil
     expect(timer_show[:status]).to eq(200)
     expect(timer_show.dig(:json, :timestamp)).to eq(timer_seconds.dig(:json, :timestamp))
     expect(timer_show.dig(:json, :timer_mode)).to eq('countdown')
+    expect(timer_show.dig(:json, :timer_reason)).to eq('tournament_start')
+    expect(timer_reason_custom[:status]).to eq(200)
+    expect(timer_reason_custom.dig(:json, :timestamp)).to eq(timer_seconds.dig(:json, :timestamp))
+    expect(timer_reason_custom.dig(:json, :timer_mode)).to eq('countdown')
+    expect(timer_reason_custom.dig(:json, :timer_reason)).to eq('custom')
+    expect(timer_reason_custom.dig(:json, :timer_reason_text)).to eq('Pause ran long')
+    expect(timer_reason_remove[:status]).to eq(200)
+    expect(timer_reason_remove.dig(:json, :timestamp)).to eq(timer_seconds.dig(:json, :timestamp))
+    expect(timer_reason_remove.dig(:json, :timer_mode)).to eq('countdown')
+    expect(timer_reason_remove.dig(:json, :timer_reason)).to be_nil
+    expect(timer_reason_remove.dig(:json, :timer_reason_text)).to be_nil
     expect(timer_countup[:status]).to eq(200)
     expect(timer_countup.dig(:json, :timestamp)).to be_a(String)
     expect(timer_countup.dig(:json, :timer_mode)).to eq('countup')
+    expect(timer_countup.dig(:json, :timer_reason)).to eq('custom')
+    expect(timer_countup.dig(:json, :timer_reason_text)).to eq('Pause ran long')
     expect(timer_clear[:status]).to eq(200)
     expect(timer_clear.dig(:json, :timestamp)).to be_nil
     expect(timer_clear.dig(:json, :timer_mode)).to be_nil
+    expect(timer_clear.dig(:json, :timer_reason)).to be_nil
+    expect(timer_clear.dig(:json, :timer_reason_text)).to be_nil
 
     expect(timer_double[:status]).to eq(422)
     expect(timer_double.dig(:json, :error)).to eq('Only one of timestamp or timestamp_seconds is allowed')
+    expect(timer_invalid_reason[:status]).to eq(422)
+    expect(timer_invalid_reason.dig(:json, :error)).to eq('Invalid timer_reason')
+    expect(timer_custom_without_text[:status]).to eq(422)
+    expect(timer_custom_without_text.dig(:json, :error)).to eq(
+      'timer_reason_text is required for custom timer_reason'
+    )
     expect(timer_invalid_seconds[:status]).to eq(422)
     expect(timer_invalid_seconds.dig(:json, :error)).to eq('Invalid seconds format')
     expect(timer_past[:status]).to eq(422)
@@ -209,10 +333,8 @@ RSpec.describe 'Backend API surface HTTP E2E' do
 
     statistics_before = anonymous_client.get("/tournaments/#{tournament.fetch(:id)}/statistics")
     matches_all = anonymous_client.get("/tournaments/#{tournament.fetch(:id)}/matches")
-    matches_not_started = anonymous_client.get("/tournaments/#{tournament.fetch(:id)}/matches",
-                                               params: { state: 'not_started' })
-    matches_upcoming = anonymous_client.get("/tournaments/#{tournament.fetch(:id)}/matches",
-                                            params: { state: 'upcoming' })
+    matches_not_started = anonymous_client.get("/tournaments/#{tournament.fetch(:id)}/matches", params: { state: 'not_started' })
+    matches_upcoming = anonymous_client.get("/tournaments/#{tournament.fetch(:id)}/matches", params: { state: 'upcoming' })
     matches_group_position = anonymous_client.get(
       "/tournaments/#{tournament.fetch(:id)}/matches",
       params: { group_stage_position: match.fetch(:position) }
@@ -224,8 +346,7 @@ RSpec.describe 'Backend API surface HTTP E2E' do
     match_show = anonymous_client.get("/matches/#{match.fetch(:id)}")
     invalid_match_update = owner_client.patch("/matches/#{match.fetch(:id)}", body: { state: 'bogus' })
     forbidden_match_update = other_client.patch("/matches/#{match.fetch(:id)}", body: { state: 'in_progress' })
-    unauthenticated_match_update = anonymous_client.patch("/matches/#{match.fetch(:id)}",
-                                                          body: { state: 'in_progress' })
+    unauthenticated_match_update = anonymous_client.patch("/matches/#{match.fetch(:id)}", body: { state: 'in_progress' })
     stage_not_over = owner_client.patch("/stages/#{group_stage.fetch(:id)}", body: { state: 'finished' })
     invalid_stage_update = owner_client.patch("/stages/#{group_stage.fetch(:id)}", body: { state: 'in_progress' })
     forbidden_stage_update = other_client.patch("/stages/#{group_stage.fetch(:id)}", body: { state: 'finished' })
@@ -242,12 +363,14 @@ RSpec.describe 'Backend API surface HTTP E2E' do
     started_match = anonymous_client.get("/matches/#{match.fetch(:id)}")
     score_to_update = started_match.fetch(:json).fetch(:match_scores).first
     score_show = anonymous_client.get("/match_scores/#{score_to_update.fetch(:id)}")
-    score_update = owner_client.patch("/match_scores/#{score_to_update.fetch(:id)}", body: { points: 7 })
+    score_update = owner_client.patch("/match_scores/#{score_to_update.fetch(:id)}", body: { points: 7, hidden_points: 11 })
     forbidden_score_update = other_client.patch("/match_scores/#{score_to_update.fetch(:id)}", body: { points: 3 })
-    unauthenticated_score_update = anonymous_client.patch("/match_scores/#{score_to_update.fetch(:id)}",
-                                                          body: { points: 3 })
+    unauthenticated_score_update = anonymous_client.patch("/match_scores/#{score_to_update.fetch(:id)}", body: { points: 3 })
     bet_while_running = owner_client.post("/matches/#{match.fetch(:id)}/bets", body: { team: team.fetch(:id) })
     restart_started_match = owner_client.patch("/matches/#{match.fetch(:id)}", body: { state: 'in_progress' })
+    stop_started_match = owner_client.patch("/matches/#{match.fetch(:id)}", body: { state: 'not_started' })
+    stopped_match = anonymous_client.get("/matches/#{match.fetch(:id)}")
+    restop_match = owner_client.patch("/matches/#{match.fetch(:id)}", body: { state: 'not_started' })
     playoff_stats = anonymous_client.get("/tournaments/#{playoff_only.fetch(:id)}/statistics")
     tied_playoff_match = playoff_only.fetch(:stages)
                                      .flat_map { |stage| stage.fetch(:matches) }
@@ -288,9 +411,9 @@ RSpec.describe 'Backend API surface HTTP E2E' do
     expect(matches_all[:status]).to eq(200)
     expect(matches_all[:json].count).to eq(tournament_match_count(tournament))
     expect(matches_not_started[:status]).to eq(200)
-    expect(matches_not_started[:json].pluck(:id)).to include(match.fetch(:id))
+    expect(matches_not_started[:json].map { |item| item[:id] }).to include(match.fetch(:id))
     expect(matches_upcoming[:status]).to eq(200)
-    expect(matches_upcoming[:json].pluck(:id)).to include(match.fetch(:id))
+    expect(matches_upcoming[:json].map { |item| item[:id] }).to include(match.fetch(:id))
     expect(matches_group_position[:status]).to eq(200)
     expect(matches_group_position[:json].map { |item| item.dig(:stage, :level) }.uniq).to eq([-1])
     expect(matches_group_position[:json]).to all(include(position: match.fetch(:position)))
@@ -322,12 +445,21 @@ RSpec.describe 'Backend API surface HTTP E2E' do
     expect(score_show[:status]).to eq(200)
     expect(score_update[:status]).to eq(200)
     expect(score_update.dig(:json, :points)).to eq(7)
+    expect(score_update.dig(:json, :hidden_points)).to eq(11)
     expect(forbidden_score_update[:status]).to eq(403)
     expect(unauthenticated_score_update[:status]).to eq(401)
     expect(bet_while_running[:status]).to eq(422)
     expect(bet_while_running.dig(:json, :error)).to eq('Betting is not allowed while match is in_progress')
     expect(restart_started_match[:status]).to eq(422)
     expect(restart_started_match.dig(:json, :error)).to eq("Match can't start in this state")
+    expect(stop_started_match[:status]).to eq(200)
+    expect(stop_started_match.dig(:json, :state)).to eq('not_started')
+    expect(stopped_match[:status]).to eq(200)
+    expect(stopped_match.dig(:json, :state)).to eq('not_started')
+    expect(stopped_match.dig(:json, :match_scores).map { |score| score.fetch(:points) }).to all(eq(0))
+    expect(stopped_match.dig(:json, :match_scores).map { |score| score.fetch(:hidden_points) }).to all(eq(0))
+    expect(restop_match[:status]).to eq(422)
+    expect(restop_match.dig(:json, :error)).to eq("Match can't stop in this state")
 
     expect(playoff_stats[:status]).to eq(501)
     expect(playoff_stats[:json]).to eq({})
@@ -349,7 +481,6 @@ RSpec.describe 'Backend API surface HTTP E2E' do
     group = group_stage.fetch(:groups).min_by { |item| item.fetch(:number) }
     ordered_matches = group.fetch(:matches).sort_by { |item| item.fetch(:position) }
     first_match = ordered_matches.fetch(0)
-    second_match = ordered_matches.fetch(1)
     fourth_match = ordered_matches.fetch(3)
 
     upcoming_before = owner_client.get("/tournaments/#{tournament.fetch(:id)}/matches", params: { state: 'upcoming' })
@@ -358,42 +489,87 @@ RSpec.describe 'Backend API surface HTTP E2E' do
                                        })
     swapped_tournament = fetch_tournament(client: owner_client, tournament_id: tournament.fetch(:id))
     swapped_group = swapped_tournament.fetch(:stages)
-                                      .find { |stage| stage.fetch(:level) == -1 }
-                                      .fetch(:groups)
-                                      .find { |item| item.fetch(:id) == group.fetch(:id) }
+                                    .find { |stage| stage.fetch(:level) == -1 }
+                                    .fetch(:groups)
+                                    .find { |item| item.fetch(:id) == group.fetch(:id) }
     swapped_matches = swapped_group.fetch(:matches).sort_by { |item| item.fetch(:position) }
-    upcoming_after_swap = owner_client.get("/tournaments/#{tournament.fetch(:id)}/matches",
-                                           params: { state: 'upcoming' })
+    upcoming_after_swap = owner_client.get("/tournaments/#{tournament.fetch(:id)}/matches", params: { state: 'upcoming' })
 
     finish_group_match_with_winner!(match_id: fourth_match.fetch(:id))
 
-    upcoming_after_finish = owner_client.get("/tournaments/#{tournament.fetch(:id)}/matches",
-                                             params: { state: 'upcoming' })
+    upcoming_after_finish = owner_client.get("/tournaments/#{tournament.fetch(:id)}/matches", params: { state: 'upcoming' })
 
     expect(upcoming_before[:status]).to eq(200)
-    expect(upcoming_match_for_group(upcoming_before,
-                                    group_id: group.fetch(:id)).fetch(:id)).to eq(first_match.fetch(:id))
+    expect(upcoming_match_for_group(upcoming_before, group_id: group.fetch(:id)).fetch(:id)).to eq(first_match.fetch(:id))
 
     expect(swap_response[:status]).to eq(200)
-    expect(swap_response[:json].pluck(:id)).to match_array([first_match.fetch(:id), fourth_match.fetch(:id)])
+    expect(swap_response[:json].map { |match| match[:id] }).to match_array([first_match.fetch(:id), fourth_match.fetch(:id)])
 
     expect(swapped_matches.first.fetch(:id)).to eq(fourth_match.fetch(:id))
     expect(swapped_matches.first.fetch(:position)).to eq(first_match.fetch(:position))
-    expect(swapped_matches.find do |match|
-             match.fetch(:id) == first_match.fetch(:id)
-           end.fetch(:position)).to eq(fourth_match.fetch(:position))
+    expect(swapped_matches.find { |match| match.fetch(:id) == first_match.fetch(:id) }.fetch(:position)).to eq(fourth_match.fetch(:position))
     expect(upcoming_after_swap[:status]).to eq(200)
-    expect(upcoming_match_for_group(upcoming_after_swap,
-                                    group_id: group.fetch(:id)).fetch(:id)).to eq(fourth_match.fetch(:id))
+    expect(upcoming_match_for_group(upcoming_after_swap, group_id: group.fetch(:id)).fetch(:id)).to eq(fourth_match.fetch(:id))
 
     expect(upcoming_after_finish[:status]).to eq(200)
-    expect(upcoming_match_for_group(upcoming_after_finish,
-                                    group_id: group.fetch(:id)).fetch(:id)).to eq(second_match.fetch(:id))
+    expect(upcoming_match_for_group(upcoming_after_finish, group_id: group.fetch(:id))).to be_nil
+    expect(upcoming_after_finish[:json].map { |match| match.fetch(:position) }.uniq)
+      .to eq([first_match.fetch(:position)])
+  end
+
+  it 'starts only a single lagging group before all groups can advance over HTTP' do
+    tournament = create_group_stage_tournament(client: owner_client, public: false, name_prefix: 'Start Next Groups')
+    groups = group_stage_groups(tournament)
+    matches_by_group = indexed_group_matches(groups)
+    start_group_positions!(matches_by_group:, group: groups[0], positions: [0, 1])
+    start_group_positions!(matches_by_group:, group: groups[1], positions: [0])
+    start_group_positions!(matches_by_group:, group: groups[2], positions: [0, 1])
+    start_group_positions!(matches_by_group:, group: groups[3], positions: [0, 1])
+
+    first_expected_ids = match_ids_for_positions(matches_by_group:, pairs: [[groups[1], 1]])
+    second_expected_ids = match_ids_for_positions(
+      matches_by_group:,
+      pairs: groups.map { |group| [group, 2] }
+    )
+    upcoming = owner_client.get("/tournaments/#{tournament.fetch(:id)}/matches", params: { state: 'upcoming' })
+    first_start = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/start_next_group_matches")
+    second_start = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/start_next_group_matches")
+
+    expect_match_ids(upcoming, first_expected_ids)
+    expect_started_match_ids(first_start, first_expected_ids)
+    expect_started_match_ids(second_start, second_expected_ids)
+  end
+
+  it 'starts catch-up waves before the next position is started everywhere over HTTP' do
+    tournament = create_group_stage_tournament(client: owner_client, public: false, name_prefix: 'Start Catch Up Waves')
+    groups = group_stage_groups(tournament)
+    matches_by_group = indexed_group_matches(groups)
+    start_group_positions!(matches_by_group:, group: groups[0], positions: [0, 1, 2])
+    start_group_positions!(matches_by_group:, group: groups[1], positions: [0])
+    start_group_positions!(matches_by_group:, group: groups[2], positions: [0, 1, 2])
+    start_group_positions!(matches_by_group:, group: groups[3], positions: [0, 1])
+
+    first_expected_ids = match_ids_for_positions(matches_by_group:, pairs: [[groups[1], 1]])
+    second_expected_ids = match_ids_for_positions(
+      matches_by_group:,
+      pairs: [[groups[1], 2], [groups[3], 2]]
+    )
+    third_expected_ids = match_ids_for_positions(
+      matches_by_group:,
+      pairs: groups.map { |group| [group, 3] }
+    )
+    first_start = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/start_next_group_matches")
+    second_start = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/start_next_group_matches")
+    third_start = owner_client.patch("/tournaments/#{tournament.fetch(:id)}/start_next_group_matches")
+
+    expect_started_match_ids(first_start, first_expected_ids)
+    expect_started_match_ids(second_start, second_expected_ids)
+    expect_started_match_ids(third_start, third_expected_ids)
   end
 
   def login_client(email:, password:)
-    client = TurniereE2E::ApiClient.new(base_url:)
-    response = client.login!(email:, password:)
+    client = TurniereE2E::ApiClient.new(base_url: base_url)
+    response = client.login!(email: email, password: password)
 
     expect(response[:status]).to eq(200)
     expect(client.authenticated?).to eq(true)
@@ -401,15 +577,15 @@ RSpec.describe 'Backend API surface HTTP E2E' do
   end
 
   def secondary_client
-    alt_email = ENV.fetch('TURNIERE_E2E_ALT_EMAIL', nil)
-    alt_password = ENV.fetch('TURNIERE_E2E_ALT_PASSWORD', nil)
+    alt_email = ENV['TURNIERE_E2E_ALT_EMAIL']
+    alt_password = ENV['TURNIERE_E2E_ALT_PASSWORD']
     if alt_email && alt_password
-      client = TurniereE2E::ApiClient.new(base_url:)
+      client = TurniereE2E::ApiClient.new(base_url: base_url)
       response = client.login!(email: alt_email, password: alt_password)
       return client if response[:status] == 200 && client.authenticated?
     end
 
-    client = TurniereE2E::ApiClient.new(base_url:)
+    client = TurniereE2E::ApiClient.new(base_url: base_url)
     unique = unique_suffix
     response = client.post('/users', body: {
                              email: "http-e2e-secondary-#{unique}@example.com",
@@ -427,11 +603,15 @@ RSpec.describe 'Backend API surface HTTP E2E' do
     payload = {
       name: "#{name_prefix} #{unique_suffix}",
       description: 'HTTP API surface E2E group-stage tournament',
-      public:,
+      public: public,
+      location: "Venue #{name_prefix}",
+      starts_at: '2030-06-01T10:00:00+02:00',
+      ends_at: '2030-06-01T18:00:00+02:00',
+      website_url: 'https://example.com/turniere-e2e',
       group_stage: true,
       playoff_teams_amount: 8,
       teams: 4.times.flat_map do |group_index|
-        Array.new(4) do |seed_index|
+        4.times.map do |seed_index|
           {
             name: "#{name_prefix.tr(' ', '')}-G#{group_index + 1}-S#{seed_index + 1}",
             group: group_index
@@ -442,22 +622,66 @@ RSpec.describe 'Backend API surface HTTP E2E' do
 
     response = client.post('/tournaments', body: payload)
     expect(response[:status]).to eq(201)
-    fetch_tournament(client:, tournament_id: response.dig(:json, :id))
+    fetch_tournament(client: client, tournament_id: response.dig(:json, :id))
   end
 
-  def create_playoff_tournament(client:, public:, name_prefix:)
+  def group_stage_groups(tournament)
+    tournament.fetch(:stages).find { |stage| stage.fetch(:level) == -1 }
+              .fetch(:groups)
+              .sort_by { |group| group.fetch(:number) }
+  end
+
+  def indexed_group_matches(groups)
+    groups.to_h do |group|
+      [group.fetch(:id), group.fetch(:matches).sort_by { |match| match.fetch(:position) }]
+    end
+  end
+
+  def start_group_positions!(matches_by_group:, group:, positions:)
+    positions.each do |position|
+      start_group_match!(match_id: matches_by_group.fetch(group.fetch(:id)).fetch(position).fetch(:id))
+    end
+  end
+
+  def match_ids_for_positions(matches_by_group:, pairs:)
+    pairs.map do |group, position|
+      matches_by_group.fetch(group.fetch(:id)).fetch(position).fetch(:id)
+    end
+  end
+
+  def expect_match_ids(response, expected_ids)
+    expect(response[:status]).to eq(200)
+    expect(response[:json].map { |match| match.fetch(:id) }).to match_array(expected_ids)
+  end
+
+  def expect_started_match_ids(response, expected_ids)
+    expect_match_ids(response, expected_ids)
+    expect(response[:json].map { |match| match.fetch(:state) }.uniq).to eq(['in_progress'])
+  end
+
+  def player_id_by_name(response, name)
+    response.dig(:json, :players).find do |player|
+      player.fetch(:name) == name || player.fetch(:name).start_with?(name.split('@').first)
+    end.fetch(:id)
+  end
+
+  def create_playoff_tournament(client:, public:, name_prefix:, teams: nil)
     payload = {
       name: "#{name_prefix} #{unique_suffix}",
       description: 'HTTP API surface E2E playoff tournament',
-      public:,
-      teams: Array.new(4) do |index|
+      public: public,
+      location: "Venue #{name_prefix}",
+      starts_at: '2030-06-01T10:00:00+02:00',
+      ends_at: '2030-06-01T18:00:00+02:00',
+      website_url: 'https://example.com/turniere-e2e',
+      teams: teams || 4.times.map do |index|
         { name: "#{name_prefix.tr(' ', '')}-S#{index + 1}" }
       end
     }
 
     response = client.post('/tournaments', body: payload)
     expect(response[:status]).to eq(201)
-    fetch_tournament(client:, tournament_id: response.dig(:json, :id))
+    fetch_tournament(client: client, tournament_id: response.dig(:json, :id))
   end
 
   def fetch_tournament(client:, tournament_id:)
@@ -484,6 +708,11 @@ RSpec.describe 'Backend API surface HTTP E2E' do
 
     finish_response = owner_client.patch("/matches/#{match_id}", body: { state: 'finished' })
     expect(finish_response[:status]).to eq(200)
+  end
+
+  def start_group_match!(match_id:)
+    start_response = owner_client.patch("/matches/#{match_id}", body: { state: 'in_progress' })
+    expect(start_response[:status]).to eq(200)
   end
 
   def tournament_match_count(tournament)

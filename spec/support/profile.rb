@@ -1,5 +1,3 @@
-# frozen_string_literal: true
-
 require 'ruby-prof'
 
 RSpec.configure do |config|

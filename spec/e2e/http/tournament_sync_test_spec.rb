@@ -21,7 +21,7 @@ RSpec.describe 'Tournament sync test HTTP E2E' do
   let(:owner_password) { ENV.fetch('TURNIERE_E2E_PASSWORD') }
   let(:sync_token) { "sync-test-#{SecureRandom.hex(6)}" }
   let(:client) { login_client }
-  let(:anonymous_client) { TurniereE2E::ApiClient.new(base_url:) }
+  let(:anonymous_client) { TurniereE2E::ApiClient.new(base_url: base_url) }
 
   it 'roundtrips current snapshot into follower tournament through test_sync endpoint' do
     follower = create_follower_tournament(name_prefix: 'Sync Test Follower')
@@ -33,7 +33,11 @@ RSpec.describe 'Tournament sync test HTTP E2E' do
 
     rename = client.patch("/tournaments/#{leader.fetch(:id)}", body: {
                             name: "Leader Renamed #{SecureRandom.hex(3)}",
-                            description: 'Roundtrip sync test'
+                            description: 'Roundtrip sync test',
+                            location: 'Sync Test Arena',
+                            starts_at: '2030-08-01T10:00:00+02:00',
+                            ends_at: '2030-08-01T18:00:00+02:00',
+                            website_url: 'https://example.com/sync-test'
                           })
     expect(rename[:status]).to eq(200)
 
@@ -44,14 +48,55 @@ RSpec.describe 'Tournament sync test HTTP E2E' do
     expect(test_sync[:status]).to eq(200)
     expect(test_sync.dig(:json, :sync_last_pushed_at)).not_to be_nil
     expect(test_sync.dig(:json, :sync_last_push_error)).to be_nil
+    expect(test_sync.dig(:json, :sync_auth_configured)).to eq(true)
+    expect_no_sync_token_exposed!(test_sync, sync_token)
 
     after_leader = fetch_tournament(leader.fetch(:id))
     after_follower = fetch_tournament(follower.fetch(:id))
 
     expect(after_follower.fetch(:name)).to eq(after_leader.fetch(:name))
     expect(after_follower.fetch(:description)).to eq(after_leader.fetch(:description))
+    expect(after_follower.fetch(:location)).to eq(after_leader.fetch(:location))
+    expect(after_follower.fetch(:starts_at)).to eq(after_leader.fetch(:starts_at))
+    expect(after_follower.fetch(:ends_at)).to eq(after_leader.fetch(:ends_at))
+    expect(after_follower.fetch(:website_url)).to eq(after_leader.fetch(:website_url))
     expect(after_follower.fetch(:teams).map { |team| team.fetch(:name) })
       .to match_array(after_leader.fetch(:teams).map { |team| team.fetch(:name) })
+  end
+
+  it 'never exposes sync auth token after create, update, show, or sync test' do
+    follower_create = client.post('/tournaments', body: {
+                                    name: "Protected Follower #{SecureRandom.hex(3)}",
+                                    description: 'Follower token should stay write only',
+                                    public: true,
+                                    read_only_mode: true,
+                                    sync_auth_token: sync_token
+                                  })
+    expect(follower_create[:status]).to eq(201)
+    expect_no_sync_token_exposed!(follower_create, sync_token)
+
+    follower_id = follower_create.dig(:json, :id)
+    follower_owner_read = client.get("/tournaments/#{follower_id}")
+    expect(follower_owner_read[:status]).to eq(200)
+    expect(follower_owner_read.dig(:json, :sync_auth_configured)).to eq(true)
+    expect_no_sync_token_exposed!(follower_owner_read, sync_token)
+
+    follower_public_read = anonymous_client.get("/tournaments/#{follower_id}")
+    expect(follower_public_read[:status]).to eq(200)
+    expect_no_sync_token_exposed!(follower_public_read, sync_token)
+
+    leader = create_group_stage_tournament(name_prefix: 'Protected Leader')
+    configure_sync = client.patch("/tournaments/#{leader.fetch(:id)}", body: {
+                                    sync_target_url: "#{base_url}/tournaments/#{follower_id}/sync_state",
+                                    sync_auth_token: sync_token
+                                  })
+    expect(configure_sync[:status]).to eq(200)
+    expect(configure_sync.dig(:json, :sync_auth_configured)).to eq(true)
+    expect_no_sync_token_exposed!(configure_sync, sync_token)
+
+    test_sync = client.post("/tournaments/#{leader.fetch(:id)}/test_sync")
+    expect(test_sync[:status]).to eq(200)
+    expect_no_sync_token_exposed!(test_sync, sync_token)
   end
 
   it 'syncs team action list changes made through item id route and business key route' do
@@ -74,8 +119,7 @@ RSpec.describe 'Tournament sync test HTTP E2E' do
     expect(update_by_item_id[:status]).to eq(200)
 
     update_by_business_key = client.patch(
-      "/tournaments/#{leader.fetch(:id)}/team_action_lists/#{playoff_token_list_key}/teams/#{second_item.dig(:team,
-                                                                                                             :id)}",
+      "/tournaments/#{leader.fetch(:id)}/team_action_lists/#{playoff_token_list_key}/teams/#{second_item.dig(:team, :id)}",
       body: { completed: true }
     )
     expect(update_by_business_key[:status]).to eq(200)
@@ -104,22 +148,25 @@ RSpec.describe 'Tournament sync test HTTP E2E' do
 
     missing_item_update = client.patch('/team_action_items/999999999', body: { completed: true })
     expect(missing_item_update[:status]).to eq(404)
+    expect(missing_item_update.dig(:json, :error)).to include("Couldn't find TeamActionItem")
 
     missing_list_update = client.patch(
       "/tournaments/#{leader.fetch(:id)}/team_action_lists/unknown_key/teams/#{first_item.dig(:team, :id)}",
       body: { completed: true }
     )
     expect(missing_list_update[:status]).to eq(404)
+    expect(missing_list_update.dig(:json, :error)).to include("Couldn't find TeamActionList")
 
     missing_team_update = client.patch(
       "/tournaments/#{leader.fetch(:id)}/team_action_lists/#{playoff_token_list_key}/teams/999999999",
       body: { completed: true }
     )
     expect(missing_team_update[:status]).to eq(404)
+    expect(missing_team_update.dig(:json, :error)).to include("Couldn't find TeamActionItem")
   end
 
   def login_client
-    api_client = TurniereE2E::ApiClient.new(base_url:)
+    api_client = TurniereE2E::ApiClient.new(base_url: base_url)
     response = api_client.login!(email: owner_email, password: owner_password)
 
     expect(response[:status]).to eq(200)
@@ -134,7 +181,7 @@ RSpec.describe 'Tournament sync test HTTP E2E' do
       group_stage: true,
       playoff_teams_amount: 4,
       teams: 2.times.flat_map do |group_index|
-        Array.new(4) do |seed_index|
+        4.times.map do |seed_index|
           {
             name: "#{name_prefix.tr(' ', '')}-G#{group_index + 1}-S#{seed_index + 1}",
             group: group_index
@@ -142,10 +189,10 @@ RSpec.describe 'Tournament sync test HTTP E2E' do
         end
       end
     }
-    body[:sync_target_url] = sync_target_url if sync_target_url.present?
-    body[:sync_auth_token] = sync_auth_token if sync_auth_token.present?
+    body[:sync_target_url] = sync_target_url unless sync_target_url.nil? || sync_target_url.empty?
+    body[:sync_auth_token] = sync_auth_token unless sync_auth_token.nil? || sync_auth_token.empty?
 
-    response = client.post('/tournaments', body:)
+    response = client.post('/tournaments', body: body)
     expect(response[:status]).to eq(201)
     fetch_tournament(response.dig(:json, :id))
   end
@@ -166,6 +213,14 @@ RSpec.describe 'Tournament sync test HTTP E2E' do
     response = anonymous_client.get("/tournaments/#{tournament_id}")
     expect(response[:status]).to eq(200)
     response.fetch(:json)
+  end
+
+  def expect_no_sync_token_exposed!(response, token)
+    serialized_json = response.fetch(:json).inspect
+
+    expect(serialized_json).not_to include('sync_auth_token')
+    expect(serialized_json).not_to include('sync_auth_token_digest')
+    expect(serialized_json).not_to include(token)
   end
 
   def finish_group_stage_and_create_playoffs!(tournament_id)
@@ -202,7 +257,7 @@ RSpec.describe 'Tournament sync test HTTP E2E' do
 
     ordered_scores = match_response.fetch(:json).fetch(:match_scores).sort_by { |score| score.fetch(:id) }
     [first_score, second_score].each_with_index do |points, index|
-      score_update = client.patch("/match_scores/#{ordered_scores[index].fetch(:id)}", body: { points: })
+      score_update = client.patch("/match_scores/#{ordered_scores[index].fetch(:id)}", body: { points: points })
       expect(score_update[:status]).to eq(200)
     end
 

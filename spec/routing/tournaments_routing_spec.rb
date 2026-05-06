@@ -28,12 +28,26 @@ RSpec.describe TournamentsController, type: :routing do
       expect(delete: '/tournaments/1').to route_to('tournaments#destroy', id: '1')
     end
 
+    it 'routes to #destroy_playoffs' do
+      expect(delete: '/tournaments/1/playoffs').to route_to('tournaments#destroy_playoffs', id: '1')
+    end
+
     it 'routes to #sync_state' do
       expect(patch: '/tournaments/1/sync_state').to route_to('tournaments#sync_state', id: '1')
     end
 
+    it 'routes to #start_next_group_matches' do
+      expect(patch: '/tournaments/1/start_next_group_matches').to(
+        route_to('tournaments#start_next_group_matches', id: '1')
+      )
+    end
+
     it 'routes to #test_sync' do
       expect(post: '/tournaments/1/test_sync').to route_to('tournaments#test_sync', id: '1')
+    end
+
+    it 'routes to transaction log entries' do
+      expect(get: '/tournaments/1/transaction_log').to route_to('tournament_transaction_log_entries#index', id: '1')
     end
   end
 end
