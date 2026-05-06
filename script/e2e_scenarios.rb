@@ -5,6 +5,15 @@ require 'json'
 require 'optparse'
 require_relative '../e2e/lib/scenario_runner'
 
+def write_line(message)
+  $stdout.write("#{message}\n")
+end
+
+def fail_with(message)
+  $stderr.write("#{message}\n")
+  raise SystemExit, 1
+end
+
 options = {
   base_url: ENV.fetch('TURNIERE_E2E_BASE_URL', 'http://127.0.0.1:3000'),
   stop_at: nil,
@@ -39,7 +48,9 @@ OptionParser.new do |parser|
   parser.on('--username USERNAME', 'Confirmed E2E user username') { |value| options[:username] = value }
 end.parse!
 
-scenario = ARGV.shift or abort('Missing scenario name')
+scenario = ARGV.shift
+fail_with('Missing scenario name') if scenario.nil?
+
 runner = TurniereE2E::ScenarioRunner.new(
   base_url: options[:base_url],
   email: options[:email],
@@ -64,7 +75,7 @@ result = case scenario
              stop_at: options[:stop_at] || :profiled_show
            )
          else
-           abort("Unknown scenario #{scenario.inspect}")
+           fail_with("Unknown scenario #{scenario.inspect}")
          end
 
-puts JSON.pretty_generate(result)
+write_line JSON.pretty_generate(result)
