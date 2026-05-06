@@ -13,7 +13,7 @@ class CreateTeamActionLists < ActiveRecord::Migration[7.0]
       t.timestamps
     end
 
-    add_index :team_action_lists, [:tournament_id, :key], unique: true
+    add_index :team_action_lists, %i[tournament_id key], unique: true
 
     create_table :team_action_items do |t|
       t.references :team_action_list, null: false, foreign_key: { on_delete: :cascade }, index: true
@@ -25,6 +25,6 @@ class CreateTeamActionLists < ActiveRecord::Migration[7.0]
       t.timestamps
     end
 
-    add_index :team_action_items, [:team_action_list_id, :team_id], unique: true
+    add_index :team_action_items, %i[team_action_list_id team_id], unique: true
   end
 end

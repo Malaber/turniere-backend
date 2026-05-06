@@ -14,14 +14,14 @@ module DeviseRoutesRails8Compat
 
   def devise_password(mapping, controllers)
     resource :password,
-             only: [:new, :create, :edit, :update],
+             only: %i[new create edit update],
              path: mapping.path_names[:password],
              controller: controllers[:passwords]
   end
 
   def devise_confirmation(mapping, controllers)
     resource :confirmation,
-             only: [:new, :create, :show],
+             only: %i[new create show],
              path: mapping.path_names[:confirmation],
              controller: controllers[:confirmations]
   end
@@ -30,14 +30,14 @@ module DeviseRoutesRails8Compat
     return unless mapping.to.unlock_strategy_enabled?(:email)
 
     resource :unlock,
-             only: [:new, :create, :show],
+             only: %i[new create show],
              path: mapping.path_names[:unlock],
              controller: controllers[:unlocks]
   end
 
   def devise_registration(mapping, controllers)
     resource :registration,
-             only: [:new, :create, :edit, :update, :destroy],
+             only: %i[new create edit update destroy],
              path: mapping.path_names[:registration],
              path_names: {
                new: mapping.path_names[:sign_up],

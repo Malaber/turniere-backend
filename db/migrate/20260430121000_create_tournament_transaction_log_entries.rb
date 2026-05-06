@@ -14,7 +14,7 @@ class CreateTournamentTransactionLogEntries < ActiveRecord::Migration[7.0]
     end
 
     add_index :tournament_transaction_log_entries,
-              [:tournament_id, :sequence],
+              %i[tournament_id sequence],
               unique: true,
               name: 'index_tournament_log_entries_on_tournament_and_sequence'
   end

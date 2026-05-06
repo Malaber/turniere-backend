@@ -71,9 +71,7 @@ class TeamsController < ApplicationController
     return [] if id_values.empty?
 
     User.where(id: id_values).tap do |players|
-      unless players.size == id_values.uniq.size
-        raise ActiveRecord::RecordNotFound.new('Could not find all players', 'User')
-      end
+      raise ActiveRecord::RecordNotFound.new('Could not find all players', 'User') unless players.size == id_values.uniq.size
     end
   end
 

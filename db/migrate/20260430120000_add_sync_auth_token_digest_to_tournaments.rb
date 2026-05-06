@@ -8,9 +8,7 @@ class AddSyncAuthTokenDigestToTournaments < ActiveRecord::Migration[7.0]
   end
 
   def up
-    unless column_exists?(:tournaments, :sync_auth_token_digest)
-      add_column :tournaments, :sync_auth_token_digest, :string
-    end
+    add_column :tournaments, :sync_auth_token_digest, :string unless column_exists?(:tournaments, :sync_auth_token_digest)
 
     MigrationTournament.reset_column_information
     MigrationTournament

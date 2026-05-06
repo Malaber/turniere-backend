@@ -14,7 +14,8 @@ class TournamentsController < ApplicationController
   before_action :set_tournament_for_show, only: %i[show]
   before_action :set_tournament,
                 only: %i[update destroy destroy_playoffs set_timer timer sync_state test_sync start_next_group_matches]
-  before_action :authenticate_user!, only: %i[create update destroy destroy_playoffs set_timer test_sync start_next_group_matches]
+  before_action :authenticate_user!,
+                only: %i[create update destroy destroy_playoffs set_timer test_sync start_next_group_matches]
   before_action -> { require_owner! @tournament.owner },
                 only: %i[update destroy destroy_playoffs set_timer test_sync start_next_group_matches]
   before_action :validate_create_params, only: %i[create]
@@ -74,6 +75,7 @@ class TournamentsController < ApplicationController
     end
 
     raise ActionController::ParameterMissing, :teams if teams.nil?
+
     if group_stage
       params.require(:playoff_teams_amount)
       groups = organize_teams_in_groups(teams)
@@ -339,7 +341,7 @@ class TournamentsController < ApplicationController
     return if ActiveModel::Type::Boolean.new.cast(params[:read_only_mode])
 
     teams = params['teams']
-    return if teams.is_a?(Array) && teams.reject { |t| t.is_a? ActionController::Parameters }.count.zero?
+    return if teams.is_a?(Array) && teams.count { |team| !team.is_a?(ActionController::Parameters) }.zero?
 
     render json: { error: 'Invalid teams array' }, status: :unprocessable_content
   end
@@ -374,12 +376,16 @@ class TournamentsController < ApplicationController
       error: 'playoff_teams_amount, instant_finalists_amount and intermediate_round_participants_amount don\'t match'
     }, status: :unprocessable_content
   end
+
   def sync_state_params
     params.require(:snapshot).permit!.to_h
   end
 
   def authorize_sync_request!
-    return render json: { error: 'Tournament is not configured to accept sync pushes' }, status: :unprocessable_content unless @tournament.sync_accepts_push?
+    unless @tournament.sync_accepts_push?
+      return render json: { error: 'Tournament is not configured to accept sync pushes' },
+                    status: :unprocessable_content
+    end
 
     token = request.authorization.to_s.delete_prefix('Bearer ').presence || request.headers['X-Tournament-Sync-Token'].to_s
     return render json: { error: 'Missing sync token' }, status: :unauthorized if token.blank?
@@ -425,13 +431,9 @@ class TournamentsController < ApplicationController
     timer_reason_text = params[:timer_reason_text]
     clear_timer = ActiveModel::Type::Boolean.new.cast(params[:clear_timer])
 
-    if clear_timer
-      return validate_clear_timer_params(timestamp, timestamp_seconds, timer_mode, timer_reason, timer_reason_text)
-    end
+    return validate_clear_timer_params(timestamp, timestamp_seconds, timer_mode, timer_reason, timer_reason_text) if clear_timer
 
-    if timer_mode.present? && !Tournament::TIMER_MODES.include?(timer_mode)
-      return render_timer_validation_error('Invalid timer_mode')
-    end
+    return render_timer_validation_error('Invalid timer_mode') if timer_mode.present? && !Tournament::TIMER_MODES.include?(timer_mode)
 
     timer_reason_error = validate_timer_reason_params(
       timer_reason,
@@ -441,7 +443,20 @@ class TournamentsController < ApplicationController
     )
     return render_timer_validation_error(timer_reason_error) if timer_reason_error
 
-    # throw error if both timestamp and timestamp_seconds are present
+    return if validate_timer_timestamp_params(timestamp, timestamp_seconds, timer_mode)
+
+    if timer_mode == 'countup'
+      params[:timestamp] = Time.zone.now
+    elsif timer_mode.present?
+      render_timer_validation_error('timer_mode requires timestamp, timestamp_seconds, or clear_timer')
+    elsif timer_reason_update_requested
+      render_timer_validation_error('timer_reason requires active timer') unless timer_active?
+    else
+      render_timer_validation_error('timestamp, timestamp_seconds, or clear_timer is required')
+    end
+  end
+
+  def validate_timer_timestamp_params(timestamp, timestamp_seconds, timer_mode)
     if timestamp.present? && timestamp_seconds.present?
       return render_timer_validation_error('Only one of timestamp or timestamp_seconds is allowed')
     end
@@ -450,43 +465,34 @@ class TournamentsController < ApplicationController
       return render_timer_validation_error('timestamp_seconds is only allowed for countdown mode')
     end
 
-    if timestamp_seconds.present?
-      begin
-        timestamp_seconds = Integer(timestamp_seconds)
-      rescue ArgumentError
-        return render_timer_validation_error('Invalid seconds format')
-      end
+    return validate_timestamp_seconds_param(timestamp_seconds) if timestamp_seconds.present?
+    return validate_timestamp_param(timestamp, timer_mode) if timestamp.present?
 
-      if timestamp_seconds <= 0
-        return render_timer_validation_error('Timestamp must be in the future for countdown mode')
-      end
+    false
+  end
 
-      parsed_time = Time.zone.now + timestamp_seconds
-      params[:timestamp] = parsed_time
-      params[:timer_mode] = 'countdown'
-    elsif timestamp.present?
-      begin
-        parsed_time = Time.zone.parse(timestamp)
-        if parsed_time.nil?
-          return render_timer_validation_error('Invalid timestamp format')
-        elsif timer_mode != 'countup' && !parsed_time.future?
-          return render_timer_validation_error('Timestamp must be in the future for countdown mode')
-        end
+  def validate_timestamp_seconds_param(timestamp_seconds)
+    seconds = Integer(timestamp_seconds)
+    return render_timer_validation_error('Timestamp must be in the future for countdown mode') if seconds <= 0
 
-        params[:timestamp] = parsed_time
-        params[:timer_mode] = timer_mode.presence || 'countdown'
-      rescue ArgumentError
-        return render_timer_validation_error('Invalid timestamp format')
-      end
-    elsif timer_mode == 'countup'
-      params[:timestamp] = Time.zone.now
-    elsif timer_mode.present?
-      return render_timer_validation_error('timer_mode requires timestamp, timestamp_seconds, or clear_timer')
-    elsif timer_reason_update_requested
-      return render_timer_validation_error('timer_reason requires active timer') unless timer_active?
-    else
-      return render_timer_validation_error('timestamp, timestamp_seconds, or clear_timer is required')
+    params[:timestamp] = Time.zone.now + seconds
+    params[:timer_mode] = 'countdown'
+  rescue ArgumentError
+    render_timer_validation_error('Invalid seconds format')
+  end
+
+  def validate_timestamp_param(timestamp, timer_mode)
+    parsed_time = Time.zone.parse(timestamp)
+    if parsed_time.nil?
+      return render_timer_validation_error('Invalid timestamp format')
+    elsif timer_mode != 'countup' && !parsed_time.future?
+      return render_timer_validation_error('Timestamp must be in the future for countdown mode')
     end
+
+    params[:timestamp] = parsed_time
+    params[:timer_mode] = timer_mode.presence || 'countdown'
+  rescue ArgumentError
+    render_timer_validation_error('Invalid timestamp format')
   end
 
   def normalize_timer_reason_params
@@ -518,17 +524,13 @@ class TournamentsController < ApplicationController
     timer_reason_param_present,
     timer_reason_text_param_present
   )
-    if timer_reason_text_param_present && !timer_reason_param_present
-      return 'timer_reason is required when timer_reason_text is provided'
-    end
+    return 'timer_reason is required when timer_reason_text is provided' if timer_reason_text_param_present && !timer_reason_param_present
     return if timer_reason.blank? && timer_reason_text.blank?
 
     return 'timer_reason_text is only allowed when timer_reason is custom' if timer_reason.blank?
     return 'Invalid timer_reason' unless Tournament::TIMER_REASONS.include?(timer_reason)
 
-    if timer_reason == 'custom' && timer_reason_text.blank?
-      return 'timer_reason_text is required for custom timer_reason'
-    end
+    return 'timer_reason_text is required for custom timer_reason' if timer_reason == 'custom' && timer_reason_text.blank?
 
     return unless timer_reason != 'custom' && timer_reason_text.present?
 

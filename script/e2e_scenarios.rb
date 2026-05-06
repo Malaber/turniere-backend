@@ -5,6 +5,11 @@ require 'json'
 require 'optparse'
 require_relative '../e2e/lib/scenario_runner'
 
+def fail_with(message)
+  warn message
+  raise SystemExit, 1
+end
+
 options = {
   base_url: ENV.fetch('TURNIERE_E2E_BASE_URL', 'http://127.0.0.1:3000'),
   stop_at: nil,
@@ -12,9 +17,9 @@ options = {
   group_count: 4,
   teams_per_group: 4,
   playoff_teams_amount: 8,
-  email: ENV['TURNIERE_E2E_EMAIL'],
-  password: ENV['TURNIERE_E2E_PASSWORD'],
-  username: ENV['TURNIERE_E2E_USERNAME']
+  email: ENV.fetch('TURNIERE_E2E_EMAIL', nil),
+  password: ENV.fetch('TURNIERE_E2E_PASSWORD', nil),
+  username: ENV.fetch('TURNIERE_E2E_USERNAME', nil)
 }
 
 OptionParser.new do |parser|
@@ -22,9 +27,15 @@ OptionParser.new do |parser|
 
   parser.on('--base-url URL', 'API base URL') { |value| options[:base_url] = value }
   parser.on('--stop-at CHECKPOINT', 'Stop scenario at a named checkpoint') { |value| options[:stop_at] = value.to_sym }
-  parser.on('--team-count COUNT', Integer, 'Team count for playoff_only scenario') { |value| options[:team_count] = value }
-  parser.on('--group-count COUNT', Integer, 'Group count for group-stage scenarios') { |value| options[:group_count] = value }
-  parser.on('--teams-per-group COUNT', Integer, 'Teams per group for group-stage scenarios') { |value| options[:teams_per_group] = value }
+  parser.on('--team-count COUNT', Integer, 'Team count for playoff_only scenario') do |value|
+    options[:team_count] = value
+  end
+  parser.on('--group-count COUNT', Integer, 'Group count for group-stage scenarios') do |value|
+    options[:group_count] = value
+  end
+  parser.on('--teams-per-group COUNT', Integer, 'Teams per group for group-stage scenarios') do |value|
+    options[:teams_per_group] = value
+  end
   parser.on('--playoff-teams-amount COUNT', Integer, 'Playoff teams amount for group-stage scenarios') do |value|
     options[:playoff_teams_amount] = value
   end
@@ -33,7 +44,9 @@ OptionParser.new do |parser|
   parser.on('--username USERNAME', 'Confirmed E2E user username') { |value| options[:username] = value }
 end.parse!
 
-scenario = ARGV.shift or abort('Missing scenario name')
+scenario = ARGV.shift
+fail_with('Missing scenario name') if scenario.nil?
+
 runner = TurniereE2E::ScenarioRunner.new(
   base_url: options[:base_url],
   email: options[:email],
@@ -58,7 +71,7 @@ result = case scenario
              stop_at: options[:stop_at] || :profiled_show
            )
          else
-           abort("Unknown scenario #{scenario.inspect}")
+           fail_with("Unknown scenario #{scenario.inspect}")
          end
 
 puts JSON.pretty_generate(result)

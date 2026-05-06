@@ -23,9 +23,7 @@ class TournamentPlayoffDeletion
 
     playoff_stages = tournament.stages.reload.select { |stage| stage.level >= 0 }
     return failure('Playoffs have not been generated') if playoff_stages.empty?
-    unless playoffs_deletable?(playoff_stages)
-      return failure('Playoffs cannot be deleted after matches have started or scores changed')
-    end
+    return failure('Playoffs cannot be deleted after matches have started or scores changed') unless playoffs_deletable?(playoff_stages)
 
     playoff_stages.each(&:destroy!)
     group_stage.update!(state: :in_progress)

@@ -44,8 +44,8 @@ group :test, optional: true do
   gem 'factory_bot_rails'
   gem 'faker'
   gem 'rspec-rails'
-  gem 'shoulda-matchers'
   gem 'ruby-prof'
+  gem 'shoulda-matchers'
 end
 
 group :development, optional: true do
@@ -53,13 +53,13 @@ group :development, optional: true do
   # Spring speeds up development by keeping your application running in the background. Read more: https://github.com/rails/spring
   gem 'railroady'
   # Use sqlite3 as the database for Active Record
-  gem 'sqlite3'
   gem 'rubocop'
   gem 'rubocop-performance'
   gem 'rubocop-rails'
   gem 'solargraph'
   gem 'spring'
   gem 'spring-watcher-listen', '~> 2.1'
+  gem 'sqlite3'
 end
 
 group :production do

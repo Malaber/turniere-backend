@@ -267,12 +267,8 @@ module TurniereE2E
 
     def websocket_failures(level)
       failures = []
-      if level.fetch(:errors).positive?
-        failures << "WS #{level.fetch(:clients)} clients: #{level.fetch(:errors)} failed"
-      end
-      if websocket_open_short?(level)
-        failures << "WS #{level.fetch(:clients)} clients: only #{level.fetch(:opened)} opened"
-      end
+      failures << "WS #{level.fetch(:clients)} clients: #{level.fetch(:errors)} failed" if level.fetch(:errors).positive?
+      failures << "WS #{level.fetch(:clients)} clients: only #{level.fetch(:opened)} opened" if websocket_open_short?(level)
       if websocket_metric_short?(level)
         failures << "WS #{level.fetch(:clients)} clients: metrics saw #{level.fetch(:connection_metric)} connections"
       end

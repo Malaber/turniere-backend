@@ -7,7 +7,7 @@ class UserService
 
   def bet!(match, team)
     validate_bet! match, team
-    @user.bets.create! match: match, team: team
+    @user.bets.create! match:, team:
   end
 
   private

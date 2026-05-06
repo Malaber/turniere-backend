@@ -6,7 +6,8 @@ class TeamActionList < ApplicationRecord
 
   validates :name, :key, :action_name, :source, presence: true
   validates :key, uniqueness: { scope: :tournament_id }
-  validates :key, format: { with: /\A[a-z0-9_]+\z/, message: 'may only contain lowercase letters, numbers, and underscores' }
+  validates :key,
+            format: { with: /\A[a-z0-9_]+\z/, message: 'may only contain lowercase letters, numbers, and underscores' }
 
   delegate :owner, to: :tournament
 
@@ -20,7 +21,7 @@ class TeamActionList < ApplicationRecord
       team_action_items.where.not(team_id: desired_team_ids).destroy_all
 
       desired_team_ids.each do |team_id|
-        team_action_items.find_or_create_by!(team_id: team_id)
+        team_action_items.find_or_create_by!(team_id:)
       end
     end
   end

@@ -57,6 +57,18 @@ BLACKBOX_MAILGUN_API_KEY = "blackbox-test-api-key"
 BLACKBOX_MAILGUN_DOMAIN = "blackbox.example.com"
 SPEC_ROOT = Path("spec")
 E2E_SPEC_ROOT = SPEC_ROOT / "e2e" / "http"
+LINT_TARGETS = (
+    "Gemfile",
+    "Rakefile",
+    "config.ru",
+    "app",
+    "config",
+    "db/migrate",
+    "db/seeds.rb",
+    "e2e",
+    "lib",
+    "script",
+)
 ROOT = Path(__file__).resolve().parent
 DB_DIR = ROOT / "db"
 GEMFILE_LOCK_PATH = ROOT / "Gemfile.lock"
@@ -802,7 +814,7 @@ def test_shard(c, node_index=1, node_total=8, dry_run=False):
 @task
 def lint(c):
     """Run RuboCop."""
-    c.run(_bundle_exec("rubocop"), pty=True)
+    c.run(_bundle_exec("rubocop", *LINT_TARGETS, "--cache", "false"), pty=True)
 
 
 @task(name="bootstrap-dev-user")

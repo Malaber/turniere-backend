@@ -13,7 +13,7 @@ class TournamentSyncEnqueue
     return false unless tournament.sync_push_enabled?
 
     payload = TournamentSnapshotBuilder.build(fresh_tournament)
-    entry = TournamentSyncQueueEntry.find_or_initialize_by(tournament: tournament)
+    entry = TournamentSyncQueueEntry.find_or_initialize_by(tournament:)
     entry.snapshot_json = JSON.dump(payload)
     entry.status = 'pending'
     entry.attempts = 0

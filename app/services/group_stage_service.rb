@@ -3,18 +3,18 @@
 class GroupStageService
   class << self
     def generate_group_stage(groups)
-      raise 'Cannot generate group stage without groups' if groups.length.zero?
+      raise 'Cannot generate group stage without groups' if groups.empty?
 
       # raise an error if the average group size is not a whole number
       raise 'Groups need to be equal size' unless (groups.flatten.length.to_f / groups.length % 1).zero?
 
       groups = groups.map(&method(:get_group_object_from)).each_with_index { |group, i| group.number = i + 1 }
-      Stage.new level: -1, groups: groups, state: :in_progress
+      Stage.new level: -1, groups:, state: :in_progress
     end
 
     def get_group_object_from(team_array)
       Group.new matches: generate_all_matches_between(team_array),
-                group_scores: team_array.map { |team| GroupScore.new team: team }
+                group_scores: team_array.map { |team| GroupScore.new team: }
     end
 
     def deal_with_spacing_of_teams(matches, team_size)
@@ -71,7 +71,7 @@ class GroupStageService
     def update_group_scores(group)
       changed_group_scores = []
       group.teams.each do |team|
-        group_score = group.group_scores.find_by(team: team)
+        group_score = group.group_scores.find_by(team:)
         matches = group.matches.select { |match| match.teams.include? team }
         # reset previous values
         group_score.group_points = 0
@@ -217,7 +217,7 @@ class GroupStageService
     def comparison_partner_index(sorted_group_scores, index)
       return index - 1 if index.positive? && sorted_group_scores[index - 1].position == sorted_group_scores[index].position
       return index + 1 if index < sorted_group_scores.size - 1 &&
-        sorted_group_scores[index + 1].position == sorted_group_scores[index].position
+                          sorted_group_scores[index + 1].position == sorted_group_scores[index].position
       return index - 1 if index.positive?
       return index + 1 if sorted_group_scores.size > 1
 
@@ -239,11 +239,9 @@ class GroupStageService
       start_index -= 1 while start_index.positive? && sorted_group_scores[start_index - 1].position == position
 
       end_index = index
-      while end_index < sorted_group_scores.size - 1 && sorted_group_scores[end_index + 1].position == position
-        end_index += 1
-      end
+      end_index += 1 while end_index < sorted_group_scores.size - 1 && sorted_group_scores[end_index + 1].position == position
 
-      { start_index: start_index, end_index: end_index }
+      { start_index:, end_index: }
     end
 
     def advancing_slots_for_group(group)
@@ -272,7 +270,7 @@ class GroupStageService
       advancing_slots = advancing_slots_for_group(group)
       group_ready_for_decider_check = regular_group_matches_finished?(group)
 
-      cache = sorted_group_scores.each_with_index.each_with_object({}) do |(group_score, index), decisions|
+      cache = sorted_group_scores.each_with_index.with_object({}) do |(group_score, index), decisions|
         next if sorted_group_scores.size <= 1
 
         comparison_index = comparison_partner_index(sorted_group_scores, index)
@@ -296,8 +294,9 @@ class GroupStageService
           decider_match_id: comparison_reason[:decider_match_id],
           tied: comparison_reason[:tied],
           needs_decider_match: group_ready_for_decider_check &&
-            comparison_reason[:tied] &&
-            unresolved_tie_affects_advancing_placements?(sorted_group_scores, group_score, advancing_slots)
+                               comparison_reason[:tied] &&
+                               unresolved_tie_affects_advancing_placements?(sorted_group_scores, group_score,
+                                                                            advancing_slots)
         }
       end
 

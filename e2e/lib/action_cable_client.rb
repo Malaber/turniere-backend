@@ -11,7 +11,7 @@ module TurniereE2E
     ACTION_CABLE_PROTOCOLS = %w[actioncable-v1-json actioncable-unsupported].freeze
 
     def initialize(base_url:)
-      @base_url = base_url.sub(%r{/\z}, '')
+      @base_url = base_url.delete_suffix('/')
       @messages = Queue.new
       @closed = false
     end
@@ -19,7 +19,7 @@ module TurniereE2E
     def subscribe_team_action_lists!(tournament_id:)
       identifier = {
         channel: 'TournamentTeamActionListsChannel',
-        tournament_id: tournament_id
+        tournament_id:
       }.to_json
 
       subscribe!(identifier:) do |message|
@@ -30,7 +30,7 @@ module TurniereE2E
     def subscribe_timer!(tournament_id:)
       identifier = {
         channel: 'TournamentTimersChannel',
-        tournament_id: tournament_id
+        tournament_id:
       }.to_json
 
       subscribe!(identifier:) do |message|
@@ -41,8 +41,8 @@ module TurniereE2E
     def subscribe_beamer!(tournament_id:, beamer_name:)
       identifier = {
         channel: 'TournamentBeamersChannel',
-        tournament_id: tournament_id,
-        beamer_name: beamer_name
+        tournament_id:,
+        beamer_name:
       }.to_json
 
       subscribe!(identifier:) do |message|
@@ -78,31 +78,31 @@ module TurniereE2E
     end
 
     def wait_for_payload!(timeout: 20)
-      wait_for!(timeout: timeout) do |message|
+      wait_for!(timeout:) do |message|
         team_action_lists_payload_message?(message)
       end.fetch('message')
     end
 
     def wait_for_timer_payload!(timeout: 20)
-      wait_for!(timeout: timeout) do |message|
+      wait_for!(timeout:) do |message|
         timer_payload_message?(message)
       end.fetch('message')
     end
 
     def wait_for_beamer_payload!(timeout: 20)
-      wait_for!(timeout: timeout) do |message|
+      wait_for!(timeout:) do |message|
         beamer_payload_message?(message)
       end.fetch('message')
     end
 
     def wait_for_tournament_payload!(timeout: 20)
-      wait_for!(timeout: timeout) do |message|
+      wait_for!(timeout:) do |message|
         tournament_payload_message?(message)
       end.fetch('message')
     end
 
     def wait_for_matches_payload!(timeout: 20)
-      wait_for!(timeout: timeout) do |message|
+      wait_for!(timeout:) do |message|
         matches_payload_message?(message)
       end.fetch('message')
     end
@@ -135,7 +135,7 @@ module TurniereE2E
       driver.text(
         JSON.dump(
           command: 'subscribe',
-          identifier: identifier
+          identifier:
         )
       )
 
@@ -184,8 +184,8 @@ module TurniereE2E
     end
 
     def pump_until_open!(timeout: 10)
-      deadline = Time.now + timeout
-      while Time.now < deadline
+      deadline = monotonic_deadline(timeout)
+      while Process.clock_gettime(Process::CLOCK_MONOTONIC) < deadline
         read_from_socket(timeout: 0.5)
         return if driver.ready_state == 1
       end
@@ -194,19 +194,23 @@ module TurniereE2E
     end
 
     def wait_for!(timeout: 20)
-      deadline = Time.now + timeout
+      deadline = monotonic_deadline(timeout)
       loop do
         until @messages.empty?
           message = @messages.pop(true)
           return message if yield(message)
         end
 
-        raise "websocket message not received within #{timeout}s" if Time.now >= deadline
+        raise "websocket message not received within #{timeout}s" if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
 
         read_from_socket(timeout: 0.5)
       rescue ThreadError
         nil
       end
+    end
+
+    def monotonic_deadline(timeout)
+      Process.clock_gettime(Process::CLOCK_MONOTONIC) + timeout
     end
 
     def read_from_socket(timeout:)

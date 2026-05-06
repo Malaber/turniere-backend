@@ -5,9 +5,7 @@ class TournamentTransactionLogger
     def lock_tournament!(tournament)
       raise ArgumentError, 'tournament is required' if tournament.nil?
 
-      unless ActiveRecord::Base.connection.transaction_open?
-        raise 'Tournament transaction log writes must happen inside a transaction'
-      end
+      raise 'Tournament transaction log writes must happen inside a transaction' unless ActiveRecord::Base.connection.transaction_open?
 
       # Lock a fresh row instance so callers keep saved_change_to_* state for
       # after_commit callbacks on the object they just updated.

@@ -50,6 +50,5 @@ module TurniereBackend
     config.action_mailer.default_options = {
       from: 'noreply@turnie.re'
     }
-
   end
 end

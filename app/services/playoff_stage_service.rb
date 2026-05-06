@@ -16,7 +16,7 @@ class PlayoffStageService
       initial_stage.state = :intermediate_stage unless initial_stage.matches.find(&:single_team?).nil?
       playoffs << initial_stage
       # empty stages are the stages, the tournament is filled with to have the matches ready for later
-      empty_stages = generate_stages_with_empty_matches(stage_count - 1, teams.size > 3)
+      empty_stages = generate_stages_with_empty_matches(stage_count - 1, include_third_place_match: teams.size > 3)
       playoffs.concat empty_stages
       playoffs
     end
@@ -25,7 +25,7 @@ class PlayoffStageService
     #
     # @param stage_count [Integer] number of stages to generate
     # @return [Array] the generated stages
-    def generate_stages_with_empty_matches(stage_count, include_third_place_match = false)
+    def generate_stages_with_empty_matches(stage_count, include_third_place_match: false)
       empty_stages = []
       stage_count.times do |i|
         match_count = 2**i
@@ -82,7 +82,9 @@ class PlayoffStageService
       # of which the winners advance into the match below
       # depending on the position of the match, the companion match is either on the left or right of it
       companion_match = find_companion_match(current_match.position, current_stage)
-      return populate_final_stage_matches(current_match, companion_match, next_stage) if semifinal_match?(current_stage, next_stage)
+      return populate_final_stage_matches(current_match, companion_match, next_stage) if semifinal_match?(
+        current_stage, next_stage
+      )
 
       winners = get_winners_of(companion_match, current_match)
       populate_match!(match: next_stage.matches.find { |m| m.position == current_match.position / 2 }, teams: winners)

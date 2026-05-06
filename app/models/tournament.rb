@@ -9,7 +9,7 @@ class Tournament < ApplicationRecord
   METADATA_STRING_ATTRIBUTES = %i[location website_url].freeze
 
   belongs_to :user
-  belongs_to :owner, class_name: 'User', foreign_key: :user_id
+  belongs_to :owner, class_name: 'User', foreign_key: :user_id, inverse_of: :tournaments
   has_many :teams, dependent: :destroy
   has_many :stages, dependent: :destroy
   has_many :beamers, dependent: :destroy
