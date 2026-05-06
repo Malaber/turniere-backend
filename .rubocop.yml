@@ -66,6 +66,11 @@ Rails/SkipsModelValidations:
     - "app/services/tournament_sync_pusher.rb"
     - "db/migrate/**/*"
 
+Rails/Delegate:
+  Exclude:
+    - "app/controllers/tournaments_controller.rb"
+    - "e2e/lib/action_cable_client.rb"
+
 Style/MultilineBlockChain:
   Exclude:
     - "e2e/lib/api_client.rb"

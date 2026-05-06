@@ -121,7 +121,9 @@ module TurniereE2E
       websocket_url
     end
 
-    delegate :write, to: :socket
+    def write(data)
+      socket.write(data)
+    end
 
     private
 
@@ -182,8 +184,8 @@ module TurniereE2E
     end
 
     def pump_until_open!(timeout: 10)
-      deadline = Time.zone.now + timeout
-      while Time.zone.now < deadline
+      deadline = monotonic_deadline(timeout)
+      while Process.clock_gettime(Process::CLOCK_MONOTONIC) < deadline
         read_from_socket(timeout: 0.5)
         return if driver.ready_state == 1
       end
@@ -192,19 +194,23 @@ module TurniereE2E
     end
 
     def wait_for!(timeout: 20)
-      deadline = Time.zone.now + timeout
+      deadline = monotonic_deadline(timeout)
       loop do
         until @messages.empty?
           message = @messages.pop(true)
           return message if yield(message)
         end
 
-        raise "websocket message not received within #{timeout}s" if Time.zone.now >= deadline
+        raise "websocket message not received within #{timeout}s" if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
 
         read_from_socket(timeout: 0.5)
       rescue ThreadError
         nil
       end
+    end
+
+    def monotonic_deadline(timeout)
+      Process.clock_gettime(Process::CLOCK_MONOTONIC) + timeout
     end
 
     def read_from_socket(timeout:)

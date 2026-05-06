@@ -111,6 +111,7 @@ COPY script /app/script
 COPY config.ru Rakefile /app/
 COPY config/environments/production.rb /app/config/environments/beta.rb
 COPY tasks.py /app/tasks.py
+COPY .rubocop.yml /app/.rubocop.yml
 COPY e2e /app/e2e
 COPY lib /app/lib
 COPY spec /app/spec
