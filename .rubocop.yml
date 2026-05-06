@@ -66,6 +66,14 @@ Rails/SkipsModelValidations:
     - "app/services/tournament_sync_pusher.rb"
     - "db/migrate/**/*"
 
+# These are standalone CLI entrypoints where stdout is command output,
+# not Rails application logging.
+Rails/Output:
+  Exclude:
+    - "e2e/load_test.rb"
+    - "script/e2e_scenarios.rb"
+    - "script/wait_for_http.rb"
+
 Rails/Delegate:
   Exclude:
     - "app/controllers/tournaments_controller.rb"

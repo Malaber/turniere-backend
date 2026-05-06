@@ -8,4 +8,4 @@ timeout = (ARGV[1] || 30).to_i
 
 runner = TurniereE2E::ScenarioRunner.new(base_url: url)
 runner.wait_for_healthcheck!(timeout_seconds: timeout)
-$stdout.write("ready: #{url}\n")
+puts "ready: #{url}"

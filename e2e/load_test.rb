@@ -6,10 +6,6 @@ require 'optparse'
 
 require_relative 'lib/load_test_runner'
 
-def write_line(message = '')
-  $stdout.write("#{message}\n")
-end
-
 def parse_client_list(value)
   return [] if value.nil? || value.strip == '' || value.strip.casecmp('none').zero?
 
@@ -76,12 +72,12 @@ runner = TurniereE2E::LoadTestRunner.new(**runner_options)
 result = runner.run
 
 if options[:format] == 'json'
-  write_line JSON.pretty_generate(result)
+  puts JSON.pretty_generate(result)
 else
-  write_line "Load test base_url=#{result.fetch(:base_url)} tournament_id=#{result.dig(:tournament, :id)}"
+  puts "Load test base_url=#{result.fetch(:base_url)} tournament_id=#{result.dig(:tournament, :id)}"
 
   result.fetch(:http).each do |level|
-    write_line(
+    puts(
       "HTTP #{level.fetch(:clients)} clients: " \
       "#{level.fetch(:ok)}/#{level.fetch(:requests)} ok, errors=#{level.fetch(:errors)}, " \
       "p50=#{level.fetch(:p50_ms)}ms, p95=#{level.fetch(:p95_ms)}ms, " \
@@ -90,7 +86,7 @@ else
   end
 
   result.fetch(:websocket).each do |level|
-    write_line(
+    puts(
       "WS #{level.fetch(:clients)} clients: " \
       "opened=#{level.fetch(:opened)}, errors=#{level.fetch(:errors)}, " \
       "p50_open=#{level.fetch(:p50_open_ms)}ms, p95_open=#{level.fetch(:p95_open_ms)}ms, " \
@@ -99,7 +95,7 @@ else
   end
 
   metrics = result.fetch(:metrics)
-  write_line(
+  puts(
     "Metrics: action_cable_connections=#{metrics.fetch(:action_cable_connections)}, " \
     "action_cable_connections_total=#{metrics.fetch(:action_cable_connections_total)}, " \
     "ruby_threads=#{metrics.fetch(:ruby_threads)}"

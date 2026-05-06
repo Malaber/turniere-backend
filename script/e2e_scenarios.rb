@@ -5,12 +5,8 @@ require 'json'
 require 'optparse'
 require_relative '../e2e/lib/scenario_runner'
 
-def write_line(message)
-  $stdout.write("#{message}\n")
-end
-
 def fail_with(message)
-  $stderr.write("#{message}\n")
+  warn message
   raise SystemExit, 1
 end
 
@@ -78,4 +74,4 @@ result = case scenario
            fail_with("Unknown scenario #{scenario.inspect}")
          end
 
-write_line JSON.pretty_generate(result)
+puts JSON.pretty_generate(result)
