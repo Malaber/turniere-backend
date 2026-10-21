@@ -64,10 +64,16 @@ No account or write-path code from those apps is needed by this viewer.
 - Apple ID: **6825204672**
 - Team: **VWKG94374J**
 - Primary language: German
-- Source version: **0.1.0 (1)**
+- Source version: **0.1 (1)**
 - [App Store Connect](https://appstoreconnect.apple.com/apps/6825204672/distribution/info)
 
-The bundle and app record were created on 2026-10-21. No build has been uploaded or submitted.
+The bundle and app record were created on 2026-10-21. TestFlight delivery uses the signed-in Xcode account:
+
+```sh
+.venv/bin/inv upload-ios-testflight --version=0.1 --build-number=1
+```
+
+Use a new build number for every subsequent upload. Archive paths are printed by the task.
 Apple's initial store version is 1.0; set it to the intended marketing version before submitting.
 Signed physical-device validation, release metadata, privacy disclosures, and store screenshots
 remain distribution work; simulator verification does not establish physical-device signing.

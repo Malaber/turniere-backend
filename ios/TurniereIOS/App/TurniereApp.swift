@@ -124,7 +124,7 @@ struct SettingsView: View {
                     Text("Turniere verfolgen und dein Lieblingsteam merken. Die Auswahl bleibt auf diesem Gerät.")
                     Text("Ergebnisse werden während der Nutzung alle 20 Sekunden aktualisiert. Ohne Verbindung siehst du den zuletzt geladenen Stand.")
                     Link("turnie.re besuchen", destination: URL(string: "https://turnie.re")!)
-                    Text("Version 0.1.0").foregroundStyle(.secondary)
+                    Text("Version \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "–")").foregroundStyle(.secondary)
                 }
             }.navigationTitle("Einstellungen")
                 .toolbar { Button("Fertig") { dismiss() } }
