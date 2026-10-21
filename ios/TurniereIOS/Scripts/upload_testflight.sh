@@ -47,7 +47,7 @@ env PATH=/usr/bin:/bin:/usr/sbin:/sbin /usr/bin/xcodebuild \
   CURRENT_PROJECT_VERSION="$build_number" \
   CODE_SIGN_STYLE=Automatic \
   -allowProvisioningUpdates \
-  "${auth_args[@]}" \
+  ${auth_args[@]+"${auth_args[@]}"} \
   archive
 
 env PATH=/usr/bin:/bin:/usr/sbin:/sbin /usr/bin/xcodebuild \
@@ -55,6 +55,6 @@ env PATH=/usr/bin:/bin:/usr/sbin:/sbin /usr/bin/xcodebuild \
   -archivePath "$archive_path" \
   -exportPath "$export_path" \
   -exportOptionsPlist "$package_dir/ExportOptions.TestFlight.plist" \
-  -allowProvisioningUpdates "${auth_args[@]}"
+  -allowProvisioningUpdates ${auth_args[@]+"${auth_args[@]}"}
 
 echo "TestFlight upload accepted. Archive: $archive_path"
