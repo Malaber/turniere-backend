@@ -2437,3 +2437,35 @@ def docker_blackbox_follow_manual_seeded_up(
     print(f"Leader URL:   http://127.0.0.1:{source_host_port}")
     print(f"Follower URL: http://127.0.0.1:{follower_host_port}")
     print(f"Stop it with: inv docker-blackbox-follow-down")
+
+
+IOS_ROOT = ROOT / "ios" / "TurniereIOS"
+
+
+@task
+def generate_ios_project(c):
+    """Generate the native viewer Xcode project (requires XcodeGen)."""
+    c.run(f"xcodegen generate --spec {shlex.quote(str(IOS_ROOT / 'project.yml'))}")
+
+
+@task
+def check_ios_package(c, live=False):
+    """Test native models, persistence and GET-only API; optionally smoke-test production."""
+    c.run(f"swift test --package-path {shlex.quote(str(IOS_ROOT))}",
+          env={"TURNIERE_LIVE_READ_ONLY": "1" if live else "0"})
+
+
+@task(generate_ios_project)
+def build_ios_simulator(c):
+    """Build the native iPhone/iPad viewer without signing."""
+    c.run(f"xcodebuild -project {shlex.quote(str(IOS_ROOT / 'TurniereApp.xcodeproj'))} "
+          f"-scheme Turniere -destination 'generic/platform=iOS Simulator' "
+          f"-derivedDataPath {shlex.quote(str(IOS_ROOT / 'DerivedData'))} CODE_SIGNING_ALLOWED=NO build")
+
+
+@task(generate_ios_project)
+def check_ios_ui(c, destination="platform=iOS Simulator,name=iPhone 17 Pro"):
+    """Exercise deterministic native viewer flows on an installed simulator."""
+    c.run(f"xcodebuild -project {shlex.quote(str(IOS_ROOT / 'TurniereApp.xcodeproj'))} "
+          f"-scheme Turniere -destination {shlex.quote(destination)} "
+          f"-derivedDataPath {shlex.quote(str(IOS_ROOT / 'DerivedData'))} CODE_SIGNING_ALLOWED=NO test")

@@ -62,3 +62,10 @@ While developing, use `test` image as base container and mount root of this repo
 ```bash
 $ rails diagram:all_with_engines
 ```
+
+## iOS companion
+
+The native read-only tournament viewer lives in [ios/TurniereIOS](ios/TurniereIOS/README.md).
+Use `inv check-ios-package`, `inv generate-ios-project`, `inv build-ios-simulator`, and
+`inv check-ios-ui` for its development workflow. `inv check-ios-package --live` performs
+GET-only contract checks against public production tournaments.

@@ -1,0 +1,205 @@
+{
+  "id": 1,
+  "name": "Sommercup",
+  "code": "abc123",
+  "description": "Ein Tag voller Sport. Gemeinsam mit deinem Team.",
+  "location": "Sportpark",
+  "starts_at": "2026-07-18T10:00:00Z",
+  "timestamp": null,
+  "timer_mode": null,
+  "timer_reason_text": null,
+  "teams": [
+    {
+      "id": 1,
+      "name": "Blau-Weiß"
+    },
+    {
+      "id": 2,
+      "name": "Goldfüchse"
+    },
+    {
+      "id": 3,
+      "name": "FC Morgenrot"
+    }
+  ],
+  "stages": [
+    {
+      "id": 1,
+      "level": -1,
+      "state": "in_progress",
+      "matches": [],
+      "groups": [
+        {
+          "id": 1,
+          "number": 1,
+          "matches": [
+            {
+              "id": 1,
+              "state": "in_progress",
+              "position": 0,
+              "decider": false,
+              "location": "Feld 1",
+              "start_time": null,
+              "notes": null,
+              "winner": null,
+              "match_scores": [
+                {
+                  "id": 2,
+                  "points": 4,
+                  "hidden_points": 2,
+                  "team": {
+                    "id": 1,
+                    "name": "Blau-Weiß"
+                  }
+                },
+                {
+                  "id": 3,
+                  "points": 2,
+                  "hidden_points": 1,
+                  "team": {
+                    "id": 2,
+                    "name": "Goldfüchse"
+                  }
+                }
+              ]
+            },
+            {
+              "id": 2,
+              "state": "not_started",
+              "position": 1,
+              "decider": false,
+              "location": "Feld 1",
+              "start_time": null,
+              "notes": null,
+              "winner": null,
+              "match_scores": [
+                {
+                  "id": 4,
+                  "points": 0,
+                  "hidden_points": 2,
+                  "team": {
+                    "id": 1,
+                    "name": "Blau-Weiß"
+                  }
+                },
+                {
+                  "id": 5,
+                  "points": 0,
+                  "hidden_points": 1,
+                  "team": {
+                    "id": 3,
+                    "name": "FC Morgenrot"
+                  }
+                }
+              ]
+            },
+            {
+              "id": 3,
+              "state": "finished",
+              "position": 2,
+              "decider": false,
+              "location": "Feld 1",
+              "start_time": null,
+              "notes": null,
+              "winner": {
+                "id": 2,
+                "name": "Goldfüchse"
+              },
+              "match_scores": [
+                {
+                  "id": 6,
+                  "points": 6,
+                  "hidden_points": 2,
+                  "team": {
+                    "id": 2,
+                    "name": "Goldfüchse"
+                  }
+                },
+                {
+                  "id": 7,
+                  "points": 3,
+                  "hidden_points": 1,
+                  "team": {
+                    "id": 3,
+                    "name": "FC Morgenrot"
+                  }
+                }
+              ]
+            },
+            {
+              "id": 4,
+              "state": "finished",
+              "position": 3,
+              "decider": true,
+              "location": "Feld 1",
+              "start_time": null,
+              "notes": null,
+              "winner": {
+                "id": 1,
+                "name": "Blau-Weiß"
+              },
+              "match_scores": [
+                {
+                  "id": 8,
+                  "points": 0,
+                  "hidden_points": 2,
+                  "team": {
+                    "id": 1,
+                    "name": "Blau-Weiß"
+                  }
+                },
+                {
+                  "id": 9,
+                  "points": 0,
+                  "hidden_points": 1,
+                  "team": {
+                    "id": 2,
+                    "name": "Goldfüchse"
+                  }
+                }
+              ]
+            }
+          ],
+          "group_scores": [
+            {
+              "id": 1,
+              "position": 1,
+              "group_points": 6,
+              "scored_points": 8,
+              "received_points": 3,
+              "difference_in_points": 5,
+              "team": {
+                "id": 1,
+                "name": "Blau-Weiß"
+              }
+            },
+            {
+              "id": 2,
+              "position": 2,
+              "group_points": 3,
+              "scored_points": 7,
+              "received_points": 4,
+              "difference_in_points": 3,
+              "team": {
+                "id": 2,
+                "name": "Goldfüchse"
+              }
+            },
+            {
+              "id": 3,
+              "position": 3,
+              "group_points": 0,
+              "scored_points": 6,
+              "received_points": 5,
+              "difference_in_points": 1,
+              "team": {
+                "id": 3,
+                "name": "FC Morgenrot"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
