@@ -83,3 +83,11 @@ remain distribution work; simulator verification does not establish physical-dev
 `Design/logo-original.png` preserves the supplied artwork in its own first commit.
 `Design/logo-buckle-fixed.png` threads the ribbon through the buckle in a separate commit.
 The 1024px app icon is derived from that corrected image. See `Design/README.md` for the edit prompt.
+
+### Background API-key authentication
+
+When no Apple account is registered in Xcode, configure an existing authorized App Store Connect
+API key through `APP_STORE_CONNECT_KEY_PATH` (local `.p8` path), `APP_STORE_CONNECT_KEY_ID`, and
+`APP_STORE_CONNECT_ISSUER_ID`, then run the same upload task. All three are required together.
+The task passes these to Xcode's supported command-line authentication options. Do not commit the
+private key. A successful archive does not imply a successful upload; check the export result.

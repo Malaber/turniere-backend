@@ -15,6 +15,18 @@ if [[ ! "$build_number" =~ ^[1-9][0-9]*$ ]]; then
   exit 2
 fi
 
+# Optional existing App Store Connect API credentials; never print key contents.
+auth_args=()
+if [[ -n "${APP_STORE_CONNECT_KEY_PATH:-}${APP_STORE_CONNECT_KEY_ID:-}${APP_STORE_CONNECT_ISSUER_ID:-}" ]]; then
+  : "${APP_STORE_CONNECT_KEY_PATH:?Set the path to an existing .p8 key}"
+  : "${APP_STORE_CONNECT_KEY_ID:?Set the existing API key ID}"
+  : "${APP_STORE_CONNECT_ISSUER_ID:?Set the existing API issuer ID}"
+  [[ -f "$APP_STORE_CONNECT_KEY_PATH" ]] || { echo "API key file not found." >&2; exit 2; }
+  auth_args=(-authenticationKeyPath "$APP_STORE_CONNECT_KEY_PATH"
+             -authenticationKeyID "$APP_STORE_CONNECT_KEY_ID"
+             -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID")
+fi
+
 temp_base=${TMPDIR:-/tmp}
 release_dir=$(mktemp -d "${temp_base%/}/turniere-testflight.XXXXXX")
 archive_path="$release_dir/Turniere-$marketing_version-$build_number.xcarchive"
@@ -35,6 +47,7 @@ env PATH=/usr/bin:/bin:/usr/sbin:/sbin /usr/bin/xcodebuild \
   CURRENT_PROJECT_VERSION="$build_number" \
   CODE_SIGN_STYLE=Automatic \
   -allowProvisioningUpdates \
+  "${auth_args[@]}" \
   archive
 
 env PATH=/usr/bin:/bin:/usr/sbin:/sbin /usr/bin/xcodebuild \
@@ -42,6 +55,6 @@ env PATH=/usr/bin:/bin:/usr/sbin:/sbin /usr/bin/xcodebuild \
   -archivePath "$archive_path" \
   -exportPath "$export_path" \
   -exportOptionsPlist "$package_dir/ExportOptions.TestFlight.plist" \
-  -allowProvisioningUpdates
+  -allowProvisioningUpdates "${auth_args[@]}"
 
 echo "TestFlight upload accepted. Archive: $archive_path"
