@@ -53,15 +53,15 @@ public struct Stage: Codable, Identifiable, Sendable {
     public let matches: [Match]
     public let groups: [Group]
     public var title: String {
-        if state == "intermediate_stage" { return "Zwischenrunde" }
+        if state == "intermediate_stage" { return L10n.text("stage.intermediate") }
         switch level {
-        case -1: return "Gruppenphase"
-        case -2: return "Zwischenrunde"
-        case 0: return "Finale"
-        case 1: return "Halbfinale"
-        case 2: return "Viertelfinale"
-        case 3: return "Achtelfinale"
-        default: return "Runde \(level)"
+        case -1: return L10n.text("stage.groups")
+        case -2: return L10n.text("stage.intermediate")
+        case 0: return L10n.text("stage.final")
+        case 1: return L10n.text("stage.semi")
+        case 2: return L10n.text("stage.quarter")
+        case 3: return L10n.text("stage.last16")
+        default: return L10n.format("stage.round", level)
         }
     }
     public var allMatches: [Match] {
@@ -104,13 +104,13 @@ public struct Match: Codable, Identifiable, Sendable {
     public let matchScores: [MatchScore]
     public var status: String {
         switch state {
-        case "in_progress": return "Live"
-        case "finished": return "Beendet"
-        case "not_started": return "Geplant"
-        case "single_team": return "Freilos"
-        case "not_ready": return "Teams noch offen"
-        case "undecided": return "Unentschieden"
-        default: return "Status unbekannt"
+        case "in_progress": return L10n.text("status.live")
+        case "finished": return L10n.text("status.finished")
+        case "not_started": return L10n.text("status.scheduled")
+        case "single_team": return L10n.text("status.bye")
+        case "not_ready": return L10n.text("status.pending")
+        case "undecided": return L10n.text("status.draw")
+        default: return L10n.text("status.unknown")
         }
     }
     public func points(for score: MatchScore) -> String {

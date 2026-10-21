@@ -31,7 +31,7 @@ final class TournamentStore {
         do { library = try TournamentLibrary.load(from: storageURL) }
         catch {
             storageHealthy = false
-            storageError = "Gespeicherte Turniere konnten nicht gelesen werden. Die vorhandene Datei bleibt erhalten."
+            storageError = L10n.text("error.storage.read")
         }
     }
     func discover() async {
@@ -42,7 +42,7 @@ final class TournamentStore {
             tournaments = try await api.tournaments().sorted { $0.id > $1.id }
             listError = nil
         } catch is CancellationError {} catch {
-            listError = error.localizedDescription
+            listError = L10n.message(for: error)
         }
     }
     func refresh(_ code: String) async {
@@ -57,7 +57,7 @@ final class TournamentStore {
             errors[code] = nil
             persist()
         } catch is CancellationError {} catch {
-            if (error as? URLError)?.code != .cancelled { errors[code] = error.localizedDescription }
+            if (error as? URLError)?.code != .cancelled { errors[code] = L10n.message(for: error) }
         }
     }
     func entry(_ code: String) -> SavedTournament? { library.entries.first { $0.id == (aliases[code] ?? code) || String($0.tournament.id) == code } }
@@ -66,7 +66,7 @@ final class TournamentStore {
     private func persist() {
         guard storageHealthy else { return }
         do { try library.save(to: storageURL); storageError = nil }
-        catch { storageError = "Änderungen nur für diese Sitzung gespeichert: \(error.localizedDescription)" }
+        catch { storageError = L10n.text("error.storage.write") }
     }
 }
 
@@ -76,7 +76,8 @@ struct DemoAPI: TournamentServing {
 
     func tournaments() async throws -> [TournamentSummary] {
         if offline { throw URLError(.notConnectedToInternet) }
-        return try APIClient.decoder().decode([TournamentSummary].self, from: Data("[{\"id\":1,\"name\":\"Sommercup\",\"code\":\"abc123\",\"location\":\"Sportpark\"}]".utf8))
+        guard let url = Bundle.main.url(forResource: "demo-index", withExtension: "json") else { throw APIError.invalidResponse }
+        return try APIClient.decoder().decode([TournamentSummary].self, from: Data(contentsOf: url))
     }
     func tournament(code: String) async throws -> Tournament {
         if offline { throw URLError(.notConnectedToInternet) }

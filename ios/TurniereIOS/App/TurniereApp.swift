@@ -29,26 +29,26 @@ struct RootView: View {
                 List {
                     Section {
                         VStack(alignment: .leading, spacing: 10) {
-                            Label("Dein Turnier. Dein Team.", systemImage: "trophy.fill")
+                            Label(L10n.text("home.title"), systemImage: "trophy.fill")
                                 .font(.title2.bold()).foregroundStyle(.tint)
-                            Text("Spielplan, Ergebnisse und dein Lieblingsteam immer dabei.")
+                            Text(L10n.text("home.subtitle"))
                                 .foregroundStyle(.secondary)
                         }.padding(.vertical, 10)
-                        TextField("Turniercode oder Link", text: $input)
+                        TextField(L10n.text("home.code"), text: $input)
                             .textInputAutocapitalization(.never).autocorrectionDisabled()
                             .submitLabel(.go).onSubmit(openCode)
                             .accessibilityIdentifier("tournament-code")
-                        Button("Turnier öffnen", systemImage: "arrow.right.circle.fill", action: openCode)
+                        Button(L10n.text("home.open"), systemImage: "arrow.right.circle.fill", action: openCode)
                             .accessibilityIdentifier("open-tournament")
                         if let codeError { Text(codeError).foregroundStyle(.red) }
                     }
                     if let error = store.storageError { Section { Notice(text: error) } }
-                    Section("Öffentliche Turniere") {
+                    Section(L10n.text("home.public")) {
                         if let error = store.listError {
                             Notice(text: error)
-                            Button("Erneut laden") { Task { await store.discover() } }
+                            Button(L10n.text("action.reload")) { Task { await store.discover() } }
                         }
-                        if store.loading.contains("index") && store.tournaments.isEmpty { ProgressView("Turniere laden …") }
+                        if store.loading.contains("index") && store.tournaments.isEmpty { ProgressView(L10n.text("home.loading")) }
                         ForEach(store.tournaments.filter { search.isEmpty || $0.name.localizedCaseInsensitiveContains(search) || $0.code.contains(search.lowercased()) }) { tournament in
                             NavigationLink(value: tournament.code) {
                                 VStack(alignment: .leading, spacing: 6) {
@@ -61,22 +61,22 @@ struct RootView: View {
                             }
                         }
                         if store.tournaments.isEmpty && !store.loading.contains("index") && store.listError == nil {
-                            Text("Noch keine öffentlichen Turniere. Öffne ein Turnier mit seinem Code.").foregroundStyle(.secondary)
+                            Text(L10n.text("home.empty")).foregroundStyle(.secondary)
                         }
                     }
                 }
                 .navigationTitle("turnie.re")
-                .searchable(text: $search, prompt: "Turniere suchen")
+                .searchable(text: $search, prompt: L10n.text("home.search"))
                 .navigationDestination(for: String.self) { TournamentView(code: $0) }
-                .toolbar { Button("Einstellungen", systemImage: "gearshape") { settings = true } }
+                .toolbar { Button(L10n.text("settings.title"), systemImage: "gearshape") { settings = true } }
                 .refreshable { await store.discover() }
                 .task { await store.discover() }
-            }.tabItem { Label("Entdecken", systemImage: "trophy") }.tag(0)
+            }.tabItem { Label(L10n.text("tab.discover"), systemImage: "trophy") }.tag(0)
 
             NavigationStack {
                 List {
                     if store.library.entries.isEmpty {
-                        ContentUnavailableView("Noch kein Turnier", systemImage: "star", description: Text("Öffne ein Turnier unter Entdecken. Es bleibt hier verfügbar, auch ohne Verbindung."))
+                        ContentUnavailableView(L10n.text("saved.empty.title"), systemImage: "star", description: Text(L10n.text("saved.empty.body")))
                     }
                     ForEach(store.library.entries) { entry in
                         NavigationLink { TournamentView(code: entry.id) } label: {
@@ -85,19 +85,19 @@ struct RootView: View {
                                 if let team = entry.tournament.teams.first(where: { $0.id == entry.favoriteTeamID }) {
                                     Label(team.name, systemImage: "star.fill").foregroundStyle(.tint)
                                 }
-                                Text("Stand: \(entry.fetchedAt.formatted(date: .abbreviated, time: .shortened))")
+                                Text(L10n.format("updated", entry.fetchedAt.formatted(date: .abbreviated, time: .shortened)))
                                     .font(.caption).foregroundStyle(.secondary)
                             }.padding(.vertical, 5)
-                        }.swipeActions { Button("Entfernen", role: .destructive) { store.remove(entry.id) } }
+                        }.swipeActions { Button(L10n.text("action.remove"), role: .destructive) { store.remove(entry.id) } }
                     }
-                }.navigationTitle("Meine Turniere")
-            }.tabItem { Label("Meine Turniere", systemImage: "star") }.tag(1)
+                }.navigationTitle(L10n.text("tab.saved"))
+            }.tabItem { Label(L10n.text("tab.saved"), systemImage: "star") }.tag(1)
         }
         .sheet(isPresented: $settings) { SettingsView() }
     }
     private func openCode() {
         do { let code = try TournamentCode.parse(input); codeError = nil; path.append(code) }
-        catch { codeError = error.localizedDescription }
+        catch { codeError = L10n.message(for: error) }
     }
 }
 
@@ -115,19 +115,22 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Darstellung") {
-                    Picker("Design", selection: $appearance) {
-                        Text("System").tag("system"); Text("Hell").tag("light"); Text("Dunkel").tag("dark")
+                Section(L10n.text("settings.appearance")) {
+                    Picker(L10n.text("settings.theme"), selection: $appearance) {
+                        Text(L10n.text("theme.system")).tag("system"); Text(L10n.text("theme.light")).tag("light"); Text(L10n.text("theme.dark")).tag("dark")
                     }
                 }
-                Section("Über turnie.re") {
-                    Text("Turniere verfolgen und dein Lieblingsteam merken. Die Auswahl bleibt auf diesem Gerät.")
-                    Text("Ergebnisse werden während der Nutzung alle 20 Sekunden aktualisiert. Ohne Verbindung siehst du den zuletzt geladenen Stand.")
-                    Link("turnie.re besuchen", destination: URL(string: "https://turnie.re")!)
-                    Text("Version \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "–")").foregroundStyle(.secondary)
+                Section(L10n.text("settings.about")) {
+                    Text(L10n.text("settings.local"))
+                    Text(L10n.text("settings.refresh"))
+                    Link(L10n.text("link.website"), destination: URL(string: "https://turnie.re")!)
+                    Link(L10n.text("link.support"), destination: URL(string: "https://turnie.re/support")!)
+                    Link(L10n.text("link.privacy"), destination: URL(string: "https://turnie.re/app-privacy")!)
+                        .accessibilityIdentifier("privacy-link")
+                    Text(L10n.format("version", Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "–")).foregroundStyle(.secondary)
                 }
-            }.navigationTitle("Einstellungen")
-                .toolbar { Button("Fertig") { dismiss() } }
+            }.navigationTitle(L10n.text("settings.title"))
+                .toolbar { Button(L10n.text("action.done")) { dismiss() } }
         }
     }
 }

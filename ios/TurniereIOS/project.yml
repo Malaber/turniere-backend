@@ -1,7 +1,7 @@
 name: TurniereApp
 options:
   minimumXcodeGenVersion: 2.38.0
-  developmentLanguage: de
+  developmentLanguage: en
 packages:
   TurniereCore:
     path: .
@@ -22,7 +22,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: re.turnie
         PRODUCT_NAME: Turniere
         MARKETING_VERSION: "0.1"
-        CURRENT_PROJECT_VERSION: 1
+        CURRENT_PROJECT_VERSION: 2
         TARGETED_DEVICE_FAMILY: '1,2'
         SUPPORTS_MACCATALYST: NO
         GENERATE_INFOPLIST_FILE: YES
@@ -38,6 +38,7 @@ targets:
       properties:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleLocalizations: [en, de]
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
         UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
   TurniereUITests:

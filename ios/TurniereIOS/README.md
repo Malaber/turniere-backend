@@ -91,3 +91,23 @@ API key through `APP_STORE_CONNECT_KEY_PATH` (local `.p8` path), `APP_STORE_CONN
 `APP_STORE_CONNECT_ISSUER_ID`, then run the same upload task. All three are required together.
 The task passes these to Xcode's supported command-line authentication options. Do not commit the
 private key. A successful archive does not imply a successful upload; check the export result.
+
+### Translations and appearance
+
+UI copy, accessibility labels, match states, stage names and errors use semantic
+keys through `L10n`. Translations live in
+`Sources/TurniereCore/Resources/{en,de}.lproj/Localizable.strings` and ship in the
+Swift package resource bundle. Device language preferences select the language;
+English is the fallback. Tournament/team names and organizer content remain as
+supplied by the API.
+
+To add a language, copy the English table into a new `<language>.lproj` folder,
+translate values without changing keys or format placeholders, and add the
+language code to `CFBundleLocalizations` in `project.yml`. Keep `%@` and `%ld`
+argument types intact; use positional placeholders if a language needs a different
+word order. Regenerate with `inv generate-ios-project` and run the UI checks.
+
+Appearance uses semantic SwiftUI colors and a separate dark accent color.
+Settings offers System, Light and Dark; the choice persists on the device.
+The UI suite covers German flows and English light/dark rendering and records
+screenshots for both appearances.

@@ -4,10 +4,10 @@ public enum APIError: Error, LocalizedError, Equatable {
     case invalidCode, notFound, status(Int), invalidResponse
     public var errorDescription: String? {
         switch self {
-        case .invalidCode: return "Bitte einen sechsstelligen Turniercode oder einen turnie.re-Turnierlink eingeben."
-        case .notFound: return "Turnier nicht gefunden. Bitte den Code prüfen."
-        case .status(let code): return "Server vorübergehend nicht verfügbar (\(code)). Bitte erneut versuchen."
-        case .invalidResponse: return "Die Serverantwort konnte nicht gelesen werden."
+        case .invalidCode: return L10n.text("error.code")
+        case .notFound: return L10n.text("error.notFound")
+        case .status(let code): return L10n.format("error.status", code)
+        case .invalidResponse: return L10n.text("error.response")
         }
     }
 }
