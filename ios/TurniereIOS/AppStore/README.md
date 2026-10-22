@@ -48,10 +48,11 @@ PATH="$PWD/.venv-screenshots/bin:$PATH" .venv-screenshots/bin/inv capture-ios-sc
 Requires Xcode 27.0 (27A266a), XcodeGen, and iOS 26.2 simulator runtime
 23C52. Install the runtime with
 `xcodebuild -downloadPlatform iOS -buildVersion 23C52 -architectureVariant arm64`.
-The GitLab `ios store screenshots` job runs this same task for pushes changing
-native code, tasks, or CI. It requires a macOS shell runner tagged `xcode-27`
-with Xcode at `/Applications/Xcode_27.0.app`; GitLab Docker runners cannot run
-CoreSimulator. Runner registration is infrastructure setup, not provided here.
+GitHub Actions runs `.github/workflows/ios.yml` in the CI mirror
+`Malaber/turniere-backend`, using Tracy's `xcode-27` runner and matching toolchain.
+GitLab remains the source/review location for now; push the same feature commit
+to both remotes. The unavailable GitLab macOS job has been removed. GitHub keeps
+capture ZIPs and logs for 30 days, and never uploads/submits the app itself.
 
 The task builds the real app and runs its UI tests on fresh isolated iPhone 17
 Pro and iPad Pro 13-inch (M5) simulators. Captures use bundled synthetic demo
@@ -65,7 +66,7 @@ in `e2e-artifacts/app-store/0.1/`. Each device directory contains `de-DE` and
 No resizing, invented screens, or manual graphics edits are required. The ZIP
 includes commit/toolchain metadata, image dimensions, and SHA-256 checksums.
 Upload the PNGs for the matching device and localization in App Store Connect.
-GitLab retains ZIP and build logs for 30 days. CI does not upload or submit them.
+GitHub retains ZIP and build logs for 30 days. CI does not upload or submit them.
 
 Packaging checks reject missing/duplicate captures, failure attachments, and
 unexpected dimensions. They run before capture through the same Invoke task.

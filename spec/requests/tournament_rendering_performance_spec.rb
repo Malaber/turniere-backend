@@ -31,7 +31,13 @@ RSpec.describe 'Tournament rendering performance', type: :request do
       body = response.parsed_body
       expect(body.fetch('stages').first.fetch('groups').size).to eq(scenario[:groups_count])
       expect(body.fetch('teams').size).to eq(scenario[:groups_count] * scenario[:teams_per_group])
-      expect(performance[:duration_ms]).to be <= scenario[:max_duration_ms]
+      warn "render #{scenario[:groups_count]}x#{scenario[:teams_per_group]}: #{performance.except(:result)}"
+      # Shared CI runners can deschedule this process while other shards run.
+      # Budget work done by this process, not time spent waiting for a CPU.
+      # Current serializer does one query per team plus fixed eager-load queries.
+      # Catch added per-match/N+1 work independently of runner speed.
+      expect(performance[:query_count]).to be <= scenario[:groups_count] * scenario[:teams_per_group] + 16
+      expect(performance[:cpu_ms]).to be <= scenario[:max_duration_ms]
     end
   end
 end
