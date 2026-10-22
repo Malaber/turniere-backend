@@ -25,8 +25,9 @@ is read-only. Organizer names/content are shown as supplied by the API.
 
 - Deploy and verify public support/privacy URLs after frontend MR approval.
 - Age rating is saved (18+ globally, regional variants); finish content rights,
-  free pricing/availability and privacy publication.
-- Upload German/English iPhone and iPad screenshots from the automated ZIP.
+  privacy publication. Free pricing and availability are saved.
+- German iPhone/iPad screenshots are uploaded from the automated ZIP.
+  English images are also packaged for a future English store localization.
 - Build 0.1 (2) is uploaded and selected; use Apple's validation for remaining fields.
 - Stop before final review submission.
 
@@ -77,3 +78,14 @@ The operator confirmed viewer PII is not retained. Review contact is saved.
 Local validation (2026-10-22): the full capture workflow passed all three UI
 tests on each device and generated eight validated PNGs. All five packaging
 checks passed. CI execution has not been polled or verified.
+
+Privacy URL and no-data-collected draft are saved in App Store Connect.
+Publishing the declaration requires the operator's confirmation of Apple's
+accuracy/compliance agreement. Content-rights declaration also awaits operator
+confirmation that public organizer content may be displayed by this app.
+
+App Store validation (2026-10-22), after accepting German iPhone/iPad images:
+Apple reports only missing content-rights information and published app privacy
+answers. No final submission was made. The frontend pages must additionally be
+deployed and checked before submission, even though Apple's form validation
+accepts their URLs now.
