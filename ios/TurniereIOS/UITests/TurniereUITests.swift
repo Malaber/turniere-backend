@@ -38,7 +38,7 @@ final class TurniereUITests: XCTestCase {
 
     func testFavoriteSurvivesRelaunchAndStandingsRender() {
         let app = XCUIApplication()
-        app.launchArguments = ["--demo", "--reset-demo", "-AppleLanguages", "(de)", "-AppleLocale", "de_DE"]
+        app.launchArguments = ["--demo", "--reset-demo", "-AppleLanguages", "(de)", "-AppleLocale", "de_DE", "-appearance", "light"]
         app.launch()
         let tournament = app.staticTexts["Sommercup"].firstMatch
         XCTAssertTrue(tournament.waitForExistence(timeout: 10))
@@ -58,7 +58,7 @@ final class TurniereUITests: XCTestCase {
         app.buttons["Tabelle"].tap()
         capture(app, name: "de-standings-online")
         app.terminate()
-        app.launchArguments = ["--demo", "--demo-offline", "-AppleLanguages", "(de)", "-AppleLocale", "de_DE"]
+        app.launchArguments = ["--demo", "--demo-offline", "-AppleLanguages", "(de)", "-AppleLocale", "de_DE", "-appearance", "light"]
         app.launch()
         app.buttons["Meine Turniere"].firstMatch.tap()
         XCTAssertTrue(app.staticTexts["Blau-Weiß"].firstMatch.waitForExistence(timeout: 5))

@@ -33,3 +33,6 @@ coverage/**
 
 /specs_with_runtime.txt
 .venv/
+
+/e2e-artifacts/app-store/
+.venv-screenshots/

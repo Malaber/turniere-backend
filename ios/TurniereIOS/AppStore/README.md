@@ -23,15 +23,57 @@ is read-only. Organizer names/content are shown as supplied by the API.
 
 ## Remaining submission checks
 
-- Restore App Store Connect browser session (Xcode upload credentials are separate).
-- Supply review contact phone number.
-- Confirm API/infrastructure logging and retention before publishing privacy labels.
 - Deploy and verify public support/privacy URLs after frontend MR approval.
-- Finish age rating, content rights, free pricing/availability and privacy metadata.
-- Upload German/English iPhone and iPad screenshots from UI-test attachments.
-- Select the latest processed build; use Apple's validation to identify remaining fields.
+- Age rating is saved (18+ globally, regional variants); finish content rights,
+  free pricing/availability and privacy publication.
+- Upload German/English iPhone and iPad screenshots from the automated ZIP.
+- Build 0.1 (2) is uploaded and selected; use Apple's validation for remaining fields.
 - Stop before final review submission.
 
 No advertising, analytics SDKs or tracking identifiers are included. Favorites
 and snapshots are local. Ordinary network data reaches the API/hosting provider;
 this must be considered separately from app-side storage when completing labels.
+
+## Automated screenshots
+
+Run the complete CI workflow locally on macOS:
+
+```sh
+python3 -m venv .venv-screenshots
+.venv-screenshots/bin/pip install -r ios/TurniereIOS/Scripts/screenshot-requirements.txt
+PATH="$PWD/.venv-screenshots/bin:$PATH" .venv-screenshots/bin/inv capture-ios-screenshots
+```
+
+Requires Xcode 27.0 (27A266a), XcodeGen, and iOS 26.2 simulator runtime
+23C52. Install the runtime with
+`xcodebuild -downloadPlatform iOS -buildVersion 23C52 -architectureVariant arm64`.
+The GitLab `ios store screenshots` job runs this same task for pushes changing
+native code, tasks, or CI. It requires a macOS shell runner tagged `xcode-27`
+with Xcode at `/Applications/Xcode_27.0.app`; GitLab Docker runners cannot run
+CoreSimulator. Runner registration is infrastructure setup, not provided here.
+
+The task builds the real app and runs its UI tests on fresh isolated iPhone 17
+Pro and iPad Pro 13-inch (M5) simulators. Captures use bundled synthetic demo
+fixtures, with no live API access or account. German captures explicitly use
+light appearance; English captures cover light and dark. Status bar uses a fixed timestamp (rendered in the simulator time zone) and
+full battery. Only simulators created by the task are deleted.
+
+Output: `e2e-artifacts/app-store/turniere-app-store-0.1.zip`, plus unpacked PNGs
+in `e2e-artifacts/app-store/0.1/`. Each device directory contains `de-DE` and
+`en-US` images. Native dimensions are 1206×2622 (iPhone) and 2064×2752 (iPad).
+No resizing, invented screens, or manual graphics edits are required. The ZIP
+includes commit/toolchain metadata, image dimensions, and SHA-256 checksums.
+Upload the PNGs for the matching device and localization in App Store Connect.
+GitLab retains ZIP and build logs for 30 days. CI does not upload or submit them.
+
+Packaging checks reject missing/duplicate captures, failure attachments, and
+unexpected dimensions. They run before capture through the same Invoke task.
+
+Privacy audit: Rails production log level is WARN, which suppresses ordinary
+request/IP INFO logs. Traefik access logging is not configured. No viewer
+analytics or identity storage exists in the app; favorites/cache stay local.
+The operator confirmed viewer PII is not retained. Review contact is saved.
+
+Local validation (2026-10-22): the full capture workflow passed all three UI
+tests on each device and generated eight validated PNGs. All five packaging
+checks passed. CI execution has not been polled or verified.

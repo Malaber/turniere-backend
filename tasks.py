@@ -2480,3 +2480,12 @@ def upload_ios_testflight(c, version="0.1", build_number="1"):
         raise ValueError("build_number must be a positive integer")
     c.run(f"bash {shlex.quote(str(IOS_ROOT / 'Scripts' / 'upload_testflight.sh'))} "
           f"{shlex.quote(version)} {shlex.quote(str(build_number))}")
+
+
+@task(generate_ios_project)
+def capture_ios_screenshots(c, version="0.1"):
+    """Capture and package localized App Store screenshots on isolated simulators."""
+    c.run(f"python3 -m unittest discover -s {shlex.quote(str(IOS_ROOT / 'Scripts'))} "
+          "-p test_screenshot_packaging.py")
+    c.run(f"python3 {shlex.quote(str(IOS_ROOT / 'Scripts' / 'capture_screenshots.py'))} "
+          f"--version {shlex.quote(version)}")

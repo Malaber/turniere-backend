@@ -4,3 +4,5 @@
 App/Info.plist
 DerivedData/
 *.xcresult/
+DerivedDataScreenshots/
+Scripts/__pycache__/
