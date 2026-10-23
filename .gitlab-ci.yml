@@ -275,3 +275,5 @@ rails follow sync e2e spec:
   script:
     - cd /app
     - inv blackbox-follow-service
+
+# Native iOS checks run in the GitHub CI mirror; see .github/workflows/ios.yml.

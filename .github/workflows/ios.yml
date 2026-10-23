@@ -1,0 +1,50 @@
+name: iOS tests and App Store screenshots
+
+on:
+  push:
+    paths: ['ios/**', 'tasks.py', '.github/workflows/ios.yml']
+  pull_request:
+    paths: ['ios/**', 'tasks.py', '.github/workflows/ios.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  screenshots:
+    runs-on: xcode-27
+    timeout-minutes: 45
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+      - name: Install matching runtime
+        run: xcodebuild -downloadPlatform iOS -buildVersion 23C52 -architectureVariant arm64
+      - run: command -v xcodegen || brew install xcodegen
+      - name: Install locked capture dependencies
+        run: |
+          python3 -m venv .venv-screenshots
+          .venv-screenshots/bin/pip install -r ios/TurniereIOS/Scripts/screenshot-requirements.txt
+          echo "$GITHUB_WORKSPACE/.venv-screenshots/bin" >> "$GITHUB_PATH"
+      - run: inv check-ios-package
+      - name: Test app on iPhone and iPad and package screenshots
+        run: inv capture-ios-screenshots
+      - uses: actions/upload-artifact@v7
+        with:
+          name: turniere-app-store-screenshots
+          path: e2e-artifacts/app-store/*.zip
+          if-no-files-found: error
+          retention-days: 30
+      - if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-capture-logs
+          path: e2e-artifacts/app-store/*.log
+          retention-days: 30

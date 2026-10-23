@@ -11,3 +11,6 @@ docker-compose.yml
 README.md
 .gitlab-ci.yml
 /log
+
+# Native app sources and Xcode/Swift build products are not Rails inputs.
+/ios/

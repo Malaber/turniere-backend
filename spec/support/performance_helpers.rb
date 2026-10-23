@@ -15,6 +15,7 @@ module PerformanceHelpers
     end
 
     started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    cpu_started_at = Process.clock_gettime(Process::CLOCK_PROCESS_CPUTIME_ID)
     result = nil
 
     ActiveSupport::Notifications.subscribed(subscriber, 'sql.active_record') do
@@ -22,7 +23,8 @@ module PerformanceHelpers
     end
 
     duration_ms = (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started_at) * 1000.0
-    { result: result, query_count: query_count, duration_ms: duration_ms }
+    cpu_ms = (Process.clock_gettime(Process::CLOCK_PROCESS_CPUTIME_ID) - cpu_started_at) * 1000.0
+    { result: result, query_count: query_count, duration_ms: duration_ms, cpu_ms: cpu_ms }
   end
 
   def create_group_stage_tournament(groups_count:, teams_per_group:)

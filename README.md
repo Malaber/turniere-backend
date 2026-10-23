@@ -62,3 +62,23 @@ While developing, use `test` image as base container and mount root of this repo
 ```bash
 $ rails diagram:all_with_engines
 ```
+
+## iOS companion
+
+The native read-only tournament viewer lives in [ios/TurniereIOS](ios/TurniereIOS/README.md).
+Use `inv check-ios-package`, `inv generate-ios-project`, `inv build-ios-simulator`, and
+`inv check-ios-ui` for its development workflow. `inv check-ios-package --live` performs
+GET-only contract checks against public production tournaments.
+
+
+### Reproducing rendering performance CI
+
+Run `SPEC_OPTS="--seed 57741" inv test --spec=spec/requests/tournament_rendering_performance_spec.rb`.
+Use an isolated `DATABASE_URL=sqlite3:/tmp/turniere-perf.sqlite3` for concurrent work.
+The request regression checks CPU time and query count; wall time is logged for
+investigation but is not a shared-runner scheduling assertion. CPU limits remain
+1s for 8×4 teams and 5s for the larger fixtures. Query count is bounded by one
+query per team plus 16 fixed queries, catching new per-match/N+1 work.
+
+Native iOS CI runs in the GitHub mirror `Malaber/turniere-backend`. GitLab keeps
+Rails CI and merge requests until the later repository migration.
