@@ -36,3 +36,5 @@ coverage/**
 
 /e2e-artifacts/app-store/
 .venv-screenshots/
+
+__pycache__/
