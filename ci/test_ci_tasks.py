@@ -11,6 +11,23 @@ spec.loader.exec_module(tasks)
 
 
 class CITaskTests(unittest.TestCase):
+    def test_compose_plugin_on_github_runner(self):
+        with patch.object(tasks.shutil, "which", side_effect=lambda name: "/usr/bin/docker" if name == "docker" else None), \
+             patch.object(tasks.subprocess, "run", return_value=Mock(returncode=0)):
+            self.assertEqual(tasks._docker_compose_cmd("isolated", "stack.yml"),
+                             ["/usr/bin/docker", "compose", "-p", "isolated", "-f", "stack.yml"])
+
+    def test_standalone_fallback_when_plugin_missing(self):
+        with patch.object(tasks.shutil, "which", side_effect=lambda name: "/bin/" + name), \
+             patch.object(tasks.subprocess, "run", return_value=Mock(returncode=1)):
+            self.assertEqual(tasks._docker_compose_cmd("isolated", "stack.yml"),
+                             ["/bin/docker-compose", "-p", "isolated", "-f", "stack.yml"])
+
+    def test_missing_compose_has_actionable_error(self):
+        with patch.object(tasks.shutil, "which", return_value=None):
+            with self.assertRaisesRegex(RuntimeError, "Docker Compose is required"):
+                tasks._docker_compose_cmd()
+
     def test_rejects_unknown_check_before_building(self):
         with patch.object(tasks, "docker_build_all") as build:
             with self.assertRaises(ValueError):

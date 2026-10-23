@@ -3,6 +3,7 @@ from invoke import task
 import os
 import re
 import shlex
+import shutil
 import signal
 import subprocess
 import time
@@ -145,7 +146,15 @@ def _wait_for_http(base_url=TEST_BASE_URL, timeout=60):
 
 
 def _docker_compose_cmd(project_name=BLACKBOX_PROJECT, compose_file=BLACKBOX_COMPOSE_FILE):
-    return ["docker-compose", "-p", project_name, "-f", compose_file]
+    docker = shutil.which("docker")
+    if docker:
+        result = subprocess.run([docker, "compose", "version"], capture_output=True, check=False)
+        if result.returncode == 0:
+            return [docker, "compose", "-p", project_name, "-f", compose_file]
+    standalone = shutil.which("docker-compose")
+    if standalone:
+        return [standalone, "-p", project_name, "-f", compose_file]
+    raise RuntimeError("Docker Compose is required: install the docker compose plugin or docker-compose.")
 
 
 def _run_subprocess(command, env=None, capture_output=False, check=True):
