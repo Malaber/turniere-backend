@@ -2548,3 +2548,22 @@ def ci_check(c, check="lint", build=True):
 def ci_task_tests(c):
     """Verify CI orchestration and cleanup without Docker."""
     c.run("python -m unittest discover -s ci -p 'test_*.py'")
+
+
+@task(name="poll-player-scores")
+def poll_player_scores(c):
+    """Poll configured followers once; leader initiates all network requests."""
+    c.run(_bundle_exec("rails", "runner", "PlayerScoreProposalPoller.poll_all!"))
+
+
+@task(name="test-player-scores")
+def test_player_scores(c):
+    """Verify player authorization, agreement, leader polling, replay and races."""
+    test(c, spec=" ".join([
+        "spec/requests/player_score_proposals_spec.rb",
+        "spec/services/player_score_proposal_apply_spec.rb",
+        "spec/services/player_score_proposal_concurrency_spec.rb",
+        "spec/services/player_score_proposal_poller_spec.rb",
+        "spec/services/tournament_sync_schema_spec.rb",
+        "spec/services/tournament_snapshot_importer_spec.rb",
+    ]))

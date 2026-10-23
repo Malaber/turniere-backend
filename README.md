@@ -92,3 +92,10 @@ image names remain compatible with deployment.
 See the [infra migration and secret-transfer checklist](https://github.com/Malaber/turniere-infra/blob/main/ci/GITHUB_MIGRATION.md)
 before enabling release/deploy variables. Backend/frontend are active; the legacy
 match service is archived and superseded by Mission Control.
+
+### Player score proposals
+
+[TUR-246 workflow and API](docs/player-score-proposals.md) describes follower
+proposals, leader polling, migrations, trusted membership setup and replay rules.
+Run `inv test-player-scores` for focused verification or `inv poll-player-scores`
+for a single leader polling pass.

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_05_04_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_23_190000) do
   create_table "beamers", force: :cascade do |t|
     t.json "config", default: {}, null: false
     t.datetime "created_at", null: false
@@ -76,7 +76,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_04_120000) do
     t.integer "group_id"
     t.string "location"
     t.text "notes"
+    t.boolean "player_score_blocked", default: false, null: false
     t.integer "position"
+    t.integer "score_revision", default: 0, null: false
     t.integer "stage_id"
     t.string "start_time"
     t.integer "state", default: 0
@@ -84,6 +86,38 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_04_120000) do
     t.datetime "updated_at", precision: nil, null: false
     t.index ["group_id"], name: "index_matches_on_group_id"
     t.index ["stage_id"], name: "index_matches_on_stage_id"
+  end
+
+  create_table "player_score_proposals", force: :cascade do |t|
+    t.json "agreed_scores"
+    t.integer "base_score_revision", null: false
+    t.datetime "created_at", null: false
+    t.datetime "locked_at"
+    t.bigint "locked_sequence"
+    t.string "proposal_id", null: false
+    t.integer "revision", default: 0, null: false
+    t.bigint "source_match_id", null: false
+    t.json "team_ids", null: false
+    t.json "team_proposals", default: {}, null: false
+    t.integer "tournament_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["proposal_id"], name: "index_player_score_proposals_on_proposal_id", unique: true
+    t.index ["tournament_id", "locked_sequence"], name: "unique_player_proposal_sequence", unique: true
+    t.index ["tournament_id", "source_match_id"], name: "unique_player_proposal_match", unique: true
+    t.index ["tournament_id"], name: "index_player_score_proposals_on_tournament_id"
+  end
+
+  create_table "player_score_receipts", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "outcome", null: false
+    t.json "proposal", null: false
+    t.string "proposal_id", null: false
+    t.bigint "source_match_id", null: false
+    t.integer "tournament_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["tournament_id", "proposal_id"], name: "unique_player_receipt_proposal", unique: true
+    t.index ["tournament_id", "source_match_id"], name: "unique_player_receipt_match", unique: true
+    t.index ["tournament_id"], name: "index_player_score_receipts_on_tournament_id"
   end
 
   create_table "stages", force: :cascade do |t|
@@ -186,6 +220,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_04_120000) do
     t.integer "playoff_teams_amount", default: 0
     t.boolean "public", default: true
     t.boolean "read_only_mode", default: false, null: false
+    t.bigint "score_proposal_cursor", default: 0, null: false
     t.datetime "starts_at"
     t.string "sync_auth_token"
     t.string "sync_auth_token_digest"
@@ -246,6 +281,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_04_120000) do
   add_foreign_key "match_scores", "teams", on_delete: :cascade
   add_foreign_key "matches", "groups", on_delete: :cascade
   add_foreign_key "matches", "stages", on_delete: :cascade
+  add_foreign_key "player_score_proposals", "tournaments"
+  add_foreign_key "player_score_receipts", "tournaments"
   add_foreign_key "stages", "tournaments", on_delete: :cascade
   add_foreign_key "team_action_items", "team_action_lists", on_delete: :cascade
   add_foreign_key "team_action_items", "teams", on_delete: :cascade

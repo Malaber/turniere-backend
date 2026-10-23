@@ -22,6 +22,8 @@ class MatchScoresController < ApplicationController
       old_values = score_values(@match_score)
 
       if @match_score.update(match_score_params)
+        match = @match_score.match.reload
+        match.update!(player_score_blocked: true, score_revision: match.score_revision + 1)
         group_scores = []
         if @match_score.part_of_group_match?
           UpdateGroupsGroupScoresAndSave.call(group: @match_score.match.group)
