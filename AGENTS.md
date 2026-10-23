@@ -189,3 +189,10 @@ For team action lists specifically:
 
 If you touch test, verification, boot, Docker, or scenario setup workflows,
 check whether `tasks.py` also needs to change.
+
+## GitHub CI migration
+
+Active CI now lives in `.github/workflows`. Use the Invoke CI tasks documented in
+the README for local reproduction. The GitLab YAML is a disabled compatibility
+stub; container names remain in the GitLab registry during cutover. Backend and
+frontend Mission Control replace the archived match application.

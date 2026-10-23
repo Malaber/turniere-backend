@@ -80,5 +80,15 @@ investigation but is not a shared-runner scheduling assertion. CPU limits remain
 1s for 8×4 teams and 5s for the larger fixtures. Query count is bounded by one
 query per team plus 16 fixed queries, catching new per-match/N+1 work.
 
-Native iOS CI runs in the GitHub mirror `Malaber/turniere-backend`. GitLab keeps
+Native iOS CI runs in the GitHub repository `Malaber/turniere-backend`. GitLab keeps
 Rails CI and merge requests until the later repository migration.
+
+## GitHub Actions
+
+`.github/workflows/ci.yml` replaces GitLab CI. PR checks run without credentials;
+publication and deployment are opt-in main-branch jobs. Existing GitLab registry
+image names remain compatible with deployment.
+
+See the [infra migration and secret-transfer checklist](https://github.com/Malaber/turniere-infra/blob/main/ci/GITHUB_MIGRATION.md)
+before enabling release/deploy variables. Backend/frontend are active; the legacy
+match service is archived and superseded by Mission Control.

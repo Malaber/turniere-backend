@@ -2489,3 +2489,53 @@ def capture_ios_screenshots(c, version="0.1"):
           "-p test_screenshot_packaging.py")
     c.run(f"python3 {shlex.quote(str(IOS_ROOT / 'Scripts' / 'capture_screenshots.py'))} "
           f"--version {shlex.quote(version)}")
+
+
+@task(name="ci-check")
+def ci_check(c, check="lint", build=True):
+    """Run one GitHub CI check locally with the same Docker images and cleanup."""
+    allowed = {"lint", "http", "load", "follow"} | {f"shard-{i}" for i in range(1, 9)}
+    if check not in allowed:
+        raise ValueError(f"Unknown CI check: {check}")
+    if build:
+        docker_build_all(c)
+    if check == "lint":
+        subprocess.run(["docker", "run", "--rm", TEST_TAG, "inv", "lint"], check=True)
+        return
+    if check.startswith("shard-"):
+        docker_test_shard(c, node_index=int(check.split("-")[1]), build=False)
+        return
+
+    follow = check == "follow"
+    compose_file = BLACKBOX_FOLLOW_COMPOSE_FILE if follow else BLACKBOX_COMPOSE_FILE
+    project = BLACKBOX_FOLLOW_PROJECT if follow else BLACKBOX_PROJECT
+    env = _follow_compose_env() if follow else _compose_env(expect_profiling="false")
+    logs = ROOT / "e2e-artifacts" / "ci"
+    logs.mkdir(parents=True, exist_ok=True)
+    try:
+        if follow:
+            docker_blackbox_follow_up(c, build=False)
+            docker_blackbox_follow_test(c)
+        else:
+            docker_blackbox_up(c, build=False)
+            if check == "http":
+                docker_blackbox_test(c)
+            else:
+                _compose_run([
+                    "run", "--rm", "e2e", "inv", "load-test",
+                    "--base-url=http://app:3000", "--http-clients=1,10,50,100",
+                    "--websocket-clients=1,10,50,100,200", "--http-requests-per-client=3",
+                    "--websocket-hold-seconds=1.0", "--websocket-connect-batch-size=25",
+                ], env=env)
+    finally:
+        result = _compose_run(["logs", "--no-color"], env=env, capture_output=True,
+                              check=False, project_name=project, compose_file=compose_file)
+        (logs / f"{check}.log").write_text((result.stdout or "") + (result.stderr or ""))
+        _compose_run(["down", "-v", "--remove-orphans"], env=env, check=False,
+                     project_name=project, compose_file=compose_file)
+
+
+@task(name="ci-task-tests")
+def ci_task_tests(c):
+    """Verify CI orchestration and cleanup without Docker."""
+    c.run("python -m unittest discover -s ci -p 'test_*.py'")
