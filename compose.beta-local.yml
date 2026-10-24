@@ -1,0 +1,63 @@
+# Local authoritative leader; remote follower lives at beta.turnie.re.
+name: turniere-beta-local
+services:
+  database:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: turniere_beta_local
+      POSTGRES_USER: turniere
+      POSTGRES_PASSWORD: ${BETA_LOCAL_DB_PASSWORD:?Run inv beta-local-init}
+    volumes:
+      - database:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U turniere -d turniere_beta_local']
+      interval: 3s
+      timeout: 3s
+      retries: 30
+  backend:
+    image: turniere-beta-local-backend
+    build:
+      context: .
+      target: production
+      args:
+        base_commit: ${BETA_LOCAL_BACKEND_SHA:-local}
+    environment:
+      RAILS_ENV: production
+      DATABASE_URL: postgresql://turniere:${BETA_LOCAL_DB_PASSWORD}@database/turniere_beta_local
+      SECRET_KEY_BASE: ${BETA_LOCAL_SECRET_KEY_BASE:?Run inv beta-local-init}
+      TURNIERE_DISABLE_EMAIL_DELIVERY: '1'
+      MAILGUN_API_KEY: local-disabled
+      MAILGUN_DOMAIN: local.invalid
+      WEB_CONCURRENCY: '1'
+      RAILS_MAX_THREADS: '5'
+      RAILS_DB_POOL: '5'
+      RAILS_LOG_TO_STDOUT: '1'
+    depends_on:
+      database:
+        condition: service_healthy
+    ports:
+      - '127.0.0.1:${BETA_LOCAL_API_PORT:-4300}:3000'
+    healthcheck:
+      test: [CMD, ruby, -rnet/http, -e, "exit(Net::HTTP.get_response(URI('http://127.0.0.1:3000/healthz')).is_a?(Net::HTTPSuccess) ? 0 : 1)"]
+      interval: 5s
+      timeout: 5s
+      start_period: 60s
+      retries: 30
+  frontend:
+    image: turniere-beta-local-frontend
+    build:
+      context: ../turniere-frontend
+      dockerfile: docker/production/Dockerfile
+      args:
+        base_commit: ${BETA_LOCAL_FRONTEND_SHA:-local}
+    environment:
+      TURNIERE_API_URL: http://backend:3000
+      PORT: '80'
+      HOST: 0.0.0.0
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - '127.0.0.1:${BETA_LOCAL_WEB_PORT:-4301}:80'
+volumes:
+  database:

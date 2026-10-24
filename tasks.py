@@ -1,3 +1,4 @@
+import sys
 from invoke import task
 
 import os
@@ -2567,3 +2568,47 @@ def test_player_scores(c):
         "spec/services/tournament_sync_schema_spec.rb",
         "spec/services/tournament_snapshot_importer_spec.rb",
     ]))
+
+
+def _beta_local(action, *args):
+    subprocess.run([sys.executable, str(ROOT / "lib/beta_lab/cli.py"), action, *args], check=True)
+
+
+@task(name="beta-local-init")
+def beta_local_init(c):
+    """Generate private local beta lab configuration; preserve existing credentials."""
+    _beta_local("init")
+
+
+@task(name="beta-local-up")
+def beta_local_up(c, build=True):
+    """Build sibling checkouts, start persistent local stack, and bootstrap its owner."""
+    _beta_local("up", *([] if build else ["--no-build"]))
+
+
+@task(name="beta-local-down")
+def beta_local_down(c):
+    """Stop local beta lab; retain database and pairing state."""
+    _beta_local("down")
+
+
+@task(name="beta-local-status")
+def beta_local_status(c):
+    _beta_local("status")
+
+
+@task(name="beta-local-logs")
+def beta_local_logs(c):
+    _beta_local("logs")
+
+
+@task(name="beta-local-pair")
+def beta_local_pair(c, leader_id):
+    """Create/reuse a beta follower for this local tournament; prompts for beta login."""
+    _beta_local("pair", "--leader-id", str(int(leader_id)))
+
+
+@task(name="beta-local-config")
+def beta_local_config(c):
+    """Validate Compose configuration without printing resolved credentials."""
+    _beta_local("config")

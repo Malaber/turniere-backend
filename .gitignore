@@ -38,3 +38,6 @@ coverage/**
 .venv-screenshots/
 
 __pycache__/
+
+# Persistent local beta lab credentials and pairing state
+/.beta-local/
