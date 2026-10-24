@@ -42,7 +42,8 @@ serializers continue to expose canonical points only.
 The leader treats every envelope as untrusted, rejects additional fields and
 checks tournament/match/team identities, its own live state and score revision.
 A tournament row lock serializes application with admin writes. An accepted
-agreement changes points only, stores a durable receipt and audit entry, queues
+agreement changes live points only (the existing `hidden_points` tie-break field
+for deciders, `points` otherwise), stores a durable receipt and audit entry, queues
 normal canonical replication, and broadcasts only after commit. Standings,
 finish logic and progression are untouched, even for unusual but valid points.
 

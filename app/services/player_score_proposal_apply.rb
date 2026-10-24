@@ -24,9 +24,10 @@ class PlayerScoreProposalApply
       raise PlayerScoreProposalService::Invalid, 'Match is outside the configured tournament' if match.nil?
 
       outcome = eligibility(match)
-      old_scores = match.match_scores.to_h { |score| [score.team_id.to_s, score.points] }
+      score_field = match.decider? ? :hidden_points : :points
+      old_scores = match.match_scores.to_h { |score| [score.team_id.to_s, score.public_send(score_field)] }
       if outcome == 'applied'
-        match.match_scores.each { |score| score.update!(points: payload['scores'].fetch(score.team_id.to_s)) }
+        match.match_scores.each { |score| score.update!(score_field => payload['scores'].fetch(score.team_id.to_s)) }
         match.update!(score_revision: match.score_revision + 1)
       end
       PlayerScoreReceipt.create!(tournament: tournament, source_match_id: match.id,

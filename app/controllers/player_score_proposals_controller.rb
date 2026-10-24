@@ -74,7 +74,7 @@ class PlayerScoreProposalsController < ApplicationController
     end
     {
       match_id: match.id,
-      official_scores: match.match_scores.to_h { |score| [score.team_id, score.points] },
+      official_scores: match.match_scores.to_h { |score| [score.team_id, match.decider? ? score.hidden_points : score.points] },
       eligible_team_ids: PlayerScoreProposalService.eligible_team_ids(match, current_user),
       accepting: match.tournament.sync_accepts_push? && match.in_progress? &&
         !match.player_score_blocked? && !proposal&.locked_at?,

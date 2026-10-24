@@ -51,7 +51,10 @@ RSpec.describe 'Player score proposals', type: :request do
     replicate
     expect(@remote.reload).to be_decider
     expect(@remote).to be_in_progress
-    expect(@remote.match_scores.order(:id).pluck(:points)).to eq([7, 10])
+    expect(@remote.match_scores.order(:id).pluck(:hidden_points)).to eq([7, 10])
+    expect(@remote.match_scores.order(:id).pluck(:points)).to eq([0, 0])
+    get "/matches/#{@remote.id}/score_proposal", headers: @players.first.create_new_auth_token
+    expect(response.parsed_body['official_scores']).to eq(remote_scores)
   end
 
   it 'rejects opponent impersonation, unauthenticated requests and non-members' do
