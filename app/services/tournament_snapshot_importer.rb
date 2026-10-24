@@ -141,6 +141,8 @@ class TournamentSnapshotImporter
       match.stage = attrs[:stage_id] ? stages_by_source_id.fetch(attrs[:stage_id]) : nil
       match.group = attrs[:group_id] ? groups_by_source_id.fetch(attrs[:group_id]) : nil
       match.state = attrs.fetch(:state)
+      match.score_revision = attrs.fetch(:score_revision, 0)
+      match.player_score_blocked = attrs.fetch(:player_score_blocked, false)
       match.position = attrs[:position]
       match.decider = attrs[:decider]
       match.location = attrs[:location]

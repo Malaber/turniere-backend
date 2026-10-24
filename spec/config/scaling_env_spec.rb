@@ -37,6 +37,14 @@ RSpec.describe 'runtime scaling configuration' do
     end
   end
 
+  it 'starts tournament synchronization after a worker boots' do
+    worker = double('TournamentSyncWorker')
+    stub_const('TournamentSyncWorker', worker)
+    expect(worker).to receive(:start)
+
+    evaluate_puma_config.fetch(:on_worker_boot).call
+  end
+
   it 'uses safe Puma defaults' do
     config = evaluate_puma_config
 
@@ -138,6 +146,10 @@ RSpec.describe 'runtime scaling configuration' do
 
       def environment(value)
         @config[:environment] = value
+      end
+
+      def on_worker_boot(&block)
+        @config[:on_worker_boot] = block
       end
 
       def plugin(name)

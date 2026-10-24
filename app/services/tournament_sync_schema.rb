@@ -32,6 +32,7 @@ class TournamentSyncSchema
         sync_source_tournament_id
         sync_last_pushed_at
         sync_last_push_error
+        score_proposal_cursor
         sync_last_imported_snapshot_at
       ].freeze
     }.freeze,
@@ -52,7 +53,7 @@ class TournamentSyncSchema
       ignored: %w[created_at updated_at sync_source_id].freeze
     }.freeze,
     Match => {
-      synced: %w[id state position stage_id group_id decider location start_time notes].freeze,
+      synced: %w[id state position stage_id group_id decider location start_time notes score_revision player_score_blocked].freeze,
       ignored: %w[created_at updated_at sync_source_id].freeze
     }.freeze,
     MatchScore => {

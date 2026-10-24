@@ -3,6 +3,10 @@
 class TournamentSerializer < SimpleTournamentSerializer
   attributes :description, :playoff_teams_amount,
              :instant_finalists_amount, :intermediate_round_participants_amount
+  attribute :player_score_proposals_enabled do
+    object.sync_accepts_push?
+  end
+
   attribute :read_only_mode, if: :sync_metadata_visible?
   attribute :sync_target_url, if: :sync_metadata_visible?
   attribute :sync_auth_configured, if: :sync_metadata_visible?

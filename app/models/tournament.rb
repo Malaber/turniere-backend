@@ -10,6 +10,8 @@ class Tournament < ApplicationRecord
 
   belongs_to :user
   belongs_to :owner, class_name: 'User', foreign_key: :user_id, inverse_of: :tournaments
+  has_many :player_score_proposals, dependent: :destroy
+  has_many :player_score_receipts, dependent: :destroy
   has_many :teams, dependent: :destroy
   has_many :stages, dependent: :destroy
   has_many :beamers, dependent: :destroy
