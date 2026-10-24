@@ -10,19 +10,21 @@ final class TournamentStore {
     var errors: [String: String] = [:]
     var loading = Set<String>()
     var storageError: String?
+    let server: AppServer
     private let api: any TournamentServing
     private let storageURL: URL
     private var storageHealthy = true
     private var aliases: [String: String] = [:]
 
-    init() {
+    init(server: AppServer = .production) {
+        self.server = server
         var demo = false
         #if DEBUG
         demo = ProcessInfo.processInfo.arguments.contains("--demo")
         #endif
-        api = demo ? DemoAPI(offline: ProcessInfo.processInfo.arguments.contains("--demo-offline")) : APIClient()
+        api = demo ? DemoAPI(offline: ProcessInfo.processInfo.arguments.contains("--demo-offline")) : APIClient(baseURL: server.apiURL)
         let root = URL.applicationSupportDirectory.appendingPathComponent("re.turnie", isDirectory: true)
-        storageURL = root.appendingPathComponent(demo ? "demo-library.json" : "library.json")
+        storageURL = root.appendingPathComponent(demo ? "demo-library.json" : server == .beta ? "beta-library.json" : "library.json")
         #if DEBUG
         if demo && ProcessInfo.processInfo.arguments.contains("--reset-demo") {
             try? FileManager.default.removeItem(at: storageURL)
@@ -34,6 +36,7 @@ final class TournamentStore {
             storageError = L10n.text("error.storage.read")
         }
     }
+    func webURL(_ tournament: Tournament) -> URL { server.webURL.appendingPathComponent("t/\(tournament.id)") }
     func discover() async {
         guard !loading.contains("index") else { return }
         loading.insert("index")

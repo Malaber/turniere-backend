@@ -18,6 +18,7 @@ public struct Tournament: Codable, Identifiable, Sendable {
     public let timestamp: String?
     public let timerMode: String?
     public let timerReasonText: String?
+    public let playerScoreProposalsEnabled: Bool?
     public let teams: [Team]
     public let stages: [Stage]
 
@@ -33,6 +34,10 @@ public struct Tournament: Codable, Identifiable, Sendable {
     }
     public func matches(for teamID: Int) -> [Match] {
         matches.filter { $0.matchScores.contains { $0.team?.id == teamID } }
+    }
+    public func groups(for teamID: Int) -> [Group] {
+        orderedStages.flatMap { $0.groups.sorted { $0.number < $1.number } }
+            .filter { $0.groupScores.contains { $0.team.id == teamID } }
     }
     public func nextMatch(for teamID: Int) -> Match? {
         let games = matches(for: teamID)
@@ -130,7 +135,7 @@ public enum TournamentCode {
     public static func parse(_ input: String) throws -> String {
         var code = input.trimmingCharacters(in: .whitespacesAndNewlines)
         if code.contains("://") {
-            guard let url = URL(string: code), url.scheme == "https", url.host == "turnie.re",
+            guard let url = URL(string: code), url.scheme == "https", ["turnie.re", "beta.turnie.re"].contains(url.host ?? ""),
                   url.user == nil, url.password == nil,
                   url.pathComponents.count >= 3, url.pathComponents[1] == "t" else {
                 throw APIError.invalidCode

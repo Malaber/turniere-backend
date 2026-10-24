@@ -1,3 +1,17 @@
+# Next TestFlight release: 0.2 (3)
+
+Optional player sign-in and score proposals, plus direct favorite-team standings
+and table/court access. Settings → Server → beta.turnie.re selects beta with its
+own accounts and saved tournaments. Backend capability and team membership are
+required before proposal entry appears. Do not submit for App Store release until
+privacy labels and the updated public privacy page reflect account email, user IDs
+and score submissions (app functionality, account-linked, no tracking).
+
+Privacy manifest categories follow Apple’s documentation:
+https://developer.apple.com/documentation/technotes/tn3184-adding-data-collection-details-to-your-privacy-manifest
+
+The historical 0.1 release notes below describe the previous viewer-only build.
+
 # App Store release 0.1
 
 - App: turnie.re; bundle ID and SKU: `re.turnie`

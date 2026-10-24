@@ -3,15 +3,25 @@ import TurniereCore
 
 @main
 struct TurniereApp: App {
-    @State private var store = TournamentStore()
+    @AppStorage("server") private var server = "production"
     @AppStorage("appearance") private var appearance = "system"
     var body: some Scene {
         WindowGroup {
-            RootView()
-                .environment(store)
+            ServerRoot(server: AppServer(rawValue: server) ?? .production)
+                .id(server)
                 .preferredColorScheme(appearance == "dark" ? .dark : appearance == "light" ? .light : nil)
         }
     }
+}
+
+struct ServerRoot: View {
+    @State private var store: TournamentStore
+    @State private var player: PlayerStore
+    init(server: AppServer) {
+        _store = State(initialValue: TournamentStore(server: server))
+        _player = State(initialValue: PlayerStore(server: server))
+    }
+    var body: some View { RootView().environment(store).environment(player) }
 }
 
 struct RootView: View {
@@ -96,7 +106,11 @@ struct RootView: View {
         .sheet(isPresented: $settings) { SettingsView() }
     }
     private func openCode() {
-        do { let code = try TournamentCode.parse(input); codeError = nil; path.append(code) }
+        do {
+            if input.contains("://"), let host = URL(string: input.trimmingCharacters(in: .whitespacesAndNewlines))?.host,
+               host != store.server.webURL.host { codeError = L10n.text("server.wrongLink"); return }
+            let code = try TournamentCode.parse(input); codeError = nil; path.append(code)
+        }
         catch { codeError = L10n.message(for: error) }
     }
 }
@@ -110,6 +124,9 @@ struct Notice: View {
 }
 
 struct SettingsView: View {
+    @Environment(TournamentStore.self) private var store
+    @AppStorage("server") private var server = "production"
+    @State private var account = false
     @Environment(\.dismiss) private var dismiss
     @AppStorage("appearance") private var appearance = "system"
     var body: some View {
@@ -120,6 +137,14 @@ struct SettingsView: View {
                         Text(L10n.text("theme.system")).tag("system"); Text(L10n.text("theme.light")).tag("light"); Text(L10n.text("theme.dark")).tag("dark")
                     }
                 }
+                Section(L10n.text("account.title")) {
+                    Button(L10n.text("account.title")) { account = true }
+                    Picker(L10n.text("server.title"), selection: $server) {
+                        Text(L10n.text("account.production")).tag("production")
+                        Text(L10n.text("account.beta")).tag("beta")
+                    }
+                    Text(L10n.text("server.hint")).font(.footnote)
+                }
                 Section(L10n.text("settings.about")) {
                     Text(L10n.text("settings.local"))
                     Text(L10n.text("settings.refresh"))
@@ -129,7 +154,8 @@ struct SettingsView: View {
                         .accessibilityIdentifier("privacy-link")
                     Text(L10n.format("version", Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "–")).foregroundStyle(.secondary)
                 }
-            }.navigationTitle(L10n.text("settings.title"))
+            }.sheet(isPresented: $account) { AccountView(server: store.server) }
+                .navigationTitle(L10n.text("settings.title"))
                 .toolbar { Button(L10n.text("action.done")) { dismiss() } }
         }
     }
