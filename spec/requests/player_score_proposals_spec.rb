@@ -27,6 +27,33 @@ RSpec.describe 'Player score proposals', type: :request do
     expect(PlayerScoreProposal.first.revision).to eq(4)
   end
 
+  it 'accepts decider proposals and publishes only leader-applied live points' do
+    @match.update!(decider: true)
+    replicate
+    get "/matches/#{@remote.id}/score_proposal", headers: @players.first.create_new_auth_token
+    expect(response.parsed_body['accepting']).to be(true)
+    submit
+    expect(response).to have_http_status(:ok)
+    submit(player: 2, team: @teams.last)
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body['locked']).to be(true)
+    expect(response.parsed_body['accepting']).to be(false)
+    expect(@remote.reload.match_scores.pluck(:points)).to eq([0, 0])
+
+    expect(PopulateMatchBelowAndSave).not_to receive(:call)
+    expect(UpdateGroupsGroupScoresAndSave).not_to receive(:call)
+    payload = PlayerScoreProposal.first.locked_payload.deep_stringify_keys
+    expect(PlayerScoreProposalApply.call(@leader, payload)).to eq(:applied)
+    expect(PlayerScoreProposalApply.call(@leader, payload)).to eq(:duplicate)
+    expect(@match.reload).to be_in_progress
+    expect(@match.winner).to be_nil
+    expect(@stage.reload).to be_in_progress
+    replicate
+    expect(@remote.reload).to be_decider
+    expect(@remote).to be_in_progress
+    expect(@remote.match_scores.order(:id).pluck(:points)).to eq([7, 10])
+  end
+
   it 'rejects opponent impersonation, unauthenticated requests and non-members' do
     submit(team: @teams.last)
     expect(response).to have_http_status(:forbidden)

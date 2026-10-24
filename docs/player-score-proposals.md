@@ -32,7 +32,8 @@ preserve existing team records/memberships and independent proposal records.
   at most 100 agreements ordered by lock sequence. Payload IDs belong to leader.
 
 Score values must be integers from 0 through 1000, with exactly the two teams.
-Decider matches require an organizer. Pending proposals remain private to match
+All live match types, including deciders, accept proposals under the same rules.
+Finishing and progression remain organizer-controlled. Pending proposals remain private to match
 participants; only agreements are readable using the sync token. Public match
 serializers continue to expose canonical points only.
 

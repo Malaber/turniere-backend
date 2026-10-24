@@ -35,7 +35,6 @@ class PlayerScoreProposalService
       raise Forbidden, 'Player proposals are only available on a configured follower' unless tournament.sync_accepts_push?
       raise Forbidden, 'You must belong to the submitting team' unless eligible_team_ids(match, user).include?(team_id)
       raise Conflict, 'Match is not accepting player scores' unless match.in_progress? && !match.player_score_blocked?
-      raise Conflict, 'Decider scores require an organizer' if match.decider?
 
       teams = mapped_teams!(match)
       ids = teams.map(&:sync_source_id)

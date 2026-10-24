@@ -76,7 +76,7 @@ class PlayerScoreProposalsController < ApplicationController
       match_id: match.id,
       official_scores: match.match_scores.to_h { |score| [score.team_id, score.points] },
       eligible_team_ids: PlayerScoreProposalService.eligible_team_ids(match, current_user),
-      accepting: match.tournament.sync_accepts_push? && match.in_progress? && !match.decider? &&
+      accepting: match.tournament.sync_accepts_push? && match.in_progress? &&
         !match.player_score_blocked? && !proposal&.locked_at?,
       locked: proposal&.locked_at? || false, revision: proposal&.revision || 0,
       proposals: proposals, teams: teams.map { |team| { id: team.id, name: team.name } }

@@ -65,7 +65,7 @@ class PlayerScoreProposalApply
 
   def eligibility(match)
     return 'rejected_admin_override' if match.player_score_blocked?
-    return 'rejected_state' unless match.in_progress? && !match.decider?
+    return 'rejected_state' unless match.in_progress?
     return 'rejected_revision' unless match.score_revision == payload['base_score_revision']
     return 'rejected_teams' unless match.teams.map(&:id).sort == payload['team_ids'].sort &&
                                    match.match_scores.size == 2 && match.teams.all? { |team| team.tournament_id == tournament.id }
