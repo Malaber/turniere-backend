@@ -9,6 +9,10 @@ final class TurniereUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Your tournament. Your team."].waitForExistence(timeout: 10))
         app.buttons["Settings"].tap()
         let privacy = app.descendants(matching: .any)["privacy-link"].firstMatch
+        for _ in 0..<5 {
+            if privacy.exists && privacy.isHittable { break }
+            app.swipeUp()
+        }
         XCTAssertTrue(privacy.waitForExistence(timeout: 5))
         XCTAssertEqual(privacy.label, "Privacy")
         app.buttons["Done"].tap()

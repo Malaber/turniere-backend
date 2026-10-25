@@ -2,6 +2,7 @@ name: iOS tests and App Store screenshots
 
 on:
   push:
+    branches: [main]
     paths: ['ios/**', 'tasks.py', '.github/workflows/ios.yml']
   pull_request:
     paths: ['ios/**', 'tasks.py', '.github/workflows/ios.yml']
