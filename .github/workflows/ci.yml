@@ -10,7 +10,7 @@ permissions:
   contents: read
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 jobs:
   build:
     runs-on: ubuntu-24.04
@@ -71,9 +71,9 @@ jobs:
         pattern: image-*
         merge-multiple: true
         path: /tmp/images
-    - run: |-
-        docker load -i /tmp/images/production.tar
-        docker load -i /tmp/images/test.tar
+    - run: 'docker load -i /tmp/images/production.tar
+
+        docker load -i /tmp/images/test.tar'
     - run: inv ci-check --check=${{ matrix.check }} --no-build
     - if: always()
       uses: actions/upload-artifact@v7
@@ -85,57 +85,76 @@ jobs:
     needs:
     - checks
     - task-tests
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.TURNIERE_RELEASE_ENABLED == 'true'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
-    environment: registry
     strategy:
       matrix:
-        target:
-        - production
-        - test
+        include:
+        - target: production
+          image: ghcr.io/malaber/turniere-backend
+        - target: test
+          image: ghcr.io/malaber/turniere-backend-test
     steps:
     - uses: actions/checkout@v7
     - uses: docker/setup-qemu-action@v4
     - uses: docker/setup-buildx-action@v4
     - uses: docker/login-action@v4
       with:
-        registry: registry.gitlab.com
-        username: ${{ secrets.REGISTRY_USER }}
-        password: ${{ secrets.REGISTRY_TOKEN }}
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     - uses: docker/build-push-action@v7
       with:
         context: .
         file: Dockerfile
         build-args: base_commit=${{ github.sha }}
         platforms: linux/amd64,linux/arm64
-        tags: |-
-          registry.gitlab.com/turniere/turniere-backend/${{ matrix.target }}/commits:${{ github.sha }}
-          registry.gitlab.com/turniere/turniere-backend/${{ matrix.target }}:latest
-          registry.gitlab.com/turniere/turniere-backend/${{ matrix.target }}/refs:main
+        tags: ${{ matrix.image }}:sha-${{ github.sha }}
         cache-from: type=gha,scope=${{ matrix.target }}
         cache-to: type=gha,mode=max,scope=${{ matrix.target }}
         target: ${{ matrix.target }}
         push: true
-  deploy-request:
-    needs: publish
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.TURNIERE_DEPLOY_ENABLED == 'true'
-    runs-on: ubuntu-24.04
-    environment: deployment-dispatch
-    steps:
-    - name: Request infra deployment
-      env:
-        GH_TOKEN: ${{ secrets.INFRA_DISPATCH_TOKEN }}
-        VERSION: ${{ github.sha }}
-      run: gh api repos/Malaber/turniere-infra/dispatches --method POST -f event_type=image-published -f client_payload[target]=turniere-backend
-        -f client_payload[version]="$VERSION"
+        labels: 'org.opencontainers.image.source=https://github.com/${{ github.repository }}
+
+          org.opencontainers.image.revision=${{ github.sha }}'
+    permissions:
+      contents: read
+      packages: write
   task-tests:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
-        with:
-          python-version: '3.14'
-      - run: pip install invoke==2.2.0
-      - run: inv ci-task-tests
+    - uses: actions/checkout@v7
+    - uses: actions/setup-python@v7
+      with:
+        python-version: '3.14'
+    - run: pip install invoke==2.2.0
+    - run: inv ci-task-tests
+  release:
+    needs: publish
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      packages: write
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+    - uses: actions/setup-python@v7
+      with:
+        python-version: '3.14'
+    - uses: docker/setup-buildx-action@v4
+    - uses: docker/login-action@v4
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    - run: pip install invoke==2.2.0
+    - run: inv release-github
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        GITHUB_SHA: ${{ github.sha }}

@@ -2493,7 +2493,7 @@ def upload_ios_testflight(c, version="0.1", build_number="1"):
 
 
 @task(generate_ios_project)
-def capture_ios_screenshots(c, version="0.1"):
+def capture_ios_screenshots(c, version="0.2"):
     """Capture and package localized App Store screenshots on isolated simulators."""
     c.run(f"python3 -m unittest discover -s {shlex.quote(str(IOS_ROOT / 'Scripts'))} "
           "-p test_screenshot_packaging.py")
@@ -2612,3 +2612,9 @@ def beta_local_pair(c, leader_id):
 def beta_local_config(c):
     """Validate Compose configuration without printing resolved credentials."""
     _beta_local("config")
+
+
+@task(name="release-github")
+def release_github(c):
+    """Promote published commit images and create an idempotent GitHub patch release."""
+    c.run("python ci/release.py")

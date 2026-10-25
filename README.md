@@ -86,8 +86,8 @@ Rails CI and merge requests until the later repository migration.
 ## GitHub Actions
 
 `.github/workflows/ci.yml` replaces GitLab CI. PR checks run without credentials;
-publication and deployment are opt-in main-branch jobs. Existing GitLab registry
-image names remain compatible with deployment.
+successful main runs publish GHCR images and automatic GitHub patch releases.
+Publication does not deploy. See [release setup](ci/GITHUB_RELEASES.md).
 
 See the [infra migration and secret-transfer checklist](https://github.com/Malaber/turniere-infra/blob/main/ci/GITHUB_MIGRATION.md)
 before enabling release/deploy variables. Backend/frontend are active; the legacy

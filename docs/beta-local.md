@@ -47,8 +47,8 @@ inv deploy-beta
 ```
 
 Use full 40-character SHAs whose production images have actually been published.
-The current workflows publish main only and require the release variable and
-registry credentials. There is no implicit merge, publication or remote deployment
+The workflows publish main only to GHCR using the built-in GitHub token.
+See `ci/GITHUB_RELEASES.md`; make the packages public after first publication. There is no implicit merge, publication or remote deployment
 in any local-lab task. Avoid `inv deploy` and `inv deploy-hosts`: those also deploy
 production. The beta-only playbook runs backend migrations at startup and checks
 remote HTTP health.
@@ -136,3 +136,19 @@ without a running Docker daemon. Full build/start, remote pairing and player rou
 trip require Docker plus deployed beta images and accounts. These instructions
 are a repeatable manual live-test lab, not yet an automated cross-instance browser
 E2E test.
+
+## iOS beta testing and production separation
+
+The uploaded 0.2 (3) TestFlight build currently has a server selector in Settings.
+Choose Beta before signing into beta accounts; favorites and Keychain sessions
+are separate from production. Deploy the proposal backend and grant follower-local
+memberships before expecting eligible matches.
+
+Before public App Store release, replace this selector with a dedicated internal
+beta app target (for example `re.turnie.beta`, display name `turnie.re Beta`).
+Compile the beta endpoint into that target, use a separate TestFlight internal
+tester group, and compile production builds to production only. Both apps can
+then coexist on the same phone without accidental environment switching. This
+requires a separate Apple app record/provisioning and is planned follow-up work;
+the current uploaded build is unchanged. A hidden gesture alone is not an access
+control. Beta accounts and server-side authorization still remain necessary.
