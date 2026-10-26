@@ -3,18 +3,35 @@ import TurniereCore
 
 @main
 struct TurniereApp: App {
-    @State private var store = TournamentStore()
+    // Environment is a build choice, never a persisted user preference.
+    #if TURNIERE_BETA
+    private let server: AppServer = .beta
+    #else
+    private let server: AppServer = .production
+    #endif
     @AppStorage("appearance") private var appearance = "system"
     var body: some Scene {
         WindowGroup {
-            RootView()
-                .environment(store)
+            ServerRoot(server: server)
                 .preferredColorScheme(appearance == "dark" ? .dark : appearance == "light" ? .light : nil)
         }
     }
 }
 
+struct ServerRoot: View {
+    @State private var store: TournamentStore
+    @State private var player: PlayerStore
+    init(server: AppServer) {
+        _store = State(initialValue: TournamentStore(server: server))
+        _player = State(initialValue: PlayerStore(server: server))
+    }
+    var body: some View { RootView().environment(store).environment(player) }
+}
+
 struct RootView: View {
+    @Environment(PlayerStore.self) private var player
+    @AppStorage("accountNudgeDismissed") private var accountNudgeDismissed = false
+    @State private var account = false
     @Environment(TournamentStore.self) private var store
     @State private var path: [String] = []
     @State private var input = ""
@@ -75,6 +92,16 @@ struct RootView: View {
 
             NavigationStack {
                 List {
+                    if !player.signedIn && !accountNudgeDismissed {
+                        Section {
+                            Text(L10n.text("account.nudge.title")).font(.headline)
+                            Text(L10n.text("account.nudge.body")).foregroundStyle(.secondary)
+                            Button(L10n.text("account.signIn")) { account = true }
+                                .accessibilityIdentifier("saved-sign-in")
+                            Button(L10n.text("account.nudge.dismiss")) { accountNudgeDismissed = true }
+                                .accessibilityIdentifier("dismiss-account-nudge")
+                        }
+                    }
                     if store.library.entries.isEmpty {
                         ContentUnavailableView(L10n.text("saved.empty.title"), systemImage: "star", description: Text(L10n.text("saved.empty.body")))
                     }
@@ -94,9 +121,21 @@ struct RootView: View {
             }.tabItem { Label(L10n.text("tab.saved"), systemImage: "star") }.tag(1)
         }
         .sheet(isPresented: $settings) { SettingsView() }
+        .sheet(isPresented: $account) { AccountView(server: store.server) }
+        .onAppear {
+            #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("--reset-demo") {
+                accountNudgeDismissed = false
+            }
+            #endif
+        }
     }
     private func openCode() {
-        do { let code = try TournamentCode.parse(input); codeError = nil; path.append(code) }
+        do {
+            if input.contains("://"), let host = URL(string: input.trimmingCharacters(in: .whitespacesAndNewlines))?.host,
+               host != store.server.webURL.host { codeError = L10n.text("server.wrongLink"); return }
+            let code = try TournamentCode.parse(input); codeError = nil; path.append(code)
+        }
         catch { codeError = L10n.message(for: error) }
     }
 }
@@ -110,6 +149,8 @@ struct Notice: View {
 }
 
 struct SettingsView: View {
+    @Environment(TournamentStore.self) private var store
+    @State private var account = false
     @Environment(\.dismiss) private var dismiss
     @AppStorage("appearance") private var appearance = "system"
     var body: some View {
@@ -120,6 +161,12 @@ struct SettingsView: View {
                         Text(L10n.text("theme.system")).tag("system"); Text(L10n.text("theme.light")).tag("light"); Text(L10n.text("theme.dark")).tag("dark")
                     }
                 }
+                Section(L10n.text("account.title")) {
+                    Button(L10n.text("account.title")) { account = true }
+                    Text(L10n.text("account.\(store.server.rawValue)"))
+                        .font(.footnote).foregroundStyle(.secondary)
+                        .accessibilityIdentifier("account-environment")
+                }
                 Section(L10n.text("settings.about")) {
                     Text(L10n.text("settings.local"))
                     Text(L10n.text("settings.refresh"))
@@ -129,7 +176,8 @@ struct SettingsView: View {
                         .accessibilityIdentifier("privacy-link")
                     Text(L10n.format("version", Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "–")).foregroundStyle(.secondary)
                 }
-            }.navigationTitle(L10n.text("settings.title"))
+            }.sheet(isPresented: $account) { AccountView(server: store.server) }
+                .navigationTitle(L10n.text("settings.title"))
                 .toolbar { Button(L10n.text("action.done")) { dismiss() } }
         }
     }

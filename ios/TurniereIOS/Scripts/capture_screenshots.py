@@ -90,7 +90,7 @@ def package_device(export, destination, dimensions):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--version", default="0.1")
+    parser.add_argument("--version", default="0.2")
     args = parser.parse_args()
     if run("xcodebuild", "-version") != "Xcode 27.0\nBuild version 27A266a":
         raise SystemExit("Screenshot captures require Xcode 27.0 build 27A266a")

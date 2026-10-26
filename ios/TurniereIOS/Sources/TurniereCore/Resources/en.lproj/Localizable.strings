@@ -91,3 +91,43 @@
 "match.number" = "Match %ld";
 "stage.round" = "Round %ld";
 "error.status" = "Server temporarily unavailable (%ld). Please try again.";
+
+// Player proposals and favorite-team shortcuts
+"proposal.title" = "Score proposals";
+"proposal.explanation" = "Confirm the complete score for your team. Both teams must agree. Official scores update after the tournament leader processes the agreement. This does not finish the match.";
+"proposal.official" = "Official score";
+"proposal.from" = "Proposal from %@";
+"proposal.pending" = "No proposal yet";
+"proposal.locked" = "Agreement locked. Official scores update separately.";
+"proposal.closed" = "This match is not accepting proposals.";
+"proposal.team" = "On behalf of";
+"proposal.points" = "Points";
+"proposal.pointsFor" = "Points for %@";
+"proposal.submit" = "Confirm score";
+"proposal.empty" = "No live matches for your account’s teams. Choosing a favorite does not grant team membership.";
+"proposal.invalid" = "Enter whole numbers from 0 to 1000 for both teams.";
+"proposal.conflict" = "The match or agreement changed. Check the refreshed status before submitting again.";
+"proposal.forbidden" = "Your account cannot submit scores for this team or tournament.";
+"account.title" = "Player account";
+"account.email" = "Email";
+"account.password" = "Password";
+"account.signIn" = "Sign in";
+"account.signOut" = "Sign out";
+"account.signedIn" = "Signed in on this server.";
+"account.existing" = "Use an existing, confirmed account. An organizer must assign you to your team.";
+"account.invalid" = "Sign-in failed. Check your credentials and account confirmation.";
+"account.expired" = "Your session expired. Sign in again.";
+"account.storage" = "Signed in for this session, but secure storage could not be updated.";
+"account.signOutOffline" = "Signed out on this device. The server session could not be revoked; it will expire automatically.";
+"account.production" = "turnie.re — Production";
+"account.beta" = "beta.turnie.re — Testing";
+"server.title" = "Server";
+"server.hint" = "Beta uses separate accounts and saved tournaments. Switch to beta for testing.";
+"team.standings" = "Your team’s standings";
+"team.court" = "Your table / court";
+"team.courtPending" = "Not assigned yet";
+"server.wrongLink" = "Select the matching server in Settings before opening this link.";
+
+"account.nudge.title" = "Not signed in yet?";
+"account.nudge.body" = "Sign in with your existing account to propose scores for your team. Following tournaments works without an account.";
+"account.nudge.dismiss" = "Continue without signing in";

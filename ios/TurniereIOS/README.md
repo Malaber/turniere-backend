@@ -1,8 +1,8 @@
 # turnie.re for iPhone and iPad
 
-Native, read-only tournament companion in the Rails repository. Browse public tournaments,
+Native tournament companion with optional player score proposals in the Rails repository. Browse public tournaments,
 open a tournament code or `https://turnie.re/t/<id>` link, view results and group standings,
-and select one favorite team per tournament. German UI, iOS 17+, Swift 6, no third-party SDKs.
+and select one favorite team per tournament. English/German UI, dark mode, iOS 17+, Swift 6, no third-party SDKs.
 
 ## Build and verification
 
@@ -27,7 +27,7 @@ The app does not expose fixture switches in Release builds.
 
 ## Behavior and API contract
 
-- Default API: `https://api.turnie.re`. `APIClient` contains only GET operations.
+- Default API: `https://api.turnie.re`. Viewer `APIClient` remains GET-only. `PlayerAPI` adds explicit sign-in/out and score proposal requests.
 - The Rails detail route resolves **IDs**, not tournament codes. Public codes are resolved through
   `GET /tournaments`, then loaded through `GET /tournaments/:id`. Both ID and code are verified.
   This is essential: Rails can interpret a hexadecimal code's numeric prefix as another record's ID.
@@ -111,3 +111,28 @@ Appearance uses semantic SwiftUI colors and a separate dark accent color.
 Settings offers System, Light and Dark; the choice persists on the device.
 The UI suite covers German flows and English light/dark rendering and records
 screenshots for both appearances.
+
+
+## Version 0.2: player proposals and favorite-team shortcuts
+
+- Your Team shows only that team’s group standings, with its current/next court
+  prominently above matches. Overview links straight to these standings.
+- Score proposals appear only when the tournament advertises
+  `player_score_proposals_enabled`. Existing confirmed account and trusted team
+  membership are required; a favorite is not authorization.
+- Settings → Server selects production or beta. Each server has separate saved
+  tournaments and Keychain credentials. Use beta for live score testing.
+- Session tokens are stored with `WhenUnlockedThisDeviceOnly` accessibility.
+  Passwords are used only for sign-in and cleared from the form afterwards.
+- Both teams must agree. Pending/locked scores remain separate from official
+  scores; no finish/progression requests are sent. Deciders follow the same flow.
+- Failed writes are never automatically retried; a read refresh checks whether
+  the server already accepted the request. HTTP 401 clears the local session.
+- Native UI tests use DEBUG fixtures. Package tests exercise HTTP methods,
+  payloads, token rotation, validation and error responses with URLProtocol.
+  These tests do not replace a real two-instance beta round trip.
+
+Before App Store release, deploy the updated app privacy page and update App Store
+Connect privacy labels for optional account email, user ID and score submissions,
+linked to the account for app functionality, without tracking. The bundled manifest
+reflects these categories. TestFlight upload is not App Store submission.

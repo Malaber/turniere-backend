@@ -1,9 +1,10 @@
 import Foundation
 
 public enum APIError: Error, LocalizedError, Equatable {
-    case invalidCode, notFound, status(Int), invalidResponse
+    case invalidCode, notFound, status(Int), invalidResponse, invalidScore
     public var errorDescription: String? {
         switch self {
+        case .invalidScore: return L10n.text("proposal.invalid")
         case .invalidCode: return L10n.text("error.code")
         case .notFound: return L10n.text("error.notFound")
         case .status(let code): return L10n.format("error.status", code)

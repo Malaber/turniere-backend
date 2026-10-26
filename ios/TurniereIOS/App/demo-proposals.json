@@ -1,0 +1,28 @@
+{
+  "matches": [
+    {
+      "match_id": 1,
+      "official_scores": {
+        "1": 0,
+        "2": 0
+      },
+      "eligible_team_ids": [
+        1
+      ],
+      "accepting": true,
+      "locked": false,
+      "revision": 0,
+      "proposals": [],
+      "teams": [
+        {
+          "id": 1,
+          "name": "Blue"
+        },
+        {
+          "id": 2,
+          "name": "Gold"
+        }
+      ]
+    }
+  ]
+}

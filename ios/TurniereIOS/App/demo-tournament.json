@@ -11,11 +11,11 @@
   "teams": [
     {
       "id": 1,
-      "name": "Blau-Weiß"
+      "name": "Blau-Wei\u00df"
     },
     {
       "id": 2,
-      "name": "Goldfüchse"
+      "name": "Goldf\u00fcchse"
     },
     {
       "id": 3,
@@ -49,7 +49,7 @@
                   "hidden_points": 2,
                   "team": {
                     "id": 1,
-                    "name": "Blau-Weiß"
+                    "name": "Blau-Wei\u00df"
                   }
                 },
                 {
@@ -58,7 +58,7 @@
                   "hidden_points": 1,
                   "team": {
                     "id": 2,
-                    "name": "Goldfüchse"
+                    "name": "Goldf\u00fcchse"
                   }
                 }
               ]
@@ -79,7 +79,7 @@
                   "hidden_points": 2,
                   "team": {
                     "id": 1,
-                    "name": "Blau-Weiß"
+                    "name": "Blau-Wei\u00df"
                   }
                 },
                 {
@@ -103,7 +103,7 @@
               "notes": null,
               "winner": {
                 "id": 2,
-                "name": "Goldfüchse"
+                "name": "Goldf\u00fcchse"
               },
               "match_scores": [
                 {
@@ -112,7 +112,7 @@
                   "hidden_points": 2,
                   "team": {
                     "id": 2,
-                    "name": "Goldfüchse"
+                    "name": "Goldf\u00fcchse"
                   }
                 },
                 {
@@ -136,7 +136,7 @@
               "notes": null,
               "winner": {
                 "id": 1,
-                "name": "Blau-Weiß"
+                "name": "Blau-Wei\u00df"
               },
               "match_scores": [
                 {
@@ -145,7 +145,7 @@
                   "hidden_points": 2,
                   "team": {
                     "id": 1,
-                    "name": "Blau-Weiß"
+                    "name": "Blau-Wei\u00df"
                   }
                 },
                 {
@@ -154,7 +154,7 @@
                   "hidden_points": 1,
                   "team": {
                     "id": 2,
-                    "name": "Goldfüchse"
+                    "name": "Goldf\u00fcchse"
                   }
                 }
               ]
@@ -170,7 +170,7 @@
               "difference_in_points": 5,
               "team": {
                 "id": 1,
-                "name": "Blau-Weiß"
+                "name": "Blau-Wei\u00df"
               }
             },
             {
@@ -182,7 +182,7 @@
               "difference_in_points": 3,
               "team": {
                 "id": 2,
-                "name": "Goldfüchse"
+                "name": "Goldf\u00fcchse"
               }
             },
             {
@@ -201,5 +201,6 @@
         }
       ]
     }
-  ]
+  ],
+  "player_score_proposals_enabled": true
 }

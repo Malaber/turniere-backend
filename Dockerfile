@@ -51,12 +51,6 @@ RUN bundle config set deployment 'true' \
     && bundle install \
     && rm -rf /usr/local/bundle/cache/*.gem
 
-FROM build-base AS bundle-test
-
-RUN bundle config set with 'development test' \
-    && bundle install \
-    && rm -rf /usr/local/bundle/cache/*.gem
-
 FROM runtime-base AS production
 
 ARG base_commit=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
@@ -82,6 +76,12 @@ COPY config/environments/production.rb /app/config/environments/beta.rb
 EXPOSE 3000
 
 CMD ["sh", "-lc", "bundle exec rails db:migrate && bundle exec rails s -b 0.0.0.0"]
+
+FROM build-base AS bundle-test
+
+RUN bundle config set with 'development test' \
+    && bundle install \
+    && rm -rf /usr/local/bundle/cache/*.gem
 
 FROM runtime-base AS test
 

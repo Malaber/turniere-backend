@@ -12,6 +12,8 @@ class Match < ApplicationRecord
 
   validates :match_scores, length: { maximum: 2 }
 
+  before_update :advance_score_revision_for_state_change
+
   validate :stage_xor_group
 
   def teams
@@ -92,6 +94,10 @@ class Match < ApplicationRecord
   end
 
   private
+
+  def advance_score_revision_for_state_change
+    self.score_revision += 1 if will_save_change_to_state? && !tournament.read_only_mode?
+  end
 
   def match_score_for(team)
     match_scores.find { |match_score| match_score.team_id == team.id }

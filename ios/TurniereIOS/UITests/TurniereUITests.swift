@@ -9,6 +9,10 @@ final class TurniereUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Your tournament. Your team."].waitForExistence(timeout: 10))
         app.buttons["Settings"].tap()
         let privacy = app.descendants(matching: .any)["privacy-link"].firstMatch
+        for _ in 0..<5 {
+            if privacy.exists && privacy.isHittable { break }
+            app.swipeUp()
+        }
         XCTAssertTrue(privacy.waitForExistence(timeout: 5))
         XCTAssertEqual(privacy.label, "Privacy")
         app.buttons["Done"].tap()
@@ -23,10 +27,86 @@ final class TurniereUITests: XCTestCase {
         app.launchArguments = ["--demo", "-AppleLanguages", "(en)", "-AppleLocale", "en_US", "-appearance", "dark"]
         app.launch()
         app.staticTexts["Sommercup"].firstMatch.tap()
-        app.buttons["detail-section"].tap()
+        openSectionPicker(app)
         app.buttons["Standings"].tap()
         XCTAssertTrue(app.staticTexts["6 pts"].firstMatch.waitForExistence(timeout: 5))
         capture(app, name: "en-standings-dark")
+    }
+
+    func testPlayerProposalsKeepOfficialScoreSeparate() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--demo", "--reset-demo", "-server", "production", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launch()
+        app.staticTexts["Sommercup"].firstMatch.tap()
+        app.buttons["open-proposals"].tap()
+        app.buttons["Sign in"].tap()
+        app.textFields["account-email"].tap()
+        app.textFields["account-email"].typeText("player@example.test")
+        app.secureTextFields["account-password"].tap()
+        app.secureTextFields["account-password"].typeText("password")
+        app.buttons["account-sign-in"].tap()
+        let first = app.textFields["proposal-score-1"]
+        XCTAssertTrue(first.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["proposal-submit"].isEnabled)
+        first.tap(); first.typeText("7")
+        let second = app.textFields["proposal-score-2"]
+        second.tap(); second.typeText("10")
+        app.swipeUp()
+        app.buttons["proposal-submit"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["proposal-locked"].firstMatch.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["proposal-submit"].exists)
+        app.swipeDown()
+        let official = app.descendants(matching: .any)["proposal-official-1"].firstMatch
+        XCTAssertTrue(official.waitForExistence(timeout: 5))
+        XCTAssertEqual(official.value as? String, "0")
+        capture(app, name: "en-player-agreement")
+    }
+
+    func testFavoriteHasCourtAndOwnStandings() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--demo", "--reset-demo", "-server", "production", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launch()
+        app.staticTexts["Sommercup"].firstMatch.tap()
+        app.buttons["choose-team"].tap()
+        app.buttons["team-1"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["favorite-court"].firstMatch.waitForExistence(timeout: 5))
+        app.buttons["favorite-standings"].tap()
+        app.swipeUp()
+        XCTAssertTrue(app.staticTexts["6 pts"].firstMatch.waitForExistence(timeout: 5))
+        capture(app, name: "en-favorite-table")
+    }
+
+    func testSavedSignInNudgeDismissalPersists() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--demo", "--reset-demo", "-AppleLanguages", "(en)", "-AppleLocale", "en_US", "-server", "beta"]
+        app.launch()
+        app.buttons["My tournaments"].firstMatch.tap()
+        let signIn = app.buttons["saved-sign-in"]
+        XCTAssertTrue(signIn.waitForExistence(timeout: 5))
+        signIn.tap()
+        XCTAssertTrue(app.textFields["account-email"].waitForExistence(timeout: 5))
+        app.buttons["Done"].tap()
+        app.buttons["dismiss-account-nudge"].tap()
+        XCTAssertFalse(signIn.exists)
+        app.terminate()
+        app.launchArguments.removeAll { $0 == "--reset-demo" }
+        app.launch()
+        app.buttons["My tournaments"].firstMatch.tap()
+        XCTAssertFalse(app.buttons["saved-sign-in"].exists)
+        app.buttons["Discover"].firstMatch.tap()
+        app.buttons["Settings"].tap()
+        XCTAssertTrue(app.buttons["Player account"].waitForExistence(timeout: 5))
+        // Old persisted/launch server preferences cannot redirect the public app.
+        XCTAssertEqual(app.staticTexts["account-environment"].label, "turnie.re — Production")
+    }
+
+    private func openSectionPicker(_ app: XCUIApplication) {
+        let picker = app.buttons["detail-section"]
+        for _ in 0..<4 {
+            if picker.exists && picker.isHittable { break }
+            app.swipeDown()
+        }
+        picker.tap()
     }
 
     private func capture(_ app: XCUIApplication, name: String) {
@@ -54,7 +134,7 @@ final class TurniereUITests: XCTestCase {
         attachment.name = "favorite-team"
         attachment.lifetime = .keepAlways
         add(attachment)
-        app.buttons["detail-section"].tap()
+        openSectionPicker(app)
         app.buttons["Tabelle"].tap()
         capture(app, name: "de-standings-online")
         app.terminate()
@@ -64,7 +144,7 @@ final class TurniereUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Blau-Weiß"].firstMatch.waitForExistence(timeout: 5))
         app.staticTexts["Sommercup"].firstMatch.tap()
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Gespeicherter Stand wird angezeigt")).firstMatch.waitForExistence(timeout: 10))
-        app.buttons["detail-section"].tap()
+        openSectionPicker(app)
         app.buttons["Tabelle"].tap()
         XCTAssertTrue(app.staticTexts["6 Pkt."].firstMatch.waitForExistence(timeout: 5))
         let table = XCTAttachment(screenshot: app.screenshot())

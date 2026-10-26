@@ -13,7 +13,10 @@ class TournamentSyncWorker
         @thread = Thread.new do
           Thread.current.name = 'tournament-sync-worker' if Thread.current.respond_to?(:name=)
           loop do
-            TournamentSyncProcessor.process_due!
+            ActiveRecord::Base.connection_pool.with_connection do
+              TournamentSyncProcessor.process_due!
+              PlayerScoreProposalPoller.poll_all!
+            end
             wait_for_wake_or_timeout
           rescue StandardError => e
             Rails.logger.warn("Tournament sync worker error: #{e.message}")

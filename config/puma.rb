@@ -35,3 +35,8 @@ preload_app!
 
 # Allow puma to be restarted by `rails restart` command.
 plugin :tmp_restart
+
+# Background threads must be started again after Puma forks a worker.
+on_worker_boot do
+  TournamentSyncWorker.start
+end

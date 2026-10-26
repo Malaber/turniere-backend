@@ -1,3 +1,4 @@
+import sys
 from invoke import task
 
 import os
@@ -2465,15 +2466,16 @@ def check_ios_package(c, live=False):
 
 
 @task(generate_ios_project)
-def build_ios_simulator(c):
-    """Build the native iPhone/iPad viewer without signing."""
+def build_ios_simulator(c, beta=False):
+    """Build the production or isolated beta app without signing."""
+    scheme = "TurniereBeta" if beta else "Turniere"
     c.run(f"xcodebuild -project {shlex.quote(str(IOS_ROOT / 'TurniereApp.xcodeproj'))} "
-          f"-scheme Turniere -destination 'generic/platform=iOS Simulator' "
+          f"-scheme {scheme} -destination 'generic/platform=iOS Simulator' "
           f"-derivedDataPath {shlex.quote(str(IOS_ROOT / 'DerivedData'))} CODE_SIGNING_ALLOWED=NO build")
 
 
 @task(generate_ios_project)
-def check_ios_ui(c, destination="platform=iOS Simulator,name=iPhone 17 Pro"):
+def check_ios_ui(c, destination="platform=iOS Simulator,name=iPhone 17 Pro,OS=26.2"):
     """Exercise deterministic native viewer flows on an installed simulator."""
     c.run(f"xcodebuild -project {shlex.quote(str(IOS_ROOT / 'TurniereApp.xcodeproj'))} "
           f"-scheme Turniere -destination {shlex.quote(destination)} "
@@ -2481,18 +2483,28 @@ def check_ios_ui(c, destination="platform=iOS Simulator,name=iPhone 17 Pro"):
 
 
 @task
-def upload_ios_testflight(c, version="0.1", build_number="1"):
+def upload_ios_testflight(c, version="0.2", build_number="4", beta=False):
     """Archive, sign, and upload the native app using the signed-in Xcode account."""
     if not re.fullmatch(r"[0-9]+\.[0-9]+(?:\.[0-9]+)?", version):
         raise ValueError("version must be major.minor or major.minor.patch")
     if not re.fullmatch(r"[1-9][0-9]*", str(build_number)):
         raise ValueError("build_number must be a positive integer")
     c.run(f"bash {shlex.quote(str(IOS_ROOT / 'Scripts' / 'upload_testflight.sh'))} "
-          f"{shlex.quote(version)} {shlex.quote(str(build_number))}")
+          f"{shlex.quote(version)} {shlex.quote(str(build_number))} "
+          f"{'beta' if beta else 'production'}")
+
+
+@task
+def upload_ios_testflight_pair(c, version="0.2", build_number=""):
+    """Upload production N and same-app beta N+1; provide an unused starting number."""
+    if not re.fullmatch(r"[1-9][0-9]*", str(build_number)):
+        raise ValueError("build_number must be an unused positive production build number")
+    upload_ios_testflight(c, version=version, build_number=str(build_number))
+    upload_ios_testflight(c, version=version, build_number=str(int(build_number) + 1), beta=True)
 
 
 @task(generate_ios_project)
-def capture_ios_screenshots(c, version="0.1"):
+def capture_ios_screenshots(c, version="0.2"):
     """Capture and package localized App Store screenshots on isolated simulators."""
     c.run(f"python3 -m unittest discover -s {shlex.quote(str(IOS_ROOT / 'Scripts'))} "
           "-p test_screenshot_packaging.py")
@@ -2548,3 +2560,72 @@ def ci_check(c, check="lint", build=True):
 def ci_task_tests(c):
     """Verify CI orchestration and cleanup without Docker."""
     c.run("python -m unittest discover -s ci -p 'test_*.py'")
+
+
+@task(name="poll-player-scores")
+def poll_player_scores(c):
+    """Poll configured followers once; leader initiates all network requests."""
+    c.run(_bundle_exec("rails", "runner", "PlayerScoreProposalPoller.poll_all!"))
+
+
+@task(name="test-player-scores")
+def test_player_scores(c):
+    """Verify player authorization, agreement, leader polling, replay and races."""
+    test(c, spec=" ".join([
+        "spec/requests/player_score_proposals_spec.rb",
+        "spec/services/player_score_proposal_apply_spec.rb",
+        "spec/services/player_score_proposal_concurrency_spec.rb",
+        "spec/services/player_score_proposal_poller_spec.rb",
+        "spec/services/tournament_sync_schema_spec.rb",
+        "spec/services/tournament_snapshot_importer_spec.rb",
+    ]))
+
+
+def _beta_local(action, *args):
+    subprocess.run([sys.executable, str(ROOT / "lib/beta_lab/cli.py"), action, *args], check=True)
+
+
+@task(name="beta-local-init")
+def beta_local_init(c):
+    """Generate private local beta lab configuration; preserve existing credentials."""
+    _beta_local("init")
+
+
+@task(name="beta-local-up")
+def beta_local_up(c, build=True):
+    """Build sibling checkouts, start persistent local stack, and bootstrap its owner."""
+    _beta_local("up", *([] if build else ["--no-build"]))
+
+
+@task(name="beta-local-down")
+def beta_local_down(c):
+    """Stop local beta lab; retain database and pairing state."""
+    _beta_local("down")
+
+
+@task(name="beta-local-status")
+def beta_local_status(c):
+    _beta_local("status")
+
+
+@task(name="beta-local-logs")
+def beta_local_logs(c):
+    _beta_local("logs")
+
+
+@task(name="beta-local-pair")
+def beta_local_pair(c, leader_id):
+    """Create/reuse a beta follower for this local tournament; prompts for beta login."""
+    _beta_local("pair", "--leader-id", str(int(leader_id)))
+
+
+@task(name="beta-local-config")
+def beta_local_config(c):
+    """Validate Compose configuration without printing resolved credentials."""
+    _beta_local("config")
+
+
+@task(name="release-github")
+def release_github(c):
+    """Promote published commit images and create an idempotent GitHub patch release."""
+    c.run("python ci/release.py")

@@ -4,6 +4,12 @@ set -euo pipefail
 package_dir=$(cd "$(dirname "$0")/.." && pwd)
 marketing_version=${1:-}
 build_number=${2:-}
+environment=${3:-production}
+case "$environment" in
+  production) scheme=Turniere; bundle_id=re.turnie; export_options=ExportOptions.TestFlight.plist ;;
+  beta) scheme=TurniereBeta; bundle_id=re.turnie; export_options=ExportOptions.TestFlight.plist ;;
+  *) echo "Environment must be production or beta." >&2; exit 2 ;;
+esac
 
 if [[ ! "$marketing_version" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
   echo "Usage: $0 <marketing-version> <build-number>" >&2
@@ -37,12 +43,12 @@ xcodegen generate
 
 env PATH=/usr/bin:/bin:/usr/sbin:/sbin /usr/bin/xcodebuild \
   -project TurniereApp.xcodeproj \
-  -scheme Turniere \
+  -scheme "$scheme" \
   -configuration Release \
   -destination 'generic/platform=iOS' \
   -archivePath "$archive_path" \
   DEVELOPMENT_TEAM=VWKG94374J \
-  PRODUCT_BUNDLE_IDENTIFIER=re.turnie \
+  PRODUCT_BUNDLE_IDENTIFIER="$bundle_id" \
   MARKETING_VERSION="$marketing_version" \
   CURRENT_PROJECT_VERSION="$build_number" \
   CODE_SIGN_STYLE=Automatic \
@@ -50,11 +56,16 @@ env PATH=/usr/bin:/bin:/usr/sbin:/sbin /usr/bin/xcodebuild \
   ${auth_args[@]+"${auth_args[@]}"} \
   archive
 
+# Fail closed on a mismatched archive or incorrect environment/icon.
+python3 "$package_dir/Scripts/validate_testflight_export.py" \
+  "$archive_path/Products/Applications/$scheme.app/Info.plist" \
+  "$package_dir/$export_options" "$environment"
+
 env PATH=/usr/bin:/bin:/usr/sbin:/sbin /usr/bin/xcodebuild \
   -exportArchive \
   -archivePath "$archive_path" \
   -exportPath "$export_path" \
-  -exportOptionsPlist "$package_dir/ExportOptions.TestFlight.plist" \
+  -exportOptionsPlist "$package_dir/$export_options" \
   -allowProvisioningUpdates ${auth_args[@]+"${auth_args[@]}"}
 
 echo "TestFlight upload accepted. Archive: $archive_path"

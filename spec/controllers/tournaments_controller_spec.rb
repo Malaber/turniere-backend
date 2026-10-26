@@ -105,13 +105,14 @@ RSpec.describe TournamentsController, type: :controller do
       expected_keys = %i[
         id name code public description playoff_teams_amount
         instant_finalists_amount intermediate_round_participants_amount
-        location starts_at ends_at website_url
+        location starts_at ends_at website_url player_score_proposals_enabled
         timestamp timer_mode timer_reason timer_reason_text owner_username stages teams team_action_lists
       ]
       expect(json.keys).to match_array(expected_keys)
       expect(json[:name]).to eq(@tournament.name)
       expect(json[:description]).to eq(@tournament.description)
       expect(json[:public]).to eq(@tournament.public)
+      expect(json[:player_score_proposals_enabled]).to be(false)
       expect(json).to eq(TournamentPayload.build(@tournament))
     end
 

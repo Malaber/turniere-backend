@@ -12,6 +12,7 @@ Rails.application.routes.draw do
     member do
       patch :swap
     end
+    resource :score_proposal, only: %i[show update], controller: 'player_score_proposals'
     resources :bets, only: %i[index create]
   end
   resources :groups, only: %i[show] do
@@ -39,6 +40,8 @@ Rails.application.routes.draw do
       get :timer
       get :transaction_log, to: 'tournament_transaction_log_entries#index'
       patch :timer, action: :set_timer
+      get :player_score_matches, to: 'player_score_proposals#matches'
+      get :locked_score_proposals, to: 'player_score_proposals#index'
       patch :sync_state
       patch :start_next_group_matches
       post :test_sync

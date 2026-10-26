@@ -86,9 +86,23 @@ Rails CI and merge requests until the later repository migration.
 ## GitHub Actions
 
 `.github/workflows/ci.yml` replaces GitLab CI. PR checks run without credentials;
-publication and deployment are opt-in main-branch jobs. Existing GitLab registry
-image names remain compatible with deployment.
+successful main runs publish GHCR images and automatic GitHub patch releases.
+Publication does not deploy. See [release setup](ci/GITHUB_RELEASES.md).
 
-See the [infra migration and secret-transfer checklist](https://github.com/Malaber/turniere-infra/blob/main/ci/GITHUB_MIGRATION.md)
-before enabling release/deploy variables. Backend/frontend are active; the legacy
+See the [publishing permissions and package setup](ci/GITHUB_RELEASES.md).
+Infra deployment remains a separate step in the local infra checkout. Backend/frontend are active; the legacy
 match service is archived and superseded by Mission Control.
+
+### Player score proposals
+
+[TUR-246 workflow and API](docs/player-score-proposals.md) describes follower
+proposals, leader polling, migrations, trusted membership setup and replay rules.
+Run `inv test-player-scores` for focused verification or `inv poll-player-scores`
+for a single leader polling pass.
+
+### Persistent local leader for beta
+
+Run `inv beta-local-up` to build the backend and sibling frontend with persistent
+Postgres at http://127.0.0.1:4301. Pair a local tournament explicitly using
+`inv beta-local-pair --leader-id=<id>`. See [the beta lab runbook](docs/beta-local.md)
+for credentials, daily startup, beta-only rollout and real player testing.

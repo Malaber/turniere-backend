@@ -30,6 +30,14 @@ struct TournamentView: View {
                         ForEach(["overview", "matches", "standings", "team"], id: \.self) { Text(L10n.text("section.\($0)")).tag($0) }
                     }.pickerStyle(.menu).accessibilityIdentifier("detail-section")
                 }
+                if entry.tournament.playerScoreProposalsEnabled == true {
+                    Section {
+                        NavigationLink {
+                            PlayerProposalsView(tournamentID: entry.tournament.id, server: store.server)
+                        } label: { Label(L10n.text("proposal.title"), systemImage: "square.and.pencil") }
+                            .accessibilityIdentifier("open-proposals")
+                    }
+                }
                 switch section {
                 case "matches": matches(entry.tournament)
                 case "standings": standings(entry.tournament)
@@ -44,7 +52,7 @@ struct TournamentView: View {
         .navigationTitle(L10n.text("tournament.title")).navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if let tournament = entry?.tournament {
-                ShareLink(item: tournament.webURL)
+                ShareLink(item: store.webURL(tournament))
                 Button(L10n.text("favorite.choose"), systemImage: favorite == nil ? "star" : "star.fill") { choosingTeam = true }
                     .accessibilityIdentifier("choose-team")
             }
@@ -61,14 +69,21 @@ struct TournamentView: View {
             } while !Task.isCancelled
         }
     }
+    @ViewBuilder private func court(_ match: Match) -> some View {
+        LabeledContent(L10n.text("team.court"), value: match.location?.isEmpty == false ? match.location! : L10n.text("team.courtPending"))
+            .font(.headline).foregroundStyle(.tint).accessibilityIdentifier("favorite-court")
+    }
     @ViewBuilder private func overview(_ tournament: Tournament) -> some View {
         Section(L10n.text("favorite.title")) {
             if let team = tournament.teams.first(where: { $0.id == favorite }) {
                 Label(team.name, systemImage: "star.fill").font(.headline).foregroundStyle(.tint)
                 if let match = tournament.nextMatch(for: team.id) {
                     Text(match.state == "in_progress" ? L10n.text("match.now") : L10n.text("match.next")).font(.subheadline).foregroundStyle(.secondary)
+                    court(match)
                     MatchRow(match: match, favorite: favorite)
                 } else { Text(L10n.text("match.noNext")).foregroundStyle(.secondary) }
+                Button(L10n.text("team.standings")) { section = "team" }
+                    .accessibilityIdentifier("favorite-standings")
                 Button(L10n.text("team.allMatches")) { section = "team" }
             } else {
                 Button(L10n.text("favorite.choose"), systemImage: "star") { choosingTeam = true }
@@ -95,7 +110,7 @@ struct TournamentView: View {
             LabeledContent(L10n.text("section.matches"), value: String(tournament.matches.count))
             if let date = APIDate.parse(tournament.startsAt) { LabeledContent(L10n.text("tournament.start"), value: date.formatted(date: .abbreviated, time: .shortened)) }
             if let description = tournament.description, !description.isEmpty { Text(description) }
-            Link(L10n.text("link.browser"), destination: tournament.webURL)
+            Link(L10n.text("link.browser"), destination: store.webURL(tournament))
         }
     }
     @ViewBuilder private func matches(_ tournament: Tournament) -> some View {
@@ -111,12 +126,12 @@ struct TournamentView: View {
             }
         }
     }
-    @ViewBuilder private func standings(_ tournament: Tournament) -> some View {
+    @ViewBuilder private func standings(_ tournament: Tournament, forTeam teamID: Int? = nil) -> some View {
         if tournament.stages.allSatisfy({ $0.groups.isEmpty }) {
             ContentUnavailableView(L10n.text("standings.empty.title"), systemImage: "list.number", description: Text(L10n.text("standings.empty.body")))
         }
         ForEach(tournament.orderedStages) { stage in
-            ForEach(stage.groups.sorted { $0.number < $1.number }) { group in
+            ForEach(stage.groups.filter { group in teamID == nil || group.groupScores.contains { $0.team.id == teamID } }.sorted { $0.number < $1.number }) { group in
                 Section(L10n.format("stage.group", stage.title, group.number)) {
                     ForEach(group.standings) { row in
                         HStack(alignment: .top, spacing: 12) {
@@ -137,6 +152,10 @@ struct TournamentView: View {
     @ViewBuilder private func teamSection(_ tournament: Tournament) -> some View {
         if let team = tournament.teams.first(where: { $0.id == favorite }) {
             Section { Label(team.name, systemImage: "star.fill").font(.title2.bold()); Button(L10n.text("team.change")) { choosingTeam = true } }
+            if let next = tournament.nextMatch(for: team.id) {
+                Section(L10n.text("match.next")) { court(next); MatchRow(match: next, favorite: favorite) }
+            }
+            standings(tournament, forTeam: team.id)
             let games = tournament.matches(for: team.id)
             if games.isEmpty { Text(L10n.text("team.empty")) }
             Section(L10n.text("team.matches")) { ForEach(games) { MatchRow(match: $0, favorite: favorite) } }

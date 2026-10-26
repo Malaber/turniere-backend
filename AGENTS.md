@@ -194,5 +194,28 @@ check whether `tasks.py` also needs to change.
 
 Active CI now lives in `.github/workflows`. Use the Invoke CI tasks documented in
 the README for local reproduction. The GitLab YAML is a disabled compatibility
-stub; container names remain in the GitLab registry during cutover. Backend and
+stub; new main builds publish to GHCR with automatic GitHub patch releases. Backend and
 frontend Mission Control replace the archived match application.
+
+## Background Tests and CI
+
+Start long-running tests asynchronously and leave them running in the background.
+Do not poll local test results or CI status unless the user explicitly asks.
+Report the command, log path, and any already-known results, then return early;
+the user will check results or ask to resume. Clearly mark unfinished validation
+as pending. Do not wait for background tests before pushing reviewable changes.
+This does not authorize merging, deploying, or claiming pending tests passed.
+
+## iOS TestFlight releases
+
+Always upload both production and beta variants of the same app (`re.turnie`) when
+releasing to TestFlight. Use distinct, increasing build numbers: production N,
+beta N+1. Prefer `inv upload-ios-testflight-pair --version=... --build-number=N`.
+Both variants share the existing App Store Connect record and tester groups.
+Beta uses the red BETA icon and compiled beta backend; external testers are allowed.
+Do not use internal-only export or create a separate beta app record.
+Only production builds should be selected for App Store release; upload guards
+verify environment/icon but cannot prevent manual selection in App Store Connect.
+Never reuse an accepted build number or report upload acceptance as processing
+completion. If one app upload fails, report partial completion and retry only
+that app with an unused number; do not duplicate the successful upload.

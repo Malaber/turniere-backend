@@ -91,3 +91,43 @@
 "match.number" = "Spiel %ld";
 "stage.round" = "Runde %ld";
 "error.status" = "Server vorübergehend nicht verfügbar (%ld). Bitte erneut versuchen.";
+
+// Player proposals and favorite-team shortcuts
+"proposal.title" = "Spielstand vorschlagen";
+"proposal.explanation" = "Bestätige den gesamten Spielstand für dein Team. Beide Teams müssen zustimmen. Der offizielle Spielstand wird nach Verarbeitung durch die Turnierleitung aktualisiert. Das Spiel wird dadurch nicht beendet.";
+"proposal.official" = "Offizieller Spielstand";
+"proposal.from" = "Vorschlag von %@";
+"proposal.pending" = "Noch kein Vorschlag";
+"proposal.locked" = "Einigung gesperrt. Der offizielle Spielstand wird separat aktualisiert.";
+"proposal.closed" = "Dieses Spiel nimmt keine Vorschläge an.";
+"proposal.team" = "Für Team";
+"proposal.points" = "Punkte";
+"proposal.pointsFor" = "Punkte für %@";
+"proposal.submit" = "Spielstand bestätigen";
+"proposal.empty" = "Keine laufenden Spiele für die Teams deines Kontos. Ein Favorit ersetzt keine Teammitgliedschaft.";
+"proposal.invalid" = "Gib für beide Teams ganze Zahlen von 0 bis 1000 ein.";
+"proposal.conflict" = "Das Spiel oder die Einigung hat sich geändert. Prüfe den aktualisierten Stand vor einem weiteren Versuch.";
+"proposal.forbidden" = "Dein Konto darf für dieses Team oder Turnier keine Spielstände vorschlagen.";
+"account.title" = "Spielerkonto";
+"account.email" = "E-Mail";
+"account.password" = "Passwort";
+"account.signIn" = "Anmelden";
+"account.signOut" = "Abmelden";
+"account.signedIn" = "Auf diesem Server angemeldet.";
+"account.existing" = "Verwende ein bestehendes, bestätigtes Konto. Die Turnierleitung muss dich deinem Team zuordnen.";
+"account.invalid" = "Anmeldung fehlgeschlagen. Prüfe Zugangsdaten und Kontobestätigung.";
+"account.expired" = "Deine Sitzung ist abgelaufen. Melde dich erneut an.";
+"account.storage" = "Für diese Sitzung angemeldet, aber der sichere Speicher konnte nicht aktualisiert werden.";
+"account.signOutOffline" = "Auf diesem Gerät abgemeldet. Die Serversitzung konnte nicht widerrufen werden; sie läuft automatisch ab.";
+"account.production" = "turnie.re — Produktiv";
+"account.beta" = "beta.turnie.re — Test";
+"server.title" = "Server";
+"server.hint" = "Beta verwendet getrennte Konten und gespeicherte Turniere. Wähle Beta zum Testen.";
+"team.standings" = "Tabelle deines Teams";
+"team.court" = "Dein Tisch / Spielfeld";
+"team.courtPending" = "Noch nicht zugewiesen";
+"server.wrongLink" = "Wähle zuerst den passenden Server in den Einstellungen, um diesen Link zu öffnen.";
+
+"account.nudge.title" = "Noch nicht angemeldet?";
+"account.nudge.body" = "Melde dich mit deinem bestehenden Konto an, um Spielstände für dein Team vorzuschlagen. Turniere kannst du auch ohne Konto verfolgen.";
+"account.nudge.dismiss" = "Ohne Anmeldung fortfahren";
