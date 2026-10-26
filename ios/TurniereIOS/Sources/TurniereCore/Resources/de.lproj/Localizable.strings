@@ -127,3 +127,7 @@
 "team.court" = "Dein Tisch / Spielfeld";
 "team.courtPending" = "Noch nicht zugewiesen";
 "server.wrongLink" = "Wähle zuerst den passenden Server in den Einstellungen, um diesen Link zu öffnen.";
+
+"account.nudge.title" = "Noch nicht angemeldet?";
+"account.nudge.body" = "Melde dich mit deinem bestehenden Konto an, um Spielstände für dein Team vorzuschlagen. Turniere kannst du auch ohne Konto verfolgen.";
+"account.nudge.dismiss" = "Ohne Anmeldung fortfahren";

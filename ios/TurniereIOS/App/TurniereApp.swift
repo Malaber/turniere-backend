@@ -3,12 +3,16 @@ import TurniereCore
 
 @main
 struct TurniereApp: App {
-    @AppStorage("server") private var server = "production"
+    // Environment is a build choice, never a persisted user preference.
+    #if TURNIERE_BETA
+    private let server: AppServer = .beta
+    #else
+    private let server: AppServer = .production
+    #endif
     @AppStorage("appearance") private var appearance = "system"
     var body: some Scene {
         WindowGroup {
-            ServerRoot(server: AppServer(rawValue: server) ?? .production)
-                .id(server)
+            ServerRoot(server: server)
                 .preferredColorScheme(appearance == "dark" ? .dark : appearance == "light" ? .light : nil)
         }
     }
@@ -25,6 +29,9 @@ struct ServerRoot: View {
 }
 
 struct RootView: View {
+    @Environment(PlayerStore.self) private var player
+    @AppStorage("accountNudgeDismissed") private var accountNudgeDismissed = false
+    @State private var account = false
     @Environment(TournamentStore.self) private var store
     @State private var path: [String] = []
     @State private var input = ""
@@ -85,6 +92,16 @@ struct RootView: View {
 
             NavigationStack {
                 List {
+                    if !player.signedIn && !accountNudgeDismissed {
+                        Section {
+                            Text(L10n.text("account.nudge.title")).font(.headline)
+                            Text(L10n.text("account.nudge.body")).foregroundStyle(.secondary)
+                            Button(L10n.text("account.signIn")) { account = true }
+                                .accessibilityIdentifier("saved-sign-in")
+                            Button(L10n.text("account.nudge.dismiss")) { accountNudgeDismissed = true }
+                                .accessibilityIdentifier("dismiss-account-nudge")
+                        }
+                    }
                     if store.library.entries.isEmpty {
                         ContentUnavailableView(L10n.text("saved.empty.title"), systemImage: "star", description: Text(L10n.text("saved.empty.body")))
                     }
@@ -104,6 +121,14 @@ struct RootView: View {
             }.tabItem { Label(L10n.text("tab.saved"), systemImage: "star") }.tag(1)
         }
         .sheet(isPresented: $settings) { SettingsView() }
+        .sheet(isPresented: $account) { AccountView(server: store.server) }
+        .onAppear {
+            #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("--reset-demo") {
+                accountNudgeDismissed = false
+            }
+            #endif
+        }
     }
     private func openCode() {
         do {
@@ -125,7 +150,6 @@ struct Notice: View {
 
 struct SettingsView: View {
     @Environment(TournamentStore.self) private var store
-    @AppStorage("server") private var server = "production"
     @State private var account = false
     @Environment(\.dismiss) private var dismiss
     @AppStorage("appearance") private var appearance = "system"
@@ -139,11 +163,9 @@ struct SettingsView: View {
                 }
                 Section(L10n.text("account.title")) {
                     Button(L10n.text("account.title")) { account = true }
-                    Picker(L10n.text("server.title"), selection: $server) {
-                        Text(L10n.text("account.production")).tag("production")
-                        Text(L10n.text("account.beta")).tag("beta")
-                    }
-                    Text(L10n.text("server.hint")).font(.footnote)
+                    Text(L10n.text("account.\(store.server.rawValue)"))
+                        .font(.footnote).foregroundStyle(.secondary)
+                        .accessibilityIdentifier("account-environment")
                 }
                 Section(L10n.text("settings.about")) {
                     Text(L10n.text("settings.local"))

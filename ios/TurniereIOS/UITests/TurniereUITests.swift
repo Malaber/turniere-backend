@@ -76,6 +76,30 @@ final class TurniereUITests: XCTestCase {
         capture(app, name: "en-favorite-table")
     }
 
+    func testSavedSignInNudgeDismissalPersists() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--demo", "--reset-demo", "-AppleLanguages", "(en)", "-AppleLocale", "en_US", "-server", "beta"]
+        app.launch()
+        app.buttons["My tournaments"].firstMatch.tap()
+        let signIn = app.buttons["saved-sign-in"]
+        XCTAssertTrue(signIn.waitForExistence(timeout: 5))
+        signIn.tap()
+        XCTAssertTrue(app.textFields["account-email"].waitForExistence(timeout: 5))
+        app.buttons["Done"].tap()
+        app.buttons["dismiss-account-nudge"].tap()
+        XCTAssertFalse(signIn.exists)
+        app.terminate()
+        app.launchArguments.removeAll { $0 == "--reset-demo" }
+        app.launch()
+        app.buttons["My tournaments"].firstMatch.tap()
+        XCTAssertFalse(app.buttons["saved-sign-in"].exists)
+        app.buttons["Discover"].firstMatch.tap()
+        app.buttons["Settings"].tap()
+        XCTAssertTrue(app.buttons["Player account"].waitForExistence(timeout: 5))
+        // Old persisted/launch server preferences cannot redirect the public app.
+        XCTAssertEqual(app.staticTexts["account-environment"].label, "turnie.re — Production")
+    }
+
     private func openSectionPicker(_ app: XCUIApplication) {
         let picker = app.buttons["detail-section"]
         for _ in 0..<4 {

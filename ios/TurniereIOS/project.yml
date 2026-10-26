@@ -41,6 +41,38 @@ targets:
         CFBundleLocalizations: [en, de]
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
         UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+  TurniereBeta:
+    type: application
+    platform: iOS
+    deploymentTarget: '17.0'
+    sources: [App, Assets.xcassets]
+    dependencies:
+      - package: TurniereCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: re.turnie.beta
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) TURNIERE_BETA"
+        PRODUCT_NAME: TurniereBeta
+        MARKETING_VERSION: "0.2"
+        CURRENT_PROJECT_VERSION: 3
+        TARGETED_DEVICE_FAMILY: '1,2'
+        SUPPORTS_MACCATALYST: NO
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: turnie.re Beta
+        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.sports
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+    info:
+      path: Beta/Info.plist
+      properties:
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleLocalizations: [en, de]
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
   TurniereUITests:
     type: bundle.ui-testing
     platform: iOS
@@ -59,3 +91,7 @@ schemes:
         Turniere: all
     test:
       targets: [TurniereUITests]
+  TurniereBeta:
+    build:
+      targets:
+        TurniereBeta: all

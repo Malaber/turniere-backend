@@ -6,3 +6,5 @@ DerivedData/
 *.xcresult/
 DerivedDataScreenshots/
 Scripts/__pycache__/
+
+Beta/Info.plist

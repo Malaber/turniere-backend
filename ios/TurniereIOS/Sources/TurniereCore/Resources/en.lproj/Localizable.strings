@@ -127,3 +127,7 @@
 "team.court" = "Your table / court";
 "team.courtPending" = "Not assigned yet";
 "server.wrongLink" = "Select the matching server in Settings before opening this link.";
+
+"account.nudge.title" = "Not signed in yet?";
+"account.nudge.body" = "Sign in with your existing account to propose scores for your team. Following tournaments works without an account.";
+"account.nudge.dismiss" = "Continue without signing in";

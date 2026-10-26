@@ -35,6 +35,8 @@ jobs:
           .venv-screenshots/bin/pip install -r ios/TurniereIOS/Scripts/screenshot-requirements.txt
           echo "$GITHUB_WORKSPACE/.venv-screenshots/bin" >> "$GITHUB_PATH"
       - run: inv check-ios-package
+      - name: Build isolated beta app
+        run: inv build-ios-simulator --beta
       - name: Test app on iPhone and iPad and package screenshots
         run: inv capture-ios-screenshots
       - uses: actions/upload-artifact@v7

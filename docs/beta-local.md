@@ -144,11 +144,22 @@ Choose Beta before signing into beta accounts; favorites and Keychain sessions
 are separate from production. Deploy the proposal backend and grant follower-local
 memberships before expecting eligible matches.
 
-Before public App Store release, replace this selector with a dedicated internal
-beta app target (for example `re.turnie.beta`, display name `turnie.re Beta`).
-Compile the beta endpoint into that target, use a separate TestFlight internal
-tester group, and compile production builds to production only. Both apps can
-then coexist on the same phone without accidental environment switching. This
-requires a separate Apple app record/provisioning and is planned follow-up work;
-the current uploaded build is unchanged. A hidden gesture alone is not an access
-control. Beta accounts and server-side authorization still remain necessary.
+The next source build removes the selector entirely. `Turniere` always uses
+production, ignoring the old persisted `server` preference. `TurniereBeta` uses
+beta through the `TURNIERE_BETA` compilation flag, with bundle ID `re.turnie.beta`
+and display name `turnie.re Beta`. Separate app sandboxes and environment-specific
+Keychain services keep accounts and saved tournaments separate. Both apps can
+coexist; choose the app icon instead of changing servers inside the app.
+
+Build the beta target locally with `inv build-ios-simulator --beta`; open the
+`TurniereBeta` scheme in the generated Xcode project to run it on a device.
+CI also builds this target. The existing upload task still uploads only the
+production `Turniere` scheme. Beta TestFlight distribution requires a separate
+Apple app record/provisioning and internal tester setup, which is not created by
+these code changes. The currently uploaded 0.2 (3) binary remains unchanged.
+Beta accounts and server-side authorization remain necessary.
+
+My tournaments now offers a localized sign-in reminder for signed-out users.
+Dismissing it persists across launches; account access stays available in Settings.
+Following tournaments never requires login, and selecting a favorite does not
+create team membership.

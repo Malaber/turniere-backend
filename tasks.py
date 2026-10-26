@@ -2466,10 +2466,11 @@ def check_ios_package(c, live=False):
 
 
 @task(generate_ios_project)
-def build_ios_simulator(c):
-    """Build the native iPhone/iPad viewer without signing."""
+def build_ios_simulator(c, beta=False):
+    """Build the production or isolated beta app without signing."""
+    scheme = "TurniereBeta" if beta else "Turniere"
     c.run(f"xcodebuild -project {shlex.quote(str(IOS_ROOT / 'TurniereApp.xcodeproj'))} "
-          f"-scheme Turniere -destination 'generic/platform=iOS Simulator' "
+          f"-scheme {scheme} -destination 'generic/platform=iOS Simulator' "
           f"-derivedDataPath {shlex.quote(str(IOS_ROOT / 'DerivedData'))} CODE_SIGNING_ALLOWED=NO build")
 
 
