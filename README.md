@@ -89,8 +89,8 @@ Rails CI and merge requests until the later repository migration.
 successful main runs publish GHCR images and automatic GitHub patch releases.
 Publication does not deploy. See [release setup](ci/GITHUB_RELEASES.md).
 
-See the [infra migration and secret-transfer checklist](https://github.com/Malaber/turniere-infra/blob/main/ci/GITHUB_MIGRATION.md)
-before enabling release/deploy variables. Backend/frontend are active; the legacy
+See the [publishing permissions and package setup](ci/GITHUB_RELEASES.md).
+Infra deployment remains a separate step in the local infra checkout. Backend/frontend are active; the legacy
 match service is archived and superseded by Mission Control.
 
 ### Player score proposals
