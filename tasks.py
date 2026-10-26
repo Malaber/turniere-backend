@@ -2475,7 +2475,7 @@ def build_ios_simulator(c, beta=False):
 
 
 @task(generate_ios_project)
-def check_ios_ui(c, destination="platform=iOS Simulator,name=iPhone 17 Pro"):
+def check_ios_ui(c, destination="platform=iOS Simulator,name=iPhone 17 Pro,OS=26.2"):
     """Exercise deterministic native viewer flows on an installed simulator."""
     c.run(f"xcodebuild -project {shlex.quote(str(IOS_ROOT / 'TurniereApp.xcodeproj'))} "
           f"-scheme Turniere -destination {shlex.quote(destination)} "
