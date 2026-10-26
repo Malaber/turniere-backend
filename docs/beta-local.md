@@ -153,8 +153,15 @@ coexist; choose the app icon instead of changing servers inside the app.
 
 Build the beta target locally with `inv build-ios-simulator --beta`; open the
 `TurniereBeta` scheme in the generated Xcode project to run it on a device.
-CI also builds this target. The existing upload task still uploads only the
-production `Turniere` scheme. Beta TestFlight distribution requires a separate
+CI also builds this target. The default upload task uploads the production `Turniere` scheme:
+`inv upload-ios-testflight --version=0.2 --build-number=4`.
+For the separate beta app use `inv upload-ios-testflight --beta --version=0.2
+--build-number=4` (on one line). This selects the red BETA icon and dedicated
+export options with Apple's `testFlightInternalTestingOnly=true`: those uploaded
+builds cannot be distributed through external TestFlight or the App Store.
+Before exporting, the script verifies the archive's bundle ID, environment marker,
+icon, and internal-only flag. A mismatch aborts the upload. Use this task for all
+beta uploads; manually exporting with different settings bypasses these guards. Beta TestFlight distribution requires a separate
 Apple app record/provisioning and internal tester setup, which is not created by
 these code changes. The currently uploaded 0.2 (3) binary remains unchanged.
 Beta accounts and server-side authorization remain necessary.

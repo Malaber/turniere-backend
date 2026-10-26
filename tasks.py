@@ -2483,14 +2483,15 @@ def check_ios_ui(c, destination="platform=iOS Simulator,name=iPhone 17 Pro"):
 
 
 @task
-def upload_ios_testflight(c, version="0.1", build_number="1"):
+def upload_ios_testflight(c, version="0.2", build_number="4", beta=False):
     """Archive, sign, and upload the native app using the signed-in Xcode account."""
     if not re.fullmatch(r"[0-9]+\.[0-9]+(?:\.[0-9]+)?", version):
         raise ValueError("version must be major.minor or major.minor.patch")
     if not re.fullmatch(r"[1-9][0-9]*", str(build_number)):
         raise ValueError("build_number must be a positive integer")
     c.run(f"bash {shlex.quote(str(IOS_ROOT / 'Scripts' / 'upload_testflight.sh'))} "
-          f"{shlex.quote(version)} {shlex.quote(str(build_number))}")
+          f"{shlex.quote(version)} {shlex.quote(str(build_number))} "
+          f"{'beta' if beta else 'production'}")
 
 
 @task(generate_ios_project)
