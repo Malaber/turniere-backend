@@ -2494,6 +2494,15 @@ def upload_ios_testflight(c, version="0.2", build_number="4", beta=False):
           f"{'beta' if beta else 'production'}")
 
 
+@task
+def upload_ios_testflight_pair(c, version="0.2", build_number=""):
+    """Upload production N and same-app beta N+1; provide an unused starting number."""
+    if not re.fullmatch(r"[1-9][0-9]*", str(build_number)):
+        raise ValueError("build_number must be an unused positive production build number")
+    upload_ios_testflight(c, version=version, build_number=str(build_number))
+    upload_ios_testflight(c, version=version, build_number=str(int(build_number) + 1), beta=True)
+
+
 @task(generate_ios_project)
 def capture_ios_screenshots(c, version="0.2"):
     """Capture and package localized App Store screenshots on isolated simulators."""

@@ -139,34 +139,40 @@ E2E test.
 
 ## iOS beta testing and production separation
 
-The uploaded 0.2 (3) TestFlight build currently has a server selector in Settings.
-Choose Beta before signing into beta accounts; favorites and Keychain sessions
-are separate from production. Deploy the proposal backend and grant follower-local
-memberships before expecting eligible matches.
+Follow the Planini model: production and beta are builds of the same App Store
+Connect app, bundle ID `re.turnie`, using the existing internal and external tester
+groups. The owner chooses which groups receive each build. No separate beta app
+record is needed. Only one variant can be installed at a time; installing another
+TestFlight build replaces the installed variant.
 
-The next source build removes the selector entirely. `Turniere` always uses
-production, ignoring the old persisted `server` preference. `TurniereBeta` uses
-beta through the `TURNIERE_BETA` compilation flag, with bundle ID `re.turnie.beta`
-and display name `turnie.re Beta`. Separate app sandboxes and environment-specific
-Keychain services keep accounts and saved tournaments separate. Both apps can
-coexist; choose the app icon instead of changing servers inside the app.
+`Turniere` compiles the production endpoint and blue icon. `TurniereBeta` compiles
+the beta endpoint through `TURNIERE_BETA`, with a red BETA icon and display name
+`turnie.re Beta`. Neither has an environment picker. Environment-specific Keychain
+services and separate saved tournament files prevent mixing accounts/favorites
+when changing installed builds. The old persisted server preference is ignored.
 
-Build the beta target locally with `inv build-ios-simulator --beta`; open the
-`TurniereBeta` scheme in the generated Xcode project to run it on a device.
-CI also builds this target. The default upload task uploads the production `Turniere` scheme:
-`inv upload-ios-testflight --version=0.2 --build-number=4`.
-For the separate beta app use `inv upload-ios-testflight --beta --version=0.2
---build-number=4` (on one line). This selects the red BETA icon and dedicated
-export options with Apple's `testFlightInternalTestingOnly=true`: those uploaded
-builds cannot be distributed through external TestFlight or the App Store.
-Before exporting, the script verifies the archive's bundle ID, environment marker,
-icon, and internal-only flag. A mismatch aborts the upload. Use this task for all
-beta uploads; manually exporting with different settings bypasses these guards. Beta TestFlight distribution requires a separate
-Apple app record/provisioning and internal tester setup, which is not created by
-these code changes. The currently uploaded 0.2 (3) binary remains unchanged.
-Beta accounts and server-side authorization remain necessary.
+Build locally with `inv build-ios-simulator --beta`. Both variants use the standard
+App Store Connect export options, allowing internal and external TestFlight groups.
+The upload guard verifies bundle ID, compiled environment marker, and icon. These
+checks do not prevent someone manually selecting a beta build for App Store
+release. Select only the blue production build for public release. Apple's
+internal-only option would block external TestFlight too, so it is not used.
 
-My tournaments now offers a localized sign-in reminder for signed-out users.
-Dismissing it persists across launches; account access stays available in Settings.
-Following tournaments never requires login, and selecting a favorite does not
-create team membership.
+Always upload both variants with distinct increasing numbers. Production 0.2 (4)
+was accepted; beta 0.2 (5) is the corresponding beta build. Next pair command:
+
+```sh
+inv upload-ios-testflight-pair --version=0.2 --build-number=6
+```
+
+This uploads production 6 followed by beta 7; use unused numbers. On partial
+failure retry only the missing variant, for example:
+
+```sh
+inv upload-ios-testflight --beta --version=0.2 --build-number=5
+```
+
+Upload acceptance does not confirm Apple processing or tester distribution.
+Beta must be deployed and follower team memberships provisioned before score
+proposals work. My tournaments offers a localized, persistently dismissible
+sign-in reminder. Settings always retains account access; following needs no login.

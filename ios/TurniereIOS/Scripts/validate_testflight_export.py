@@ -1,11 +1,11 @@
-"""Reject mismatched archives and beta builds eligible for App Store distribution."""
+"""Validate TestFlight archive identity, environment, icon, and tester eligibility."""
 import plistlib
 import sys
 from pathlib import Path
 
 
 def validate(info, options, environment):
-    expected = {'production': ('re.turnie', 'AppIcon'), 'beta': ('re.turnie.beta', 'AppIconBeta')}
+    expected = {'production': ('re.turnie', 'AppIcon'), 'beta': ('re.turnie', 'AppIconBeta')}
     if environment not in expected:
         raise ValueError('Unknown app environment')
     bundle, icon = expected[environment]
@@ -14,8 +14,8 @@ def validate(info, options, environment):
     actual_icon = info.get('CFBundleIcons', {}).get('CFBundlePrimaryIcon', {}).get('CFBundleIconName')
     if actual_icon != icon:
         raise ValueError('Archive icon does not match requested environment')
-    if environment == 'beta' and options.get('testFlightInternalTestingOnly') is not True:
-        raise ValueError('Beta uploads must be TestFlight internal-only')
+    if options.get('testFlightInternalTestingOnly') is True:
+        raise ValueError('Both variants must remain eligible for external TestFlight groups')
 
 
 if __name__ == '__main__':

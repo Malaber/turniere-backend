@@ -57,7 +57,7 @@ targets:
       - package: TurniereCore
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: re.turnie.beta
+        PRODUCT_BUNDLE_IDENTIFIER: re.turnie
         SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) TURNIERE_BETA"
         PRODUCT_NAME: TurniereBeta
         MARKETING_VERSION: "0.2"

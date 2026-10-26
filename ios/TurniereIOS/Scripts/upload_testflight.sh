@@ -7,7 +7,7 @@ build_number=${2:-}
 environment=${3:-production}
 case "$environment" in
   production) scheme=Turniere; bundle_id=re.turnie; export_options=ExportOptions.TestFlight.plist ;;
-  beta) scheme=TurniereBeta; bundle_id=re.turnie.beta; export_options=ExportOptions.BetaTestFlight.plist ;;
+  beta) scheme=TurniereBeta; bundle_id=re.turnie; export_options=ExportOptions.TestFlight.plist ;;
   *) echo "Environment must be production or beta." >&2; exit 2 ;;
 esac
 
@@ -56,7 +56,7 @@ env PATH=/usr/bin:/bin:/usr/sbin:/sbin /usr/bin/xcodebuild \
   ${auth_args[@]+"${auth_args[@]}"} \
   archive
 
-# Fail closed on a mismatched archive or unsafe beta export configuration.
+# Fail closed on a mismatched archive or incorrect environment/icon.
 python3 "$package_dir/Scripts/validate_testflight_export.py" \
   "$archive_path/Products/Applications/$scheme.app/Info.plist" \
   "$package_dir/$export_options" "$environment"

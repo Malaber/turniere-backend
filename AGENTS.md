@@ -205,3 +205,17 @@ Report the command, log path, and any already-known results, then return early;
 the user will check results or ask to resume. Clearly mark unfinished validation
 as pending. Do not wait for background tests before pushing reviewable changes.
 This does not authorize merging, deploying, or claiming pending tests passed.
+
+## iOS TestFlight releases
+
+Always upload both production and beta variants of the same app (`re.turnie`) when
+releasing to TestFlight. Use distinct, increasing build numbers: production N,
+beta N+1. Prefer `inv upload-ios-testflight-pair --version=... --build-number=N`.
+Both variants share the existing App Store Connect record and tester groups.
+Beta uses the red BETA icon and compiled beta backend; external testers are allowed.
+Do not use internal-only export or create a separate beta app record.
+Only production builds should be selected for App Store release; upload guards
+verify environment/icon but cannot prevent manual selection in App Store Connect.
+Never reuse an accepted build number or report upload acceptance as processing
+completion. If one app upload fails, report partial completion and retry only
+that app with an unused number; do not duplicate the successful upload.
